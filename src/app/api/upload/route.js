@@ -4,12 +4,6 @@ import { parseZplFile } from '@/lib/zplParser';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
 
-export const config = {
-    api: {
-        bodyParser: false,
-    },
-};
-
 export async function POST(request) {
     try {
         await ensureDb();
