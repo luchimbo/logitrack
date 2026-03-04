@@ -44,7 +44,7 @@ export async function POST(request) {
         const todayResult = await db.execute("SELECT id, filenames FROM daily_batches WHERE date = CURRENT_DATE");
 
         if (todayResult.rows.length > 0) {
-            batchId = todayResult.rows[0].id;
+            batchId = Number(todayResult.rows[0].id);
             const currentFiles = todayResult.rows[0].filenames ? todayResult.rows[0].filenames.split(', ') : [];
             const newNames = new Set([...currentFiles, ...filenames]);
             await db.execute({
