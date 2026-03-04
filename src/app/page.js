@@ -7,28 +7,32 @@ import FlexSection from "@/components/FlexSection";
 import ColectaSection from "@/components/ColectaSection";
 import PickingList from "@/components/PickingList";
 import CarrierView from "@/components/CarrierView";
+import Dashboard from "@/components/Dashboard";
 import { useBatch } from "@/components/BatchContext";
+
+const PERIODS = [
+  { id: 'today', label: 'Hoy', icon: '📅' },
+  { id: 'date', label: 'Fecha', icon: '🗓️' },
+  { id: 'week', label: 'Semana', icon: '📆' },
+  { id: 'month', label: 'Mes', icon: '📊' },
+  { id: 'year', label: 'Año', icon: '📈' },
+  { id: 'all', label: 'Todo', icon: '🗃️' },
+];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
-  const { batches, currentBatchId, setCurrentBatchId } = useBatch();
+  const { period, setPeriod, specificDate, setSpecificDate } = useBatch();
 
   const renderSection = () => {
     switch (activeTab) {
-      case "upload":
-        return <UploadSection />;
-      case "pickingList":
-        return <PickingList />;
-      case "flex":
-        return <FlexSection />;
-      case "colecta":
-        return <ColectaSection />;
-      case "zoneConfig":
-        return <ZoneConfig />;
-      case "carrierView":
-        return <CarrierView />;
-      default:
-        return <div>Página no encontrada</div>;
+      case "upload": return <UploadSection />;
+      case "pickingList": return <PickingList />;
+      case "flex": return <FlexSection />;
+      case "colecta": return <ColectaSection />;
+      case "zoneConfig": return <ZoneConfig />;
+      case "carrierView": return <CarrierView />;
+      case "dashboard": return <Dashboard />;
+      default: return <div>Página no encontrada</div>;
     }
   };
 
@@ -40,12 +44,13 @@ export default function Home() {
         </div>
         <ul className="nav-links">
           {[
-            { id: "upload", icon: "upload", label: "Subir Archivo Cxt" },
-            { id: "pickingList", icon: "list", label: "Listado de Picking" },
-            { id: "flex", icon: "truck", label: "Logística Flex" },
-            { id: "colecta", icon: "box", label: "Colecta Tradicional" },
-            { id: "zoneConfig", icon: "settings", label: "Config. Zonas" },
-            { id: "carrierView", icon: "users", label: "Vista Carrier" },
+            { id: "upload", icon: "📦", label: "Subir Etiquetas" },
+            { id: "pickingList", icon: "📋", label: "Lista de Picking" },
+            { id: "flex", icon: "🚀", label: "Logística Flex" },
+            { id: "colecta", icon: "📦", label: "Colecta" },
+            { id: "dashboard", icon: "📊", label: "Dashboard" },
+            { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
+            { id: "carrierView", icon: "🚛", label: "Transportistas" },
           ].map((link) => (
             <li key={link.id}>
               <a
@@ -56,7 +61,7 @@ export default function Home() {
                   setActiveTab(link.id);
                 }}
               >
-                <i className={`icon-${link.icon}`}></i>
+                <span className="nav-icon">{link.icon}</span>
                 {link.label}
               </a>
             </li>
@@ -66,35 +71,33 @@ export default function Home() {
 
       <main className="main-content">
         <header className="topbar">
-          <div className="search-bar" id="batch-selector">
-            {!batches || batches.length === 0 ? (
-              <p style={{ fontSize: "12px", color: "var(--text-muted)" }}>Sin lotes cargados</p>
-            ) : (
-              <>
-                <label className="form-label" style={{ marginRight: "10px", marginBottom: "0" }}>📅 Lote del día</label>
-                <select
-                  className="form-select"
-                  style={{ fontSize: "12px", padding: "6px 8px", width: "auto" }}
-                  value={currentBatchId || ""}
-                  onChange={(e) => setCurrentBatchId(Number(e.target.value))}
-                >
-                  {batches.map((b) => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const label = b.date === today ? "📅 HOY" : b.date;
-                    return (
-                      <option key={b.id} value={b.id}>
-                        {label} — {b.total_packages} paq.
-                      </option>
-                    );
-                  })}
-                </select>
-              </>
+          <div className="period-picker">
+            {PERIODS.map((p) => (
+              <button
+                key={p.id}
+                className={`period-tab ${period === p.id ? 'active' : ''}`}
+                onClick={() => setPeriod(p.id)}
+                title={p.label}
+              >
+                <span className="period-icon">{p.icon}</span>
+                <span className="period-label">{p.label}</span>
+              </button>
+            ))}
+
+            {period === 'date' && (
+              <input
+                type="date"
+                className="form-input date-input"
+                value={specificDate}
+                onChange={(e) => setSpecificDate(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+              />
             )}
           </div>
 
           <div className="user-profile">
             <div className="avatar">A</div>
-            <span>Admin Logística</span>
+            <span>Admin</span>
           </div>
         </header>
 

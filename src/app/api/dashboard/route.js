@@ -1,17 +1,27 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getDateRange } from '@/lib/dateUtils';
 
 export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
+        const period = searchParams.get('period') || 'today';
+        const specificDate = searchParams.get('date');
         const batch_id = searchParams.get('batch_id');
 
-        let sql = "SELECT * FROM shipments";
-        const args = [];
+        let sql, args;
 
         if (batch_id) {
-            sql += " WHERE batch_id = ?";
-            args.push(batch_id);
+            // Legacy: filter by specific batch
+            sql = "SELECT * FROM shipments WHERE batch_id = ?";
+            args = [batch_id];
+        } else {
+            // New: filter by period via daily_batches.date
+            const range = getDateRange(period, specificDate);
+            sql = `SELECT s.* FROM shipments s
+             JOIN daily_batches b ON s.batch_id = b.id
+             WHERE b.date >= ? AND b.date <= ?`;
+            args = [range.from, range.to];
         }
 
         const result = await db.execute({ sql, args });
@@ -30,7 +40,6 @@ export async function GET(request) {
 
         const total_packages = shipments.length;
         let total_units = 0;
-
         const by_status = {};
         const by_method = {};
         const by_carrier = {};
@@ -38,19 +47,11 @@ export async function GET(request) {
 
         for (const s of shipments) {
             total_units += Number(s.quantity) || 1;
-
-            // Status
             by_status[s.status] = (by_status[s.status] || 0) + 1;
-
-            // Method
             const method = s.shipping_method || "desconocido";
             by_method[method] = (by_method[method] || 0) + 1;
-
-            // Carrier
             const carrier = s.assigned_carrier || s.carrier_name || "Sin asignar";
             by_carrier[carrier] = (by_carrier[carrier] || 0) + 1;
-
-            // Province
             const prov = s.province || "Desconocida";
             by_province[prov] = (by_province[prov] || 0) + 1;
         }

@@ -5,22 +5,18 @@ import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
 export default function PickingList() {
-    const { currentBatchId } = useBatch();
+    const { getQueryString, period, specificDate } = useBatch();
     const [pickingList, setPickingList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
         async function fetchData() {
-            if (!currentBatchId) {
-                setPickingList([]);
-                return;
-            }
             setLoading(true);
             setError(null);
             try {
-                const data = await api(`/picking-list?batch_id=${currentBatchId}`);
-                // Sort: non-completed first, then by quantity desc
+                const qs = getQueryString();
+                const data = await api(`/picking-list?${qs}`);
                 data.sort((a, b) => {
                     const aComplete = a.statuses.every(s => s !== 'pendiente');
                     const bComplete = b.statuses.every(s => s !== 'pendiente');
@@ -35,7 +31,7 @@ export default function PickingList() {
             }
         }
         fetchData();
-    }, [currentBatchId]);
+    }, [period, specificDate]);
 
     const handleStatusChange = async (shipmentIds, newStatus) => {
         try {
@@ -54,10 +50,9 @@ export default function PickingList() {
                 return p;
             }));
 
-            toast(`${shipmentIds.length} envío(s) ➔ ${newStatus}`, 'success');
+            toast(`${shipmentIds.length} envío(s) → ${newStatus}`, 'success');
         } catch (err) {
             toast('Error actualizando estado', 'error');
-            console.error(err);
         }
     };
 
@@ -66,7 +61,7 @@ export default function PickingList() {
             const allFound = item.statuses.every(s => s !== 'pendiente');
             if (!allFound) {
                 await handleStatusChange(item.shipment_ids, 'encontrado');
-                await new Promise(r => setTimeout(r, 100)); // Rate limit
+                await new Promise(r => setTimeout(r, 100));
             }
         }
     };
@@ -76,7 +71,6 @@ export default function PickingList() {
             <div className="section active">
                 <div className="section-header">
                     <h1 className="section-title">📋 Lista de Picking</h1>
-                    <p className="section-subtitle">Productos a buscar — divididos por método de envío</p>
                 </div>
                 <div className="spinner"></div>
             </div>
@@ -86,9 +80,7 @@ export default function PickingList() {
     if (error) {
         return (
             <div className="section active">
-                <div className="section-header">
-                    <h1 className="section-title">📋 Lista de Picking</h1>
-                </div>
+                <div className="section-header"><h1 className="section-title">📋 Lista de Picking</h1></div>
                 <p style={{ color: "var(--danger)" }}>Error: {error}</p>
             </div>
         );
@@ -111,7 +103,6 @@ export default function PickingList() {
 
     const colectaItems = pickingList.filter(p => p.shipping_method === 'colecta');
     const flexItems = pickingList.filter(p => p.shipping_method === 'flex');
-
     const totalProducts = pickingList.length;
     const totalUnits = pickingList.reduce((sum, p) => sum + p.total_quantity, 0);
     const colectaUnits = colectaItems.reduce((sum, p) => sum + p.total_quantity, 0);
@@ -122,19 +113,13 @@ export default function PickingList() {
         const allFound = item.statuses.every(s => s !== 'pendiente');
         return (
             <div key={idx} className={`picking-item ${allFound ? 'completed' : ''}`}>
-                <input
-                    type="checkbox"
-                    className="picking-checkbox"
-                    checked={allFound}
-                    onChange={(e) => handleStatusChange(item.shipment_ids, e.target.checked ? 'encontrado' : 'pendiente')}
-                />
+                <input type="checkbox" className="picking-checkbox" checked={allFound}
+                    onChange={(e) => handleStatusChange(item.shipment_ids, e.target.checked ? 'encontrado' : 'pendiente')} />
                 <div className="picking-qty">{item.total_quantity}</div>
                 <div className="picking-info">
                     <div className="picking-name">{item.product_name}</div>
                     <div className="picking-sku">
-                        SKU: {item.sku || 'N/A'}
-                        {item.color ? ` · ${item.color}` : ''}
-                        {' · '}{item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}
+                        SKU: {item.sku || 'N/A'}{item.color ? ` · ${item.color}` : ''} · {item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}
                     </div>
                 </div>
             </div>
@@ -148,11 +133,7 @@ export default function PickingList() {
                     <h1 className="section-title">📋 Lista de Picking</h1>
                     <p className="section-subtitle">{totalProducts} productos — {totalUnits} unidades ({colectaItems.length} colecta, {flexItems.length} flex)</p>
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                    <button className="btn btn-success btn-sm" onClick={markAllFound}>
-                        ✅ Marcar todo encontrado
-                    </button>
-                </div>
+                <button className="btn btn-success btn-sm" onClick={markAllFound}>✅ Marcar todo encontrado</button>
             </div>
 
             <div className="progress-bar mb-md">
@@ -165,24 +146,18 @@ export default function PickingList() {
             {colectaItems.length > 0 && (
                 <div className="card mb-md" style={{ borderLeft: "3px solid #f59e0b" }}>
                     <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        📦 Colecta
-                        <span className="badge badge-colecta">{colectaItems.length} productos · {colectaUnits} uds</span>
+                        📦 Colecta <span className="badge badge-colecta">{colectaItems.length} productos · {colectaUnits} uds</span>
                     </h3>
-                    <div>
-                        {colectaItems.map((item, i) => renderItem(item, i))}
-                    </div>
+                    <div>{colectaItems.map((item, i) => renderItem(item, i))}</div>
                 </div>
             )}
 
             {flexItems.length > 0 && (
                 <div className="card" style={{ borderLeft: "3px solid var(--accent)" }}>
                     <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        🚀 Flex
-                        <span className="badge badge-flex">{flexItems.length} productos · {flexUnits} uds</span>
+                        🚀 Flex <span className="badge badge-flex">{flexItems.length} productos · {flexUnits} uds</span>
                     </h3>
-                    <div>
-                        {flexItems.map((item, i) => renderItem(item, i))}
-                    </div>
+                    <div>{flexItems.map((item, i) => renderItem(item, colectaItems.length + i))}</div>
                 </div>
             )}
         </div>

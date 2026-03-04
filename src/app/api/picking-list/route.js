@@ -1,17 +1,27 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getDateRange } from '@/lib/dateUtils';
 
 export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
+        const period = searchParams.get('period');
+        const specificDate = searchParams.get('date');
         const batch_id = searchParams.get('batch_id');
 
-        let sql = "SELECT * FROM shipments";
-        const args = [];
+        let sql, args = [];
 
         if (batch_id) {
-            sql += " WHERE batch_id = ?";
+            sql = "SELECT * FROM shipments WHERE batch_id = ?";
             args.push(batch_id);
+        } else if (period) {
+            const range = getDateRange(period, specificDate);
+            sql = `SELECT s.* FROM shipments s
+             JOIN daily_batches b ON s.batch_id = b.id
+             WHERE b.date >= ? AND b.date <= ?`;
+            args.push(range.from, range.to);
+        } else {
+            sql = "SELECT * FROM shipments";
         }
 
         const result = await db.execute({ sql, args });
