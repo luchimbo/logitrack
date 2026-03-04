@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 
 export async function DELETE(request, { params }) {
     try {
-        const { id } = params;
+        const { id } = await params;
         await db.execute({
             sql: "DELETE FROM carriers WHERE id = ?",
             args: [id]
