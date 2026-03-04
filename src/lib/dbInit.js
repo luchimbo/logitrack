@@ -1,8 +1,8 @@
 import { db } from "./db";
 
 export async function initDb() {
-    const statements = [
-        `CREATE TABLE IF NOT EXISTS shipments (
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS shipments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       batch_id INTEGER,
       sale_type TEXT,
@@ -31,33 +31,51 @@ export async function initDb() {
       status TEXT DEFAULT 'pendiente',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
-        `CREATE TABLE IF NOT EXISTS zone_mappings (
+    `CREATE TABLE IF NOT EXISTS zone_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      partido TEXT NOT NULL UNIQUE,
+      partido TEXT NOT NULL,
       carrier_name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
-        `CREATE TABLE IF NOT EXISTS carriers (
+    `CREATE TABLE IF NOT EXISTS carriers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       display_name TEXT,
       color TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
-        `CREATE TABLE IF NOT EXISTS daily_batches (
+    `CREATE TABLE IF NOT EXISTS daily_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date DATE DEFAULT CURRENT_DATE,
       total_packages INTEGER DEFAULT 0,
       filenames TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`
-    ];
+  ];
 
-    for (const stmt of statements) {
-        try {
-            await db.execute(stmt);
-        } catch (e) {
-            console.error("DB Init Error:", e);
-        }
+  for (const stmt of statements) {
+    try {
+      await db.execute(stmt);
+    } catch (e) {
+      console.error("DB Init Error:", e);
     }
+  }
+
+  // Migration: remove UNIQUE constraint on zone_mappings.partido (if old schema exists)
+  try {
+    // Check if the old unique index exists by trying to recreate
+    await db.execute(`CREATE TABLE IF NOT EXISTS zone_mappings_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      partido TEXT NOT NULL,
+      carrier_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.execute(`INSERT OR IGNORE INTO zone_mappings_new (id, partido, carrier_name, created_at)
+      SELECT id, partido, carrier_name, created_at FROM zone_mappings`);
+    await db.execute(`DROP TABLE IF EXISTS zone_mappings`);
+    await db.execute(`ALTER TABLE zone_mappings_new RENAME TO zone_mappings`);
+  } catch (e) {
+    // Migration may fail if already applied, that's fine
+    console.log("Zone migration skipped or already applied");
+  }
 }

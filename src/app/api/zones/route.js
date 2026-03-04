@@ -24,20 +24,25 @@ export async function POST(request) {
 
         const normPartido = normalizeName(partido);
 
-        // Upsert equivalent
-        await db.execute({
-            sql: `INSERT INTO zone_mappings (partido, carrier_name)
-            VALUES (?, ?)
-            ON CONFLICT(partido) DO UPDATE SET carrier_name = excluded.carrier_name`,
+        // Check if this exact combo already exists
+        const existing = await db.execute({
+            sql: "SELECT id FROM zone_mappings WHERE partido = ? AND carrier_name = ?",
             args: [normPartido, carrier_name]
         });
 
-        // We skip auto-reassigning for today's batch here to keep it simple,
-        // we can implement a separate endpoint for forced reassignment.
+        if (existing.rows.length > 0) {
+            return NextResponse.json({ message: "Already assigned", partido: normPartido, carrier_name });
+        }
+
+        // Insert new mapping (allow multiple carriers per partido)
+        await db.execute({
+            sql: "INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)",
+            args: [normPartido, carrier_name]
+        });
 
         return NextResponse.json({ partido: normPartido, carrier_name });
     } catch (error) {
-        console.error("Error creating/updating zone:", error);
+        console.error("Error creating zone:", error);
         return NextResponse.json({ error: "Failed to save zone" }, { status: 500 });
     }
 }

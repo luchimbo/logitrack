@@ -118,17 +118,10 @@ export default function ZoneConfig() {
     };
 
     const handleAssignZone = async (partidoId, carrierName) => {
-        if (!carrierName) {
-            // Find current mapping if exists and delete
-            const mapping = zones.find(z => z.partido === partidoId);
-            if (mapping) {
-                await fetch(`/api/zones/${mapping.id}`, { method: 'DELETE' });
-            }
-        } else {
-            const params = new URLSearchParams({ partido: partidoId, carrier_name: carrierName });
-            await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
-        }
-        toast('Asignación actualizada', 'success');
+        if (!carrierName) return;
+        const params = new URLSearchParams({ partido: partidoId, carrier_name: carrierName });
+        await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+        toast('Transportista asignado', 'success');
         fetchData();
     };
 
@@ -145,10 +138,6 @@ export default function ZoneConfig() {
 
         try {
             for (const p of groupPartidos) {
-                const mapping = zones.find(z => z.partido === p);
-                if (mapping) {
-                    await fetch(`/api/zones/${mapping.id}`, { method: 'DELETE' });
-                }
                 const params = new URLSearchParams({ partido: p, carrier_name: carrier });
                 await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
                 assignedCount++;
@@ -182,9 +171,11 @@ export default function ZoneConfig() {
         );
     }
 
+    // Build multi-carrier map: partido -> array of assignments
     const zoneMapData = {};
     zones.forEach(z => {
-        zoneMapData[z.partido] = { carrier_name: z.carrier_name, zone_id: z.id };
+        if (!zoneMapData[z.partido]) zoneMapData[z.partido] = [];
+        zoneMapData[z.partido].push({ carrier_name: z.carrier_name, zone_id: z.id });
     });
 
     return (
@@ -273,33 +264,33 @@ export default function ZoneConfig() {
 
                             <div style={{ padding: "16px" }}>
                                 {groupPartidos.map(p => {
-                                    const assigned = zoneMapData[p.id];
-                                    const carrierDisplay = assigned ? (carriers.find(c => c.name === assigned.carrier_name)?.display_name || assigned.carrier_name) : 'Sin asignar';
+                                    const assignments = zoneMapData[p.id] || [];
+                                    const hasAssignments = assignments.length > 0;
 
                                     return (
-                                        <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px dashed var(--border)" }}>
-                                            <div style={{ fontSize: "13px", fontWeight: 600, color: assigned ? "var(--text)" : "var(--text-muted)" }}>
+                                        <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px dashed var(--border)", flexWrap: "wrap", gap: "6px" }}>
+                                            <div style={{ fontSize: "13px", fontWeight: 600, color: hasAssignments ? "var(--text)" : "var(--text-muted)", minWidth: "100px" }}>
                                                 {p.name}
                                             </div>
-                                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                                {assigned ? (
-                                                    <>
-                                                        <span className="badge badge-flex" style={{ fontSize: "11px", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                            🚛 {carrierDisplay}
+                                            <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                                                {assignments.map(a => {
+                                                    const cDisplay = carriers.find(c => c.name === a.carrier_name)?.display_name || a.carrier_name;
+                                                    return (
+                                                        <span key={a.zone_id} className="badge badge-flex" style={{ fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                                            🚛 {cDisplay}
+                                                            <button onClick={() => handleRemoveZone(a.zone_id)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "10px", padding: "0 2px" }}>✕</button>
                                                         </span>
-                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleRemoveZone(assigned.zone_id)} style={{ padding: "2px 6px", fontSize: "11px", color: "var(--danger)" }}>❌</button>
-                                                    </>
-                                                ) : (
-                                                    <select
-                                                        className="form-select"
-                                                        style={{ fontSize: "11px", padding: "4px", width: "130px", background: "var(--bg-secondary)" }}
-                                                        onChange={(e) => handleAssignZone(p.id, e.target.value)}
-                                                        value=""
-                                                    >
-                                                        <option value="">No envía</option>
-                                                        {carriers.map(c => <option key={c.id} value={c.name}>{c.display_name || c.name}</option>)}
-                                                    </select>
-                                                )}
+                                                    );
+                                                })}
+                                                <select
+                                                    className="form-select"
+                                                    style={{ fontSize: "11px", padding: "4px", width: "120px", background: "var(--bg-secondary)" }}
+                                                    onChange={(e) => { handleAssignZone(p.id, e.target.value); e.target.value = ''; }}
+                                                    value=""
+                                                >
+                                                    <option value="">{hasAssignments ? '+ Agregar' : 'Asignar'}</option>
+                                                    {carriers.map(c => <option key={c.id} value={c.name}>{c.display_name || c.name}</option>)}
+                                                </select>
                                             </div>
                                         </div>
                                     );
