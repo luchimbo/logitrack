@@ -110,7 +110,7 @@ export async function renderPicking() {
           ids.forEach(id => params.append('shipment_ids', id));
           params.append('status', newStatus);
 
-          await fetch(`/api/shipments/batch-status?${params.toString()}`, { method: 'PATCH' });
+          await fetch(`${import.meta.env.VITE_API_URL || ''}/api/shipments/batch-status?${params.toString()}`, { method: 'PATCH' });
 
           e.target.closest('.picking-item').classList.toggle('completed', e.target.checked);
           toast(`${ids.length} envío${ids.length > 1 ? 's' : ''} → ${newStatus}`, 'success');

@@ -18,8 +18,11 @@ export const state = {
 };
 
 // ── API Helper ────────────────────────────
+// Uses env var in production (Render URL), or relative path in local dev (Vite proxy)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 export async function api(path, options = {}) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE_URL}/api${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });

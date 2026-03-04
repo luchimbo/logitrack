@@ -134,7 +134,7 @@ export async function renderCarriers() {
     // Status update handler
     window.__updateStatus = async (id, status) => {
       try {
-        await fetch(`/api/shipments/${id}/status?status=${status}`, { method: 'PATCH' });
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/shipments/${id}/status?status=${status}`, { method: 'PATCH' });
         toast(`Envío #${id} → ${status}`, 'success');
       } catch (err) {
         toast('Error actualizando estado', 'error');

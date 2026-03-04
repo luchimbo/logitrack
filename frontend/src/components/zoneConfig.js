@@ -196,7 +196,7 @@ export async function renderZones() {
         const params = new URLSearchParams({ name });
         if (display) params.append('display_name', display);
         if (color) params.append('color', color);
-        await fetch(`/api/carriers?${params.toString()}`, { method: 'POST' });
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/carriers?${params.toString()}`, { method: 'POST' });
         toast(`Transportista agregado`, 'success');
         renderZones();
       } catch (err) { toast('Error', 'error'); }
@@ -204,7 +204,7 @@ export async function renderZones() {
 
     window.__deleteCarrier = async (id) => {
       if (!confirm('¿Seguro que querés eliminar este transportista?')) return;
-      await fetch(`/api/carriers/${id}`, { method: 'DELETE' });
+      await fetch(`${import.meta.env.VITE_API_URL || ''}/api/carriers/${id}`, { method: 'DELETE' });
       renderZones();
     };
 
@@ -212,7 +212,7 @@ export async function renderZones() {
     document.querySelectorAll('.btn-remove-zone').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const zoneId = e.currentTarget.dataset.zoneId;
-        await fetch(`/api/zones/${zoneId}`, { method: 'DELETE' });
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/zones/${zoneId}`, { method: 'DELETE' });
         renderZones();
       });
     });
@@ -226,7 +226,7 @@ export async function renderZones() {
 
         try {
           const params = new URLSearchParams({ partido, carrier_name: carrier });
-          await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+          await fetch(`${import.meta.env.VITE_API_URL || ''}/api/zones?${params.toString()}`, { method: 'POST' });
           toast('Asignado correctamente', 'success');
           renderZones();
         } catch (err) {
@@ -249,11 +249,11 @@ export async function renderZones() {
           for (let p of groupPartidos) {
             // Unassign first if exists
             if (zoneMapData[p]) {
-              await fetch(`/api/zones/${zoneMapData[p].zone_id}`, { method: 'DELETE' });
+              await fetch(`${import.meta.env.VITE_API_URL || ''}/api/zones/${zoneMapData[p].zone_id}`, { method: 'DELETE' });
             }
             // Assign new
             const params = new URLSearchParams({ partido: p, carrier_name: carrier });
-            await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+            await fetch(`${import.meta.env.VITE_API_URL || ''}/api/zones?${params.toString()}`, { method: 'POST' });
             assignedCount++;
           }
           toast(`${assignedCount} zonas de ${group} asignadas a ${carrier}`, 'success');

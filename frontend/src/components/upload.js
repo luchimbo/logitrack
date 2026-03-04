@@ -81,7 +81,7 @@ async function handleFiles(fileList) {
   try {
     progressFill.style.width = '60%';
 
-    const result = await fetch('/api/upload', {
+    const result = await fetch((import.meta.env.VITE_API_URL || '') + '/api/upload', {
       method: 'POST',
       body: formData,
     }).then(r => {
