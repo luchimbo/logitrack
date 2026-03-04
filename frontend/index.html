@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LogiTrack - Gestión Logística</title>
+  <meta name="description" content="Sistema de gestión logística para despacho de productos MercadoLibre" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">📦</div>
+        <span class="brand-text">LogiTrack</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#" class="nav-link active" data-section="upload" id="nav-upload">
+            <span class="nav-icon">📤</span><span class="nav-label">Subir Etiquetas</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-section="colecta" id="nav-colecta">
+            <span class="nav-icon">📦</span><span class="nav-label">Colecta</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-section="flex" id="nav-flex">
+            <span class="nav-icon">🚀</span><span class="nav-label">Flex</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-section="dashboard" id="nav-dashboard">
+            <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+          </a></li>
+        <li><a href="#" class="nav-link" data-section="zones" id="nav-zones">
+            <span class="nav-icon">⚙️</span><span class="nav-label">Zonas</span>
+          </a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="batch-selector" id="batch-selector"></div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <section id="section-upload" class="section active"></section>
+      <section id="section-colecta" class="section"></section>
+      <section id="section-flex" class="section"></section>
+      <section id="section-dashboard" class="section"></section>
+      <section id="section-zones" class="section"></section>
+    </main>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+venv/
+
+# SQLite database
+backend/data/*.db
+
+# Uploads
+backend/data/uploads/
+
+# Diagnostic/temp files
+backend/diag_output.txt
+backend/fix_results.txt
+backend/fix_partidos.py
+backend/test_partido.py
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Vite
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# ZPL sample files (contain personal data)
+*.zpl
+Etiqueta de envio*.txt
