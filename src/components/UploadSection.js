@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
@@ -8,9 +8,25 @@ export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState(null);
+    const [todayShipments, setTodayShipments] = useState([]);
+    const [showShipments, setShowShipments] = useState(false);
 
     const fileInputRef = useRef(null);
-    const { reloadBatches, setCurrentBatchId } = useBatch();
+    const { batches, reloadBatches, setCurrentBatchId } = useBatch();
+
+    // Fetch today's shipments
+    const fetchTodayShipments = async () => {
+        try {
+            const data = await api('/shipments?period=today');
+            setTodayShipments(data);
+        } catch (err) {
+            console.error("Failed to load shipments:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchTodayShipments();
+    }, []);
 
     const handleDragOver = (e) => {
         e.preventDefault();
@@ -58,6 +74,7 @@ export default function UploadSection() {
             // Update global context
             await reloadBatches();
             setCurrentBatchId(data.batch_id);
+            fetchTodayShipments();
 
             toast(`✅ ${data.total_parsed} nuevos envíos agregados (${data.total_in_batch} total)`, "success");
         } catch (error) {
@@ -68,6 +85,44 @@ export default function UploadSection() {
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
+
+    const handleDeleteShipment = async (id) => {
+        try {
+            await api(`/shipments/${id}`, { method: 'DELETE' });
+            setTodayShipments(prev => prev.filter(s => s.id !== id));
+            toast('Envío eliminado', 'success');
+        } catch (err) {
+            toast('Error al eliminar', 'error');
+        }
+    };
+
+    const handleClearToday = async () => {
+        if (!confirm('¿Seguro que querés eliminar TODOS los envíos de hoy? Esta acción no se puede deshacer.')) return;
+        try {
+            await api('/shipments?period=today', { method: 'DELETE' });
+            setTodayShipments([]);
+            setUploadResult(null);
+            await reloadBatches();
+            toast('Todos los envíos de hoy eliminados', 'success');
+        } catch (err) {
+            toast('Error al limpiar', 'error');
+        }
+    };
+
+    const handleDeleteBatch = async (batchId) => {
+        if (!confirm('¿Eliminar todos los envíos de este lote?')) return;
+        try {
+            await api(`/shipments?batch_id=${batchId}`, { method: 'DELETE' });
+            fetchTodayShipments();
+            await reloadBatches();
+            toast('Lote eliminado', 'success');
+        } catch (err) {
+            toast('Error al eliminar lote', 'error');
+        }
+    };
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayBatches = batches.filter(b => b.date === today);
 
     return (
         <div id="section-upload" className="section active">
@@ -141,6 +196,82 @@ export default function UploadSection() {
                     </div>
                 </div>
             )}
+
+            {/* Today's data management */}
+            <div className="mt-lg">
+                <div className="card">
+                    <div className="flex-between mb-md">
+                        <h3 style={{ fontSize: '16px', fontWeight: 700 }}>
+                            📋 Datos de Hoy — {todayShipments.length} envíos
+                        </h3>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setShowShipments(!showShipments); if (!showShipments) fetchTodayShipments(); }}>
+                                {showShipments ? '🔼 Ocultar' : '🔽 Ver envíos'}
+                            </button>
+                            {todayShipments.length > 0 && (
+                                <button className="btn btn-sm" onClick={handleClearToday} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                    🗑️ Limpiar todo hoy
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Today's batches */}
+                    {todayBatches.length > 0 && (
+                        <div style={{ marginBottom: '16px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lotes cargados hoy</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                                {todayBatches.map(b => (
+                                    <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--surface-hover)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', fontSize: '13px' }}>
+                                        <span style={{ fontWeight: 600 }}>Lote #{b.id}</span>
+                                        <span style={{ color: 'var(--text-muted)' }}>· {b.total_packages} envíos</span>
+                                        {b.filenames && <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>· {b.filenames}</span>}
+                                        <button onClick={() => handleDeleteBatch(b.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', padding: '0 4px' }} title="Eliminar lote">🗑️</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Individual shipments */}
+                    {showShipments && todayShipments.length > 0 && (
+                        <div className="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Destinatario</th>
+                                        <th>Método</th>
+                                        <th>Estado</th>
+                                        <th style={{ width: '50px' }}></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {todayShipments.map(s => (
+                                        <tr key={s.id}>
+                                            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                            <td>{s.recipient_name || 'N/A'}</td>
+                                            <td>
+                                                <span className={`badge ${s.shipping_method === 'flex' ? 'badge-flex' : 'badge-colecta'}`}>
+                                                    {s.shipping_method || 'colecta'}
+                                                </span>
+                                            </td>
+                                            <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
+                                            <td>
+                                                <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {showShipments && todayShipments.length === 0 && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px' }}>No hay envíos cargados hoy.</p>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }

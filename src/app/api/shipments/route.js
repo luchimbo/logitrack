@@ -81,16 +81,23 @@ export async function DELETE(request) {
     try {
         const { searchParams } = new URL(request.url);
         const batch_id = searchParams.get('batch_id');
-
-        let sql = "DELETE FROM shipments";
-        const args = [];
+        const period = searchParams.get('period');
+        const specificDate = searchParams.get('date');
 
         if (batch_id) {
-            sql += " WHERE batch_id = ?";
-            args.push(batch_id);
+            await db.execute({ sql: "DELETE FROM shipments WHERE batch_id = ?", args: [batch_id] });
+        } else if (period) {
+            const range = getDateRange(period, specificDate);
+            await db.execute({
+                sql: `DELETE FROM shipments WHERE batch_id IN (
+                    SELECT id FROM daily_batches WHERE date >= ? AND date <= ?
+                )`,
+                args: [range.from, range.to]
+            });
+        } else {
+            await db.execute("DELETE FROM shipments");
         }
 
-        await db.execute({ sql, args });
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("Error clearing shipments:", error);
