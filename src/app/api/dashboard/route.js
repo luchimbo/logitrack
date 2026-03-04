@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function GET(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period') || 'today';
         const specificDate = searchParams.get('date');
@@ -50,8 +52,10 @@ export async function GET(request) {
             by_status[s.status] = (by_status[s.status] || 0) + 1;
             const method = s.shipping_method || "desconocido";
             by_method[method] = (by_method[method] || 0) + 1;
-            const carrier = s.assigned_carrier || s.carrier_name || "Sin asignar";
-            by_carrier[carrier] = (by_carrier[carrier] || 0) + 1;
+            if (s.shipping_method === 'flex') {
+                const carrier = s.assigned_carrier || "Sin asignar (Flex)";
+                by_carrier[carrier] = (by_carrier[carrier] || 0) + 1;
+            }
             const prov = s.province || "Desconocida";
             by_province[prov] = (by_province[prov] || 0) + 1;
         }

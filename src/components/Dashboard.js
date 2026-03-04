@@ -128,19 +128,23 @@ export default function Dashboard() {
 
                 {/* By Carrier */}
                 <div className="card">
-                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🚛 Por Transportista</h3>
-                    <div className="chart-bar-container">
-                        {carrierEntries.map(([carrier, count]) => (
-                            <div key={carrier} className="chart-bar-row">
-                                <div className="chart-bar-label">{carrier}</div>
-                                <div className="chart-bar-track">
-                                    <div className="chart-bar-fill accent" style={{ width: `${(count / maxCarrier * 100).toFixed(0)}%` }}>
-                                        {count}
+                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🚛 Por Transportista (Solo Flex)</h3>
+                    {carrierEntries.length > 0 ? (
+                        <div className="chart-bar-container">
+                            {carrierEntries.map(([carrier, count]) => (
+                                <div key={carrier} className="chart-bar-row">
+                                    <div className="chart-bar-label">{carrier}</div>
+                                    <div className="chart-bar-track">
+                                        <div className="chart-bar-fill accent" style={{ width: `${(count / maxCarrier * 100).toFixed(0)}%` }}>
+                                            {count}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No hay envíos Flex en este período.</p>
+                    )}
                 </div>
 
                 {/* By Province */}
