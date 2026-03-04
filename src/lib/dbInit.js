@@ -63,19 +63,29 @@ export async function initDb() {
 
   // Migration: remove UNIQUE constraint on zone_mappings.partido (if old schema exists)
   try {
-    // Check if the old unique index exists by trying to recreate
-    await db.execute(`CREATE TABLE IF NOT EXISTS zone_mappings_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      partido TEXT NOT NULL,
-      carrier_name TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-    await db.execute(`INSERT OR IGNORE INTO zone_mappings_new (id, partido, carrier_name, created_at)
-      SELECT id, partido, carrier_name, created_at FROM zone_mappings`);
-    await db.execute(`DROP TABLE IF EXISTS zone_mappings`);
-    await db.execute(`ALTER TABLE zone_mappings_new RENAME TO zone_mappings`);
+    // Check if the unique index exists on the current table
+    const indexInfo = await db.execute(
+      "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='zone_mappings' AND sql LIKE '%UNIQUE%'"
+    );
+
+    if (indexInfo.rows.length > 0) {
+      // Old schema detected — migrate
+      await db.execute(`DROP TABLE IF EXISTS zone_mappings_new`);
+      await db.execute(`CREATE TABLE zone_mappings_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        partido TEXT NOT NULL,
+        carrier_name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await db.execute(`INSERT INTO zone_mappings_new (id, partido, carrier_name, created_at)
+        SELECT id, partido, carrier_name, created_at FROM zone_mappings`);
+      await db.execute(`DROP TABLE zone_mappings`);
+      await db.execute(`ALTER TABLE zone_mappings_new RENAME TO zone_mappings`);
+      console.log("Zone migration applied: removed UNIQUE constraint");
+    }
   } catch (e) {
-    // Migration may fail if already applied, that's fine
-    console.log("Zone migration skipped or already applied");
+    // Clean up temp table if something went wrong
+    try { await db.execute("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
+    console.log("Zone migration skipped:", e.message);
   }
 }
