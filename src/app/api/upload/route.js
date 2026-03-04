@@ -4,6 +4,15 @@ import { parseZplFile } from '@/lib/zplParser';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
 
+function toDbValue(value) {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string' || typeof value === 'bigint') return value;
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (value instanceof Date) return value.toISOString();
+    return String(value);
+}
+
 export async function POST(request) {
     try {
         await ensureDb();
@@ -70,6 +79,33 @@ export async function POST(request) {
                 continue;
             }
 
+            const args = [
+                toDbValue(batchId),
+                toDbValue(s.sale_type),
+                toDbValue(s.sale_id),
+                toDbValue(s.tracking_number),
+                toDbValue(s.remitente_id),
+                toDbValue(s.product_name),
+                toDbValue(s.sku),
+                toDbValue(s.color),
+                toDbValue(s.voltage),
+                toDbValue(s.quantity ?? 1),
+                toDbValue(s.recipient_name),
+                toDbValue(s.recipient_user),
+                toDbValue(s.address),
+                toDbValue(s.postal_code),
+                toDbValue(s.city),
+                toDbValue(s.partido),
+                toDbValue(s.province),
+                toDbValue(s.reference),
+                toDbValue(s.shipping_method),
+                toDbValue(s.carrier_code),
+                toDbValue(s.carrier_name),
+                toDbValue(s.assigned_carrier),
+                toDbValue(s.dispatch_date),
+                toDbValue(s.delivery_date),
+            ];
+
             await db.execute({
                 sql: `INSERT INTO shipments (
           batch_id, sale_type, sale_id, tracking_number, remitente_id, 
@@ -86,32 +122,7 @@ export async function POST(request) {
           ?, ?, ?, 
           ?, ?, 'pendiente'
         )`,
-                args: [
-                    batchId,
-                    s.sale_type ?? null,
-                    s.sale_id ?? null,
-                    s.tracking_number ?? null,
-                    s.remitente_id ?? null,
-                    s.product_name,
-                    s.sku ?? null,
-                    s.color ?? null,
-                    s.voltage ?? null,
-                    s.quantity ?? 1,
-                    s.recipient_name ?? null,
-                    s.recipient_user ?? null,
-                    s.address ?? null,
-                    s.postal_code ?? null,
-                    s.city ?? null,
-                    s.partido ?? null,
-                    s.province ?? null,
-                    s.reference ?? null,
-                    s.shipping_method ?? null,
-                    s.carrier_code ?? null,
-                    s.carrier_name ?? null,
-                    s.assigned_carrier ?? null,
-                    s.dispatch_date ?? null,
-                    s.delivery_date ?? null,
-                ]
+                args
             });
 
             saved++;
