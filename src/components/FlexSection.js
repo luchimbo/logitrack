@@ -120,12 +120,32 @@ export default function FlexSection() {
             {/* Per-carrier tables */}
             {Object.entries(byCarrier).map(([carrier, items]) => {
                 const carrierData = carriers.find(c => c.name === carrier);
+
+                // Zone breakdown for this carrier
+                const byZone = {};
+                items.forEach(s => {
+                    const zone = s.partido || s.city || 'Sin zona';
+                    byZone[zone] = (byZone[zone] || 0) + 1;
+                });
+                const zoneSorted = Object.entries(byZone).sort((a, b) => b[1] - a[1]);
+
                 return (
                     <div key={carrier} className="card mb-md" style={{ borderLeft: `3px solid ${carrierData?.color || 'var(--accent)'}` }}>
                         <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
                             🚛 {carrierData?.display_name || carrier}
                             <span className="badge badge-flex">{items.length} envíos</span>
                         </h3>
+
+                        {/* Zone breakdown */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "14px", padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", width: "100%", marginBottom: "4px" }}>📍 Desglose por zona</span>
+                            {zoneSorted.map(([zone, count]) => (
+                                <span key={zone} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 10px", borderRadius: "var(--radius-full)", background: "var(--surface)", border: "1px solid var(--border)", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                                    {zone} <strong style={{ color: carrierData?.color || 'var(--accent)' }}>{count}</strong>
+                                </span>
+                            ))}
+                        </div>
+
                         <div className="table-container">
                             <table>
                                 <thead><tr><th>Producto</th><th>Destino</th><th>Estado</th></tr></thead>
