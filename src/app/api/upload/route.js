@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { parseZplFile } from '@/lib/zplParser';
 import { assignCarrier } from '@/lib/zoneMapper';
+import { ensureDb } from '@/lib/ensureDb';
 
 export const config = {
     api: {
@@ -11,6 +12,7 @@ export const config = {
 
 export async function POST(request) {
     try {
+        await ensureDb();
         const formData = await request.formData();
         const files = formData.getAll('files');
 
@@ -91,12 +93,30 @@ export async function POST(request) {
           ?, ?, 'pendiente'
         )`,
                 args: [
-                    batchId, s.sale_type, s.sale_id, s.tracking_number, s.remitente_id,
-                    s.product_name, s.sku, s.color, s.voltage, s.quantity,
-                    s.recipient_name, s.recipient_user, s.address, s.postal_code,
-                    s.city, s.partido, s.province, s.reference, s.shipping_method,
-                    s.carrier_code, s.carrier_name, s.assigned_carrier,
-                    s.dispatch_date, s.delivery_date
+                    batchId,
+                    s.sale_type ?? null,
+                    s.sale_id ?? null,
+                    s.tracking_number ?? null,
+                    s.remitente_id ?? null,
+                    s.product_name,
+                    s.sku ?? null,
+                    s.color ?? null,
+                    s.voltage ?? null,
+                    s.quantity ?? 1,
+                    s.recipient_name ?? null,
+                    s.recipient_user ?? null,
+                    s.address ?? null,
+                    s.postal_code ?? null,
+                    s.city ?? null,
+                    s.partido ?? null,
+                    s.province ?? null,
+                    s.reference ?? null,
+                    s.shipping_method ?? null,
+                    s.carrier_code ?? null,
+                    s.carrier_name ?? null,
+                    s.assigned_carrier ?? null,
+                    s.dispatch_date ?? null,
+                    s.delivery_date ?? null,
                 ]
             });
 
