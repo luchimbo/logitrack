@@ -15,7 +15,7 @@ export default function CarrierView() {
             setLoading(true);
             setError(null);
             try {
-                const qs = getQueryString();
+                const qs = getQueryString('shipping_method=flex');
                 const data = await api(`/shipments?${qs}`);
                 setShipments(data);
             } catch (err) {
@@ -60,11 +60,11 @@ export default function CarrierView() {
             <div className="section active">
                 <div className="section-header">
                     <h1 className="section-title">🚛 Transportistas</h1>
-                    <p className="section-subtitle">Envíos agrupados por transportista</p>
+                    <p className="section-subtitle">Envíos Flex agrupados por transportista</p>
                 </div>
                 <div className="empty-state">
                     <div className="empty-state-icon">🚛</div>
-                    <p className="empty-state-text">No hay envíos cargados.</p>
+                    <p className="empty-state-text">No hay envíos Flex cargados.</p>
                 </div>
             </div>
         );
@@ -72,22 +72,14 @@ export default function CarrierView() {
 
     const groups = {};
     shipments.forEach(s => {
-        let groupKey, groupLabel, groupColor;
-        if (s.shipping_method === 'flex') {
-            groupKey = s.assigned_carrier || 'flex-sin-asignar';
-            groupLabel = s.assigned_carrier || '⚠️ Flex Sin Asignar';
-            groupColor = s.assigned_carrier ? '#6366f1' : '#ef4444';
-        } else {
-            groupKey = `colecta-${s.carrier_name || 'desconocido'}`;
-            groupLabel = `📦 ${s.carrier_name || 'Colecta'}`;
-            groupColor = '#f59e0b';
-        }
+        const groupKey = s.assigned_carrier || 'flex-sin-asignar';
+        const groupLabel = s.assigned_carrier || '⚠️ Flex Sin Asignar';
+        const groupColor = s.assigned_carrier ? '#6366f1' : '#ef4444';
         if (!groups[groupKey]) groups[groupKey] = { label: groupLabel, color: groupColor, shipments: [] };
         groups[groupKey].shipments.push(s);
     });
 
-    const flexCount = shipments.filter(s => s.shipping_method === 'flex').length;
-    const colectaCount = shipments.filter(s => s.shipping_method === 'colecta').length;
+    const flexCount = shipments.length;
     const unassignedFlex = shipments.filter(s => s.shipping_method === 'flex' && !s.assigned_carrier).length;
 
     const sortedGroups = Object.entries(groups).sort((a, b) => {
@@ -100,13 +92,12 @@ export default function CarrierView() {
         <div className="section active">
             <div className="section-header">
                 <h1 className="section-title">🚛 Transportistas</h1>
-                <p className="section-subtitle">Envíos agrupados por transportista y método</p>
+                <p className="section-subtitle">Envíos Flex agrupados por transportista</p>
             </div>
 
             <div className="stats-grid">
                 <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total</div></div>
                 <div className="stat-card card info"><div className="stat-value">{flexCount}</div><div className="stat-label">Flex</div></div>
-                <div className="stat-card card warning"><div className="stat-value">{colectaCount}</div><div className="stat-label">Colecta</div></div>
                 {unassignedFlex > 0 && <div className="stat-card card danger"><div className="stat-value">{unassignedFlex}</div><div className="stat-label">Sin Asignar</div></div>}
             </div>
 
