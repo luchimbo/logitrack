@@ -5,7 +5,7 @@ import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
 export default function ColectaSection() {
-    const { getQueryString, period, specificDate } = useBatch();
+    const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -15,7 +15,7 @@ export default function ColectaSection() {
             setLoading(true);
             setError(null);
             try {
-                const qs = getQueryString('shipping_method=colecta');
+                const qs = getTodayQueryString('shipping_method=colecta');
                 const data = await api(`/shipments?${qs}`);
                 setShipments(data);
             } catch (err) {
@@ -25,7 +25,7 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [period, specificDate]);
+    }, []);
 
     const handleStatusChange = async (id, status) => {
         try {

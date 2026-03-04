@@ -20,7 +20,7 @@ const PARTIDO_ZONES = {
 };
 
 export default function FlexSection() {
-    const { getQueryString, period, specificDate } = useBatch();
+    const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
     const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -31,7 +31,7 @@ export default function FlexSection() {
             setLoading(true);
             setError(null);
             try {
-                const qs = getQueryString('shipping_method=flex');
+                const qs = getTodayQueryString('shipping_method=flex');
                 const [shipmentsData, carriersData] = await Promise.all([
                     api(`/shipments?${qs}`),
                     api('/carriers'),
@@ -45,7 +45,7 @@ export default function FlexSection() {
             }
         }
         fetchData();
-    }, [period, specificDate]);
+    }, []);
 
     const handleStatusChange = async (id, status) => {
         try {
@@ -62,7 +62,7 @@ export default function FlexSection() {
             const result = await api('/shipments/reassign-flex', { method: 'POST' });
             toast(`Reasignación completada: ${result.reassigned || 0} envíos`, 'success');
             // Refresh
-            const qs = getQueryString('shipping_method=flex');
+            const qs = getTodayQueryString('shipping_method=flex');
             const data = await api(`/shipments?${qs}`);
             setShipments(data);
         } catch (err) {

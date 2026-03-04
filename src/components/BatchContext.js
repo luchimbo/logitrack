@@ -42,6 +42,12 @@ export function BatchProvider({ children }) {
         return qs;
     };
 
+    const getTodayQueryString = (extra = '') => {
+        let qs = 'period=today';
+        if (extra) qs += `&${extra}`;
+        return qs;
+    };
+
     return (
         <BatchContext.Provider value={{
             batches,
@@ -52,6 +58,7 @@ export function BatchProvider({ children }) {
             specificDate,
             setSpecificDate,
             getQueryString,
+            getTodayQueryString,
             reloadBatches: async () => {
                 const data = await api("/batches");
                 setBatches(data);

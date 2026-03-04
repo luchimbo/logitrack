@@ -72,26 +72,30 @@ export default function Home() {
       <main className="main-content">
         <header className="topbar">
           <div className="period-picker">
-            {PERIODS.map((p) => (
-              <button
-                key={p.id}
-                className={`period-tab ${period === p.id ? 'active' : ''}`}
-                onClick={() => setPeriod(p.id)}
-                title={p.label}
-              >
-                <span className="period-icon">{p.icon}</span>
-                <span className="period-label">{p.label}</span>
-              </button>
-            ))}
+            {activeTab === 'dashboard' && (
+              <>
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`period-tab ${period === p.id ? 'active' : ''}`}
+                    onClick={() => setPeriod(p.id)}
+                    title={p.label}
+                  >
+                    <span className="period-icon">{p.icon}</span>
+                    <span className="period-label">{p.label}</span>
+                  </button>
+                ))}
 
-            {period === 'date' && (
-              <input
-                type="date"
-                className="form-input date-input"
-                value={specificDate}
-                onChange={(e) => setSpecificDate(e.target.value)}
-                max={new Date().toISOString().slice(0, 10)}
-              />
+                {period === 'date' && (
+                  <input
+                    type="date"
+                    className="form-input date-input"
+                    value={specificDate}
+                    onChange={(e) => setSpecificDate(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                  />
+                )}
+              </>
             )}
           </div>
 

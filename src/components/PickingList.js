@@ -5,7 +5,7 @@ import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
 export default function PickingList() {
-    const { getQueryString, period, specificDate } = useBatch();
+    const { getTodayQueryString } = useBatch();
     const [pickingList, setPickingList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -15,7 +15,7 @@ export default function PickingList() {
             setLoading(true);
             setError(null);
             try {
-                const qs = getQueryString();
+                const qs = getTodayQueryString();
                 const data = await api(`/picking-list?${qs}`);
                 data.sort((a, b) => {
                     const aComplete = a.statuses.every(s => s !== 'pendiente');
@@ -31,7 +31,7 @@ export default function PickingList() {
             }
         }
         fetchData();
-    }, [period, specificDate]);
+    }, []);
 
     const handleStatusChange = async (shipmentIds, newStatus) => {
         try {
