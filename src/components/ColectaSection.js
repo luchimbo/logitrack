@@ -45,6 +45,19 @@ export default function ColectaSection() {
         }
     };
 
+    const handleDeleteShipment = async (id) => {
+        const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        try {
+            await api(`/shipments/${id}`, { method: 'DELETE' });
+            setShipments(prev => prev.filter(s => s.id !== id));
+            toast(`Envío #${id} eliminado`, 'success');
+        } catch (err) {
+            toast('Error eliminando envío', 'error');
+        }
+    };
+
     if (loading && !shipments.length) {
         return (
             <div className="section active">
@@ -111,6 +124,7 @@ export default function ColectaSection() {
                                 <th>Destinatario</th>
                                 <th>Ciudad</th>
                                 <th>Estado</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -127,6 +141,15 @@ export default function ColectaSection() {
                                             <option value="empaquetado">📦 Empaquetado</option>
                                             <option value="despachado">✅ Despachado</option>
                                         </select>
+                                    </td>
+                                    <td>
+                                        <button
+                                            className="btn btn-sm"
+                                            style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                            onClick={() => handleDeleteShipment(s.id)}
+                                        >
+                                            🗑️ Eliminar
+                                        </button>
                                     </td>
                                 </tr>
                             ))}

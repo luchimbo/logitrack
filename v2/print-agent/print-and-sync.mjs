@@ -18,7 +18,19 @@ const TRACKING_INDEX_PATH = path.join(DATA_DIR, "known_trackings.json");
 const HISTORY_PATH = path.join(DATA_DIR, "print_history.jsonl");
 const LAST_RUN_LOG_PATH = path.join(DATA_DIR, "last_run.log");
 
-const DEFAULT_PRINTER_PATH = "\\\\127.0.0.1\\ZDesigner ZD420-203dpi ZPL (Copiar 1)";
+const DEFAULT_PRINTER_PATH = "\\\\127.0.0.1\\ZDesigner ZD420-203dpi ZPL";
+
+function sanitizePrinterPath(value) {
+  let s = String(value || "").trim();
+  if (!s) return DEFAULT_PRINTER_PATH;
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  while (s.endsWith("\\") || s.endsWith("/")) {
+    s = s.slice(0, -1);
+  }
+  return s;
+}
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -67,9 +79,11 @@ function loadConfig() {
   const fromFile = readJson(CONFIG_PATH, {});
   return {
     printerPath:
-      process.env.PRINT_V2_PRINTER_PATH ||
-      fromFile.printerPath ||
-      DEFAULT_PRINTER_PATH,
+      sanitizePrinterPath(
+        process.env.PRINT_V2_PRINTER_PATH ||
+        fromFile.printerPath ||
+        DEFAULT_PRINTER_PATH
+      ),
     syncUrl: process.env.PRINT_V2_SYNC_URL || fromFile.syncUrl || "",
     syncToken: process.env.PRINT_V2_SYNC_TOKEN || fromFile.syncToken || "",
     retryBeforePrint: fromFile.retryBeforePrint !== false,
@@ -174,12 +188,19 @@ function buildPrintFileContent(orderedLabels) {
 }
 
 function printFileToSharedPrinter(filePath, printerPath) {
-  const command = `copy /b "${filePath}" "${printerPath}"`;
-  const result = spawnSync("cmd", ["/c", command], { encoding: "utf8" });
+  if (!printerPath.startsWith("\\\\")) {
+    throw new Error(`Ruta de impresora invalida: ${printerPath}`);
+  }
+
+  const result = spawnSync("cmd.exe", ["/c", "copy", "/b", filePath, printerPath], {
+    encoding: "utf8",
+  });
   if (result.status !== 0) {
     const stderr = (result.stderr || "").trim();
     const stdout = (result.stdout || "").trim();
-    throw new Error(stderr || stdout || "No se pudo enviar a impresora compartida");
+    throw new Error(
+      `${stderr || stdout || "No se pudo enviar a impresora compartida"} | printerPath=${printerPath}`
+    );
   }
 }
 
@@ -203,6 +224,7 @@ function buildJobPayload({
   printerPath,
   printFilePath,
   knownTrackingIndex,
+  isDryRun,
 }) {
   const seenInThisJob = new Set();
 
@@ -225,8 +247,10 @@ function buildJobPayload({
       sku: label.skuNorm,
       tracking_number: tracking,
       label_fingerprint: fingerprint,
+      sale_type: label.parsed?.sale_type || null,
       sale_id: label.parsed?.sale_id || null,
       product_name: label.parsed?.product_name || null,
+      quantity: Number(label.parsed?.quantity) || 1,
       shipping_method: label.parsed?.shipping_method || null,
       is_reprint: isReprint,
     };
@@ -241,6 +265,7 @@ function buildJobPayload({
   return {
     v: 1,
     job_id: jobId,
+    is_dry_run: Boolean(isDryRun),
     created_at: new Date().toISOString(),
     source_files: fileArgs,
     printer_path: printerPath,
@@ -442,6 +467,7 @@ async function main() {
     printerPath: config.printerPath,
     printFilePath,
     knownTrackingIndex,
+    isDryRun: config.dryRun,
   });
 
   updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
@@ -453,6 +479,11 @@ async function main() {
   logLine(`TXT ordenado: ${printFilePath}`);
   if (previewPath) {
     logLine(`Preview ordenado: ${previewPath}`);
+  }
+
+  if (config.dryRun) {
+    logLine("Dry-run activo: sync omitido.");
+    return;
   }
 
   const syncResult = await syncJob(job, config);

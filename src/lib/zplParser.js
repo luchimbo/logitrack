@@ -351,10 +351,23 @@ function emptyShipment() {
 }
 
 function isFlexLabel(content) {
+    if (content.includes("Domicilio:")) return false;
+    if (content.includes("Ciudad de destino:")) return false;
+    if (/\^BCN,/.test(content)) return false;
+    if (content.includes("CIERRE CAJAS")) return false;
+
     if (/Env.{1,3}o Flex/.test(content)) return true;
-    if (content.includes("Destinatario:")) return true;
-    if (content.includes("Direccion:") && !content.includes("Domicilio:")) return true;
     if (content.includes("sender_id") && content.includes("hash_code")) return true;
+    if (content.includes("Destinatario:") && content.includes("Direccion:")) return true;
+    if (content.includes("Direccion:") && !content.includes("Domicilio:")) return true;
+    return false;
+}
+
+function isColectaLabel(content) {
+    if (content.includes("Domicilio:")) return true;
+    if (content.includes("Ciudad de destino:")) return true;
+    if (/\^BCN,/.test(content)) return true;
+    if (content.includes("CIERRE CAJAS")) return true;
     return false;
 }
 
@@ -586,7 +599,9 @@ export function parseZplFile(content) {
         if (labelContent.trim().length < 50) continue;
 
         let shipment = null;
-        if (isFlexLabel(labelContent)) {
+        if (isColectaLabel(labelContent)) {
+            shipment = parseColectaLabel(labelContent);
+        } else if (isFlexLabel(labelContent)) {
             shipment = parseFlexLabel(labelContent);
         } else {
             shipment = parseColectaLabel(labelContent);

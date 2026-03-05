@@ -37,6 +37,19 @@ export default function CarrierView() {
         }
     };
 
+    const handleDeleteShipment = async (id) => {
+        const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        try {
+            await api(`/shipments/${id}`, { method: 'DELETE' });
+            setShipments(prev => prev.filter(s => s.id !== id));
+            toast(`Envío #${id} eliminado`, 'success');
+        } catch (err) {
+            toast('Error eliminando envío', 'error');
+        }
+    };
+
     if (loading && !shipments.length) {
         return (
             <div className="section active">
@@ -115,12 +128,21 @@ export default function CarrierView() {
                                     <div className="destination">📍 {s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</div>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
-                                        <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
-                                            <option value="pendiente">🕒 Pendiente</option>
-                                            <option value="encontrado">🔍 Encontrado</option>
-                                            <option value="empaquetado">📦 Empaquetado</option>
-                                            <option value="despachado">✅ Despachado</option>
-                                        </select>
+                                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                            <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
+                                                <option value="pendiente">🕒 Pendiente</option>
+                                                <option value="encontrado">🔍 Encontrado</option>
+                                                <option value="empaquetado">📦 Empaquetado</option>
+                                                <option value="despachado">✅ Despachado</option>
+                                            </select>
+                                            <button
+                                                className="btn btn-sm"
+                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                onClick={() => handleDeleteShipment(s.id)}
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}

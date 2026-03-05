@@ -70,6 +70,19 @@ export default function FlexSection() {
         }
     };
 
+    const handleDeleteShipment = async (id) => {
+        const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        try {
+            await api(`/shipments/${id}`, { method: 'DELETE' });
+            setShipments(prev => prev.filter(s => s.id !== id));
+            toast(`Envío #${id} eliminado`, 'success');
+        } catch (err) {
+            toast('Error eliminando envío', 'error');
+        }
+    };
+
     if (loading && !shipments.length) {
         return (
             <div className="section active">
@@ -164,7 +177,7 @@ export default function FlexSection() {
 
                         <div className="table-container">
                             <table>
-                                <thead><tr><th>Producto</th><th>Destino</th><th>Estado</th></tr></thead>
+                                <thead><tr><th>Producto</th><th>Destino</th><th>Estado</th><th>Acciones</th></tr></thead>
                                 <tbody>
                                     {items.map(s => (
                                         <tr key={s.id}>
@@ -177,6 +190,15 @@ export default function FlexSection() {
                                                     <option value="empaquetado">📦 Empaquetado</option>
                                                     <option value="despachado">✅ Despachado</option>
                                                 </select>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                    onClick={() => handleDeleteShipment(s.id)}
+                                                >
+                                                    🗑️ Eliminar
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -194,7 +216,7 @@ export default function FlexSection() {
                     </h3>
                     <div className="table-container">
                         <table>
-                            <thead><tr><th>Producto</th><th>Destino</th><th>Partido</th><th>Estado</th></tr></thead>
+                            <thead><tr><th>Producto</th><th>Destino</th><th>Partido</th><th>Estado</th><th>Acciones</th></tr></thead>
                             <tbody>
                                 {unassigned.map(s => (
                                     <tr key={s.id}>
@@ -206,10 +228,19 @@ export default function FlexSection() {
                                                 <option value="pendiente">🕒 Pendiente</option>
                                                 <option value="encontrado">🔍 Encontrado</option>
                                                 <option value="empaquetado">📦 Empaquetado</option>
-                                                <option value="despachado">✅ Despachado</option>
-                                            </select>
-                                        </td>
-                                    </tr>
+                                                    <option value="despachado">✅ Despachado</option>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                    onClick={() => handleDeleteShipment(s.id)}
+                                                >
+                                                    🗑️ Eliminar
+                                                </button>
+                                            </td>
+                                        </tr>
                                 ))}
                             </tbody>
                         </table>

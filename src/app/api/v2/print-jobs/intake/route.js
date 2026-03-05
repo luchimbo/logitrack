@@ -269,6 +269,10 @@ export async function POST(request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
+    if (payload?.is_dry_run === true) {
+      return NextResponse.json({ ok: true, ignored: true, reason: "dry_run" });
+    }
+
     const jobId = stringOrNull(payload?.job_id, 120);
     if (!jobId) {
       return NextResponse.json({ error: "job_id is required" }, { status: 400 });
