@@ -70,10 +70,24 @@ function sanitizeSkuOrder(rawSkuOrder, labels) {
     });
 }
 
-async function getOrCreateTodayBatch(sourceFiles) {
-  const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
+function extractDateOnly(value) {
+  const s = stringOrNull(value, 60);
+  if (!s) return null;
+  const datePart = s.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    return datePart;
+  }
+  return null;
+}
 
-  const todayResult = await db.execute("SELECT id, filenames FROM daily_batches WHERE date = CURRENT_DATE");
+async function getOrCreateBatch(sourceFiles, batchDate = null) {
+  const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
+  const dateValue = extractDateOnly(batchDate) || new Date().toISOString().slice(0, 10);
+
+  const todayResult = await db.execute({
+    sql: "SELECT id, filenames FROM daily_batches WHERE date = ?",
+    args: [asDbValue(dateValue)],
+  });
   if (todayResult.rows.length > 0) {
     const batchId = Number(todayResult.rows[0].id);
     const currentFiles = todayResult.rows[0].filenames
@@ -90,8 +104,8 @@ async function getOrCreateTodayBatch(sourceFiles) {
   }
 
   const result = await db.execute({
-    sql: "INSERT INTO daily_batches (filenames) VALUES (?)",
-    args: [asDbValue(filenames.join(", "))],
+    sql: "INSERT INTO daily_batches (date, filenames) VALUES (?, ?)",
+    args: [asDbValue(dateValue), asDbValue(filenames.join(", "))],
   });
 
   return Number(result.lastInsertRowid);
@@ -173,6 +187,69 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
   return { inserted, skipped };
 }
 
+function parseJsonOrFallback(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function backfillExistingJobToLegacy(jobId) {
+  const headerResult = await db.execute({
+    sql: `SELECT id, created_at_client, source_files_json
+          FROM print_jobs
+          WHERE job_id = ?
+          LIMIT 1`,
+    args: [asDbValue(jobId)],
+  });
+
+  if (!headerResult.rows.length) {
+    return { found: false, batchId: null, inserted: 0, skipped: 0 };
+  }
+
+  const header = headerResult.rows[0];
+  const sourceFiles = parseJsonOrFallback(header.source_files_json, []);
+  const batchDate = extractDateOnly(header.created_at_client);
+  const batchId = await getOrCreateBatch(sourceFiles, batchDate);
+
+  const itemsResult = await db.execute({
+    sql: `SELECT
+      item_order,
+      sku,
+      tracking_number,
+      sale_id,
+      product_name,
+      shipping_method,
+      is_reprint
+    FROM print_job_items
+    WHERE print_job_id = ?
+    ORDER BY item_order ASC, id ASC`,
+    args: [asDbValue(Number(header.id))],
+  });
+
+  const items = itemsResult.rows.map((row) => ({
+    item_order: intOrDefault(row.item_order, 0),
+    sku: stringOrNull(row.sku, 120) || "SIN-SKU",
+    tracking_number: stringOrNull(row.tracking_number, 120),
+    label_fingerprint: null,
+    sale_type: null,
+    sale_id: stringOrNull(row.sale_id, 120),
+    product_name: stringOrNull(row.product_name, 500),
+    quantity: 1,
+    shipping_method: stringOrNull(row.shipping_method, 50),
+    is_reprint: Number(row.is_reprint) === 1 ? 1 : 0,
+  }));
+
+  const legacyResult = await insertLegacyShipments(batchId, items);
+  return {
+    found: true,
+    batchId,
+    inserted: legacyResult.inserted,
+    skipped: legacyResult.skipped,
+  };
+}
+
 export async function POST(request) {
   try {
     await ensureDb();
@@ -211,11 +288,15 @@ export async function POST(request) {
       args: [jobId],
     });
     if (existingJob.rows.length > 0) {
+      const backfill = await backfillExistingJobToLegacy(jobId);
       return NextResponse.json({
         ok: true,
         duplicate: true,
         job_id: jobId,
         print_job_id: Number(existingJob.rows[0].id),
+        batch_id: backfill.batchId,
+        shipments_inserted: backfill.inserted,
+        shipments_skipped: backfill.skipped,
       });
     }
 
@@ -275,7 +356,8 @@ export async function POST(request) {
       : [];
     const skuOrder = sanitizeSkuOrder(payload?.sku_order, normalizedLabels);
 
-    const batchId = await getOrCreateTodayBatch(sourceFiles);
+    const batchDate = extractDateOnly(payload?.created_at);
+    const batchId = await getOrCreateBatch(sourceFiles, batchDate);
     const legacyResult = await insertLegacyShipments(batchId, normalizedLabels);
 
     let insertResult;
