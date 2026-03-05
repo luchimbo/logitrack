@@ -265,16 +265,25 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
 
   let inserted = 0;
   let skipped = 0;
+  let recoveredFromReprint = 0;
 
   for (const item of normalizedLabels) {
-    if (item.is_reprint === 1) {
+    const itemTracking = stringOrNull(item.tracking_number, 120);
+
+    if (itemTracking && existing.has(itemTracking)) {
       skipped += 1;
       continue;
     }
 
-    if (item.tracking_number && existing.has(item.tracking_number)) {
+    // If it is marked as reprint but the shipment does not exist in legacy table,
+    // recover it to avoid operational gaps after cleanups/migrations.
+    if (item.is_reprint === 1 && !itemTracking) {
       skipped += 1;
       continue;
+    }
+
+    if (item.is_reprint === 1 && itemTracking && !existing.has(itemTracking)) {
+      recoveredFromReprint += 1;
     }
 
     const parsedShipment = parseShipmentFromRawBlock(item.raw_block);
@@ -374,7 +383,7 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
     args: [asDbValue(batchId), asDbValue(batchId)],
   });
 
-  return { inserted, skipped };
+  return { inserted, skipped, recovered_from_reprint: recoveredFromReprint };
 }
 
 function parseJsonOrFallback(value, fallback) {
@@ -656,6 +665,7 @@ export async function POST(request) {
       unique_skus_total: skusTotal,
       shipments_inserted: legacyResult.inserted,
       shipments_skipped: legacyResult.skipped,
+      shipments_recovered_from_reprint: legacyResult.recovered_from_reprint || 0,
       integrity_verified: true,
       parser_misses: contractValidation.integrity.parser_misses,
     });
