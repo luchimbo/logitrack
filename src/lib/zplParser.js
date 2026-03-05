@@ -31,6 +31,10 @@ const PARTIDO_MAP = {
     "moreno": "moreno",
     "merlo": "merlo",
     "la matanza": "la_matanza",
+    "la matanza sur": "la_matanza_sur",
+    "la matanza norte": "la_matanza_norte",
+    "matanza sur": "la_matanza_sur",
+    "matanza norte": "la_matanza_norte",
     "ezeiza": "ezeiza",
     "esteban echeverria": "esteban_echeverria",
     "almirante brown": "almirante_brown",
@@ -287,6 +291,62 @@ const LOCALITY_TO_PARTIDO = {
     "VILLA RIACHUELO": "capital_federal",
 };
 
+const LA_MATANZA_NORTE_LOCALITIES = new Set([
+    "SAN JUSTO",
+    "RAMOS MEJIA",
+    "VILLA LUZURIAGA",
+    "LOMAS DEL MIRADOR",
+    "TABLADA",
+    "TAPIALES",
+    "ALDO BONZI",
+    "CIUDAD EVITA",
+]);
+
+const LA_MATANZA_SUR_LOCALITIES = new Set([
+    "GONZALEZ CATAN",
+    "LAFERRERE",
+    "GREGORIO DE LAFERRERE",
+    "VIRREY DEL PINO",
+    "RAFAEL CASTILLO",
+    "20 DE JUNIO",
+    "ISIDRO CASANOVA",
+]);
+
+function sanitizeUpper(value) {
+    return decodeZplHex(String(value || ""))
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function resolvePartidoFromGeo(cityRaw, provinceRaw = "") {
+    const cityUpper = sanitizeUpper(cityRaw);
+    const provinceUpper = sanitizeUpper(provinceRaw);
+    const combinedUpper = `${cityUpper} ${provinceUpper}`.trim();
+
+    if (combinedUpper.includes("LA MATANZA SUR")) return "la_matanza_sur";
+    if (combinedUpper.includes("LA MATANZA NORTE")) return "la_matanza_norte";
+
+    const cityBase = cityUpper.split(",")[0]?.trim() || cityUpper;
+
+    if (LA_MATANZA_SUR_LOCALITIES.has(cityBase)) return "la_matanza_sur";
+    if (LA_MATANZA_NORTE_LOCALITIES.has(cityBase)) return "la_matanza_norte";
+
+    if (LOCALITY_TO_PARTIDO[cityUpper]) return LOCALITY_TO_PARTIDO[cityUpper];
+    if (LOCALITY_TO_PARTIDO[cityBase]) return LOCALITY_TO_PARTIDO[cityBase];
+
+    const cityNorm = normalizePartido(cityBase || cityUpper);
+    if (Object.values(PARTIDO_MAP).includes(cityNorm)) return cityNorm;
+
+    if (provinceUpper === "CAPITAL FEDERAL" || provinceUpper === "CABA") {
+        return "capital_federal";
+    }
+
+    return normalizePartido(cityUpper);
+}
+
 function normalizePartido(name) {
     if (!name) return "";
 
@@ -447,13 +507,7 @@ function parseFlexLabel(content) {
     }
 
     if (!shipment.partido && shipment.city) {
-        const cityNorm = normalizePartido(shipment.city);
-        if (Object.values(PARTIDO_MAP).includes(cityNorm)) {
-            shipment.partido = cityNorm;
-        } else {
-            const mapped = LOCALITY_TO_PARTIDO[shipment.city.toUpperCase().trim()];
-            if (mapped) shipment.partido = mapped;
-        }
+        shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
     }
 
     const dirMatch = content.match(/\^FDDireccion:\s*(.+?)\^FS/);
@@ -518,23 +572,22 @@ function parseFlexLabel(content) {
     }
 
     if (!shipment.partido && shipment.province) {
-        const provNorm = normalizePartido(shipment.province);
-        if (shipment.province.toUpperCase() === "CABA" || shipment.province.toUpperCase() === "CAPITAL FEDERAL") {
+        const provinceUpper = sanitizeUpper(shipment.province);
+        if (provinceUpper === "CABA" || provinceUpper === "CAPITAL FEDERAL") {
             shipment.province = "Capital Federal";
             shipment.partido = "capital_federal";
-        } else if (Object.values(PARTIDO_MAP).includes(provNorm)) {
-            shipment.partido = provNorm;
+        } else if (shipment.city) {
+            shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
+        } else {
+            const provNorm = normalizePartido(shipment.province);
+            if (Object.values(PARTIDO_MAP).includes(provNorm)) {
+                shipment.partido = provNorm;
+            }
         }
     }
 
     if (!shipment.partido && shipment.city) {
-        const cityNorm = normalizePartido(shipment.city);
-        if (Object.values(PARTIDO_MAP).includes(cityNorm)) {
-            shipment.partido = cityNorm;
-        } else {
-            const mapped = LOCALITY_TO_PARTIDO[shipment.city.toUpperCase().trim()];
-            if (mapped) shipment.partido = mapped;
-        }
+        shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
     }
 
     return shipment;
@@ -567,13 +620,15 @@ function parseColectaRecipient(recipText, shipment) {
             shipment.city = cityProv[1].trim();
             shipment.province = cityProv[2].trim();
             if (shipment.province === "Buenos Aires") {
-                shipment.partido = normalizePartido(cityProv[1].trim());
+                shipment.partido = resolvePartidoFromGeo(cityProv[1].trim(), shipment.province);
             } else if (shipment.province === "Capital Federal") {
                 shipment.partido = "capital_federal";
+            } else {
+                shipment.partido = resolvePartidoFromGeo(cityProv[1].trim(), shipment.province);
             }
         } else {
             shipment.city = cityRaw;
-            shipment.partido = normalizePartido(cityRaw);
+            shipment.partido = resolvePartidoFromGeo(cityRaw, shipment.province);
         }
     }
 

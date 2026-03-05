@@ -1,15 +1,28 @@
 import { db } from "./db";
+import { ensureDb } from "./ensureDb";
 
 export function normalizeName(name) {
     if (!name) return "";
-    let s = name.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
+    let s = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     s = s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return s;
+}
+
+function canonicalPartido(normName) {
+    const s = String(normName || "");
+    if (!s) return "";
+
+    if (s.includes("la_matanza_sur")) return "la_matanza_sur";
+    if (s.includes("la_matanza_norte")) return "la_matanza_norte";
+    if (s.includes("la_matanza")) return "la_matanza";
+
     return s;
 }
 
 export async function assignCarrier(partido) {
     if (!partido) return null;
-    const normPartido = normalizeName(partido);
+    await ensureDb();
+    const normPartido = canonicalPartido(normalizeName(partido));
     const result = await db.execute({
         sql: "SELECT carrier_name FROM zone_mappings WHERE partido = ?",
         args: [normPartido]
@@ -21,10 +34,7 @@ export async function assignCarrier(partido) {
 }
 
 export async function getAllZones() {
+    await ensureDb();
     const result = await db.execute("SELECT id, partido, carrier_name FROM zone_mappings ORDER BY partido");
     return result.rows;
 }
-
-// Ensure the db is initialized in serverless environments when importing db modules
-import { initDb } from "./dbInit";
-initDb();

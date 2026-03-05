@@ -128,4 +128,28 @@ export async function initDb() {
     try { await db.execute("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
     // Not critical — may already be migrated
   }
+
+  // Seed critical sub-zones for La Matanza split
+  try {
+    const requiredMappings = [
+      { partido: "la_matanza_sur", carrier: "EntregoYa" },
+      { partido: "la_matanza_norte", carrier: "Hormiga" },
+    ];
+
+    for (const item of requiredMappings) {
+      const exists = await db.execute({
+        sql: "SELECT id FROM zone_mappings WHERE partido = ? AND carrier_name = ? LIMIT 1",
+        args: [item.partido, item.carrier],
+      });
+
+      if (!exists.rows.length) {
+        await db.execute({
+          sql: "INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)",
+          args: [item.partido, item.carrier],
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Zone seed error:", e.message || e);
+  }
 }

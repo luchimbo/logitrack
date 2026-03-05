@@ -22,6 +22,8 @@ const ZONE_GROUPS = {
   moreno: "GBA 2",
   merlo: "GBA 2",
   la_matanza: "GBA 2",
+  la_matanza_sur: "GBA 2",
+  la_matanza_norte: "GBA 1",
   ezeiza: "GBA 2",
   esteban_echeverria: "GBA 2",
   almirante_brown: "GBA 2",

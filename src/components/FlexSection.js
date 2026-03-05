@@ -11,7 +11,7 @@ const PARTIDO_ZONES = {
     '3_de_febrero': 'GBA 1', hurlingham: 'GBA 1', ituzaingo: 'GBA 1', moron: 'GBA 1',
     avellaneda: 'GBA 1', lanus: 'GBA 1',
     tigre: 'GBA 2', malvinas_argentinas: 'GBA 2', jose_c_paz: 'GBA 2', san_miguel: 'GBA 2',
-    moreno: 'GBA 2', merlo: 'GBA 2', la_matanza: 'GBA 2', ezeiza: 'GBA 2',
+    moreno: 'GBA 2', merlo: 'GBA 2', la_matanza: 'GBA 2', la_matanza_sur: 'GBA 2', la_matanza_norte: 'GBA 1', ezeiza: 'GBA 2',
     esteban_echeverria: 'GBA 2', almirante_brown: 'GBA 2', lomas_de_zamora: 'GBA 2',
     quilmes: 'GBA 2', berazategui: 'GBA 2', florencio_varela: 'GBA 2',
     escobar: 'GBA 3', pilar: 'GBA 3', general_rodriguez: 'GBA 3', marcos_paz: 'GBA 3',
