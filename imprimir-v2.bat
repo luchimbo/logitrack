@@ -1,7 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "PRINTER_PATH=\\127.0.0.1\ZDesigner ZD420-203dpi ZPL (Copiar 1)"
+set "PRINTER_PATH="
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "try { $cfg = Get-Content -Raw '%~dp0v2\print-agent\config.json' ^| ConvertFrom-Json; if ($cfg.printerPath) { $cfg.printerPath } } catch {}"`) do set "PRINTER_PATH=%%P"
+
+if not defined PRINTER_PATH if defined PRINT_V2_PRINTER_PATH set "PRINTER_PATH=%PRINT_V2_PRINTER_PATH%"
+if not defined PRINTER_PATH set "PRINTER_PATH=\\127.0.0.1\ZDesigner ZD420-203dpi ZPL"
 if not defined PRINT_V2_SYNC_URL set "PRINT_V2_SYNC_URL=https://logitrack-tan.vercel.app/api/v2/print-jobs/intake"
 
 if "%~1"=="" (
@@ -15,8 +19,18 @@ set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" exit /b 0
 
+if "%EXIT_CODE%"=="2" (
+  echo.
+  echo FALLO DE INTEGRIDAD: se detecto diferencia entre etiquetas de entrada y salida.
+  echo Por seguridad NO se imprime fallback legacy.
+  echo Revisar reporte *.integrity.json en v2\print-agent\data\
+  pause
+  exit /b 2
+)
+
 echo.
 echo V2 termino con errores. Ejecutando fallback legacy con COPY /B...
+echo Ruta impresora fallback: %PRINTER_PATH%
 
 set /a FALLBACK_SENT=0
 set /a FALLBACK_FAILED=0

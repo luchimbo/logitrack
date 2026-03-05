@@ -11,6 +11,12 @@ Este agente local mantiene drag-and-drop sobre `imprimir-v2.bat` y agrega:
 1. Copiar `config.example.json` a `config.json` (opcional para sync)
 2. Arrastrar uno o mas `.txt/.zpl` sobre `imprimir-v2.bat`
 
+## Integridad de impresion
+
+- Antes de imprimir se valida que entrada y salida tengan el mismo set de etiquetas (hash/fingerprint).
+- Si hay mismatch, se bloquea la impresion y se genera un reporte `data/*.integrity.json`.
+- En ese caso no debe usarse fallback de impresion para evitar salir con paquetes incompletos.
+
 Si no configuras `syncUrl`, el agente intenta automaticamente:
 
 - `http://localhost:3000/api/v2/print-jobs/intake`

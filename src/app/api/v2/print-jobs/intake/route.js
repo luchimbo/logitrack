@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
@@ -136,6 +137,126 @@ function parseShipmentFromRawBlock(rawBlock) {
   } catch {
     return null;
   }
+}
+
+function computeLabelFingerprint(rawBlock) {
+  const normalized = String(rawBlock || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return createHash("sha256").update(normalized).digest("hex");
+}
+
+function buildFingerprintCounter(fingerprints) {
+  const counter = new Map();
+  for (const fp of fingerprints) {
+    const key = stringOrNull(fp, 128);
+    if (!key) continue;
+    counter.set(key, (counter.get(key) || 0) + 1);
+  }
+  return counter;
+}
+
+function fingerprintDigestFromCounter(counter) {
+  const serialized = Array.from(counter.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([fp, count]) => `${fp}:${count}`)
+    .join("|");
+  return createHash("sha256").update(serialized).digest("hex");
+}
+
+function validateIntakeContract(payload, rawLabels) {
+  const agentVersion = stringOrNull(payload?.agent_version, 80);
+  if (!agentVersion) {
+    return { ok: false, status: 422, error: "agent_version is required" };
+  }
+
+  const integrity = payload?.integrity;
+  if (!integrity || typeof integrity !== "object") {
+    return { ok: false, status: 422, error: "integrity payload is required" };
+  }
+
+  const checkVersion = stringOrNull(integrity.check_version, 80);
+  if (checkVersion !== "fingerprint-multiset-v1") {
+    return { ok: false, status: 422, error: "Unsupported integrity check version" };
+  }
+
+  const inputBlocksCount = Math.max(0, intOrDefault(integrity.input_blocks_count, 0));
+  const outputBlocksCount = Math.max(0, intOrDefault(integrity.output_blocks_count, 0));
+  const inputFingerprintHash = stringOrNull(integrity.input_fingerprint_hash, 128);
+  const outputFingerprintHash = stringOrNull(integrity.output_fingerprint_hash, 128);
+
+  if (!inputBlocksCount || !outputBlocksCount) {
+    return { ok: false, status: 422, error: "Invalid integrity block counts" };
+  }
+
+  if (integrity.passed !== true) {
+    return { ok: false, status: 422, error: "Client integrity check did not pass" };
+  }
+
+  if (!inputFingerprintHash || !outputFingerprintHash) {
+    return { ok: false, status: 422, error: "Integrity fingerprints are required" };
+  }
+
+  if (inputBlocksCount !== outputBlocksCount) {
+    return { ok: false, status: 422, error: "Input/output block count mismatch in integrity payload" };
+  }
+
+  if (outputBlocksCount !== rawLabels.length) {
+    return {
+      ok: false,
+      status: 422,
+      error: `Label count mismatch. payload=${rawLabels.length} integrity=${outputBlocksCount}`,
+    };
+  }
+
+  const computedFingerprints = [];
+  for (let i = 0; i < rawLabels.length; i += 1) {
+    const raw = rawLabels[i] || {};
+    const rawBlock = stringOrNull(raw.raw_block, 40000);
+    if (!rawBlock) {
+      return { ok: false, status: 422, error: `labels[${i}].raw_block is required` };
+    }
+
+    const providedFingerprint = stringOrNull(raw.label_fingerprint, 128);
+    if (!providedFingerprint) {
+      return { ok: false, status: 422, error: `labels[${i}].label_fingerprint is required` };
+    }
+
+    const computedFingerprint = computeLabelFingerprint(rawBlock);
+    if (providedFingerprint !== computedFingerprint) {
+      return {
+        ok: false,
+        status: 422,
+        error: `labels[${i}] fingerprint mismatch`,
+      };
+    }
+
+    computedFingerprints.push(computedFingerprint);
+  }
+
+  const computedOutputHash = fingerprintDigestFromCounter(buildFingerprintCounter(computedFingerprints));
+
+  if (computedOutputHash !== outputFingerprintHash) {
+    return { ok: false, status: 422, error: "Output fingerprint hash mismatch" };
+  }
+
+  if (inputFingerprintHash !== outputFingerprintHash) {
+    return { ok: false, status: 422, error: "Input/output fingerprint hash mismatch" };
+  }
+
+  return {
+    ok: true,
+    agentVersion,
+    integrity: {
+      check_version: checkVersion,
+      input_blocks_count: inputBlocksCount,
+      output_blocks_count: outputBlocksCount,
+      input_fingerprint_hash: inputFingerprintHash,
+      output_fingerprint_hash: outputFingerprintHash,
+      computed_output_fingerprint_hash: computedOutputHash,
+      parser_misses: Math.max(0, intOrDefault(integrity.parser_misses, 0)),
+    },
+  };
 }
 
 async function insertLegacyShipments(batchId, normalizedLabels) {
@@ -356,6 +477,11 @@ export async function POST(request) {
       return NextResponse.json({ error: `Too many labels (max ${MAX_LABELS})` }, { status: 400 });
     }
 
+    const contractValidation = validateIntakeContract(payload, rawLabels);
+    if (!contractValidation.ok) {
+      return NextResponse.json({ error: contractValidation.error }, { status: contractValidation.status });
+    }
+
     const existingJob = await db.execute({
       sql: "SELECT id FROM print_jobs WHERE job_id = ?",
       args: [jobId],
@@ -530,6 +656,8 @@ export async function POST(request) {
       unique_skus_total: skusTotal,
       shipments_inserted: legacyResult.inserted,
       shipments_skipped: legacyResult.skipped,
+      integrity_verified: true,
+      parser_misses: contractValidation.integrity.parser_misses,
     });
   } catch (error) {
     console.error("V2 intake error:", error);

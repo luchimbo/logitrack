@@ -19,6 +19,7 @@ const HISTORY_PATH = path.join(DATA_DIR, "print_history.jsonl");
 const LAST_RUN_LOG_PATH = path.join(DATA_DIR, "last_run.log");
 
 const DEFAULT_PRINTER_PATH = "\\\\127.0.0.1\\ZDesigner ZD420-203dpi ZPL";
+const AGENT_VERSION = "v2.3.0-integrity";
 
 function sanitizePrinterPath(value) {
   let s = String(value || "").trim();
@@ -139,6 +140,87 @@ function computeLabelFingerprint(rawBlock) {
     .replace(/\s+/g, " ")
     .trim();
   return createHash("sha256").update(normalized).digest("hex");
+}
+
+function buildFingerprintCounter(fingerprints) {
+  const counter = new Map();
+  for (const fp of fingerprints) {
+    const key = String(fp || "").trim();
+    if (!key) continue;
+    counter.set(key, (counter.get(key) || 0) + 1);
+  }
+  return counter;
+}
+
+function fingerprintDigestFromCounter(counter) {
+  const serialized = Array.from(counter.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([fp, count]) => `${fp}:${count}`)
+    .join("|");
+  return createHash("sha256").update(serialized).digest("hex");
+}
+
+function diffFingerprintCounters(inputCounter, outputCounter) {
+  const missing = [];
+  const extra = [];
+
+  for (const [fp, inputCount] of inputCounter.entries()) {
+    const outputCount = outputCounter.get(fp) || 0;
+    if (inputCount > outputCount) {
+      missing.push({ fingerprint: fp, count: inputCount - outputCount });
+    }
+  }
+
+  for (const [fp, outputCount] of outputCounter.entries()) {
+    const inputCount = inputCounter.get(fp) || 0;
+    if (outputCount > inputCount) {
+      extra.push({ fingerprint: fp, count: outputCount - inputCount });
+    }
+  }
+
+  return { missing, extra };
+}
+
+function computeIntegritySummary(inputBlocks, outputBlocks, parserMisses) {
+  const inputFingerprints = inputBlocks.map(computeLabelFingerprint);
+  const outputFingerprints = outputBlocks.map(computeLabelFingerprint);
+
+  const inputCounter = buildFingerprintCounter(inputFingerprints);
+  const outputCounter = buildFingerprintCounter(outputFingerprints);
+  const inputFingerprintHash = fingerprintDigestFromCounter(inputCounter);
+  const outputFingerprintHash = fingerprintDigestFromCounter(outputCounter);
+  const { missing, extra } = diffFingerprintCounters(inputCounter, outputCounter);
+
+  const passed =
+    inputBlocks.length === outputBlocks.length &&
+    missing.length === 0 &&
+    extra.length === 0 &&
+    inputFingerprintHash === outputFingerprintHash;
+
+  return {
+    check_version: "fingerprint-multiset-v1",
+    passed,
+    parser_misses: parserMisses,
+    input_blocks_count: inputBlocks.length,
+    output_blocks_count: outputBlocks.length,
+    input_fingerprint_hash: inputFingerprintHash,
+    output_fingerprint_hash: outputFingerprintHash,
+    missing_fingerprints: missing,
+    extra_fingerprints: extra,
+  };
+}
+
+function writeIntegrityReport(jobId, integritySummary, inputBlocks, outputBlocks) {
+  const reportPath = path.join(DATA_DIR, `${jobId}.integrity.json`);
+  const report = {
+    job_id: jobId,
+    created_at: new Date().toISOString(),
+    integrity: integritySummary,
+    input_preview: inputBlocks.slice(0, 5),
+    output_preview: outputBlocks.slice(0, 5),
+  };
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  return reportPath;
 }
 
 function extractZplBlocks(content) {
@@ -274,6 +356,7 @@ function buildJobPayload({
   printFilePath,
   knownTrackingIndex,
   isDryRun,
+  integrity,
 }) {
   const seenInThisJob = new Set();
 
@@ -331,7 +414,9 @@ function buildJobPayload({
   return {
     v: 1,
     job_id: jobId,
+    agent_version: AGENT_VERSION,
     is_dry_run: Boolean(isDryRun),
+    integrity,
     created_at: new Date().toISOString(),
     source_files: fileArgs,
     printer_path: printerPath,
@@ -483,10 +568,6 @@ async function main() {
 
     for (const rawBlock of blocks) {
       const { parsed, parserMatched } = buildParsedLabel(rawBlock);
-      const hasIdentity = Boolean(parsed?.tracking_number || parsed?.sku);
-      if (!parserMatched && !hasIdentity) {
-        continue;
-      }
       if (!parserMatched) parserMisses += 1;
       extracted.push({
         sourceFile: path.basename(filePath),
@@ -505,6 +586,30 @@ async function main() {
   const { ordered, sortedGroups } = sortLabelsBySkuFrequency(extracted);
   const jobId = buildJobId();
   const printContent = buildPrintFileContent(ordered);
+  const outputBlocks = extractZplBlocks(printContent);
+  const integritySummary = computeIntegritySummary(
+    extracted.map((x) => x.rawBlock),
+    outputBlocks,
+    parserMisses
+  );
+
+  if (!integritySummary.passed) {
+    const reportPath = writeIntegrityReport(
+      jobId,
+      integritySummary,
+      extracted.map((x) => x.rawBlock),
+      outputBlocks
+    );
+    logLine(`ERROR integridad: mismatch entrada/salida. No se imprime. Reporte: ${reportPath}`);
+    const integrityError = new Error("Integrity check failed: input/output label mismatch");
+    integrityError.code = "INTEGRITY_CHECK_FAILED";
+    throw integrityError;
+  }
+
+  logLine(
+    `Integridad OK: ${integritySummary.input_blocks_count} -> ${integritySummary.output_blocks_count} bloques`
+  );
+
   const printFilePath = path.join(DATA_DIR, `${jobId}.txt`);
   let previewPath = null;
 
@@ -542,6 +647,7 @@ async function main() {
     printFilePath,
     knownTrackingIndex,
     isDryRun: config.dryRun,
+    integrity: integritySummary,
   });
 
   if (!config.dryRun) {
@@ -572,6 +678,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("V2 print agent error:", error.message || error);
+  logLine(`V2 print agent error: ${error.message || error}`);
+  if (error?.code === "INTEGRITY_CHECK_FAILED") {
+    process.exit(2);
+  }
   process.exit(1);
 });

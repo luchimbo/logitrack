@@ -363,6 +363,17 @@ function isFlexLabel(content) {
     return false;
 }
 
+function extractFdTexts(segment) {
+    const texts = [];
+    const regex = /\^FD([\s\S]*?)\^FS/g;
+    let match;
+    while ((match = regex.exec(segment)) !== null) {
+        const decoded = decodeZplHex(match[1] || "").replace(/\s+/g, " ").trim();
+        if (decoded) texts.push(decoded);
+    }
+    return texts;
+}
+
 function isColectaLabel(content) {
     if (content.includes("Domicilio:")) return true;
     if (content.includes("Ciudad de destino:")) return true;
@@ -474,6 +485,56 @@ function parseFlexLabel(content) {
     if (barrioField) {
         const barrio = decodeZplHex(barrioField[1].trim());
         if (barrio && !shipment.city) shipment.city = barrio;
+    }
+
+    if (!shipment.city || !shipment.province || !shipment.partido) {
+        const cpPos = content.indexOf("CP:");
+        if (cpPos !== -1) {
+            const candidates = [
+                content.indexOf("^FO0,700", cpPos),
+                content.indexOf("^FO0,715", cpPos),
+                content.indexOf("^FX 3 Horizontal Line", cpPos)
+            ].filter(x => x !== -1);
+
+            const endPos = candidates.length ? Math.min(...candidates) : content.length;
+            const geoSegment = content.slice(cpPos, endPos);
+            const geoTexts = extractFdTexts(geoSegment)
+                .filter(t => !/^CP:\s*\d+$/i.test(t))
+                .filter(t => !/^Entrega:/i.test(t))
+                .filter(t => !/^\d{2}-[A-Za-z]{3}$/i.test(t))
+                .filter(t => !/sender_id|hash_code/i.test(t));
+
+            const uniqueGeo = [...new Set(geoTexts)];
+            if (!shipment.province && uniqueGeo.length >= 1) shipment.province = uniqueGeo[0];
+            if (!shipment.city && uniqueGeo.length >= 2) shipment.city = uniqueGeo[uniqueGeo.length - 1];
+        }
+    }
+
+    if (!shipment.city && shipment.address && shipment.address.includes(",")) {
+        const chunks = shipment.address.split(",").map(x => x.trim()).filter(Boolean);
+        if (chunks.length > 1) {
+            shipment.city = chunks[chunks.length - 1];
+        }
+    }
+
+    if (!shipment.partido && shipment.province) {
+        const provNorm = normalizePartido(shipment.province);
+        if (shipment.province.toUpperCase() === "CABA" || shipment.province.toUpperCase() === "CAPITAL FEDERAL") {
+            shipment.province = "Capital Federal";
+            shipment.partido = "capital_federal";
+        } else if (Object.values(PARTIDO_MAP).includes(provNorm)) {
+            shipment.partido = provNorm;
+        }
+    }
+
+    if (!shipment.partido && shipment.city) {
+        const cityNorm = normalizePartido(shipment.city);
+        if (Object.values(PARTIDO_MAP).includes(cityNorm)) {
+            shipment.partido = cityNorm;
+        } else {
+            const mapped = LOCALITY_TO_PARTIDO[shipment.city.toUpperCase().trim()];
+            if (mapped) shipment.partido = mapped;
+        }
     }
 
     return shipment;
@@ -607,7 +668,8 @@ export function parseZplFile(content) {
             shipment = parseColectaLabel(labelContent);
         }
 
-        if (shipment && shipment.product_name) {
+        const hasIdentity = shipment && (shipment.product_name || shipment.tracking_number || shipment.sku);
+        if (hasIdentity) {
             labels.push(shipment);
         }
     }
