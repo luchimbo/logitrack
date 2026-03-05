@@ -70,6 +70,109 @@ function sanitizeSkuOrder(rawSkuOrder, labels) {
     });
 }
 
+async function getOrCreateTodayBatch(sourceFiles) {
+  const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
+
+  const todayResult = await db.execute("SELECT id, filenames FROM daily_batches WHERE date = CURRENT_DATE");
+  if (todayResult.rows.length > 0) {
+    const batchId = Number(todayResult.rows[0].id);
+    const currentFiles = todayResult.rows[0].filenames
+      ? String(todayResult.rows[0].filenames).split(", ").filter(Boolean)
+      : [];
+
+    const merged = [...new Set([...currentFiles, ...filenames])];
+    await db.execute({
+      sql: "UPDATE daily_batches SET filenames = ? WHERE id = ?",
+      args: [asDbValue(merged.join(", ")), asDbValue(batchId)],
+    });
+
+    return batchId;
+  }
+
+  const result = await db.execute({
+    sql: "INSERT INTO daily_batches (filenames) VALUES (?)",
+    args: [asDbValue(filenames.join(", "))],
+  });
+
+  return Number(result.lastInsertRowid);
+}
+
+async function insertLegacyShipments(batchId, normalizedLabels) {
+  const trackings = uniqueNonEmpty(normalizedLabels.map((x) => x.tracking_number));
+  const existing = await getExistingValues("shipments", "tracking_number", trackings);
+
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const item of normalizedLabels) {
+    if (item.is_reprint === 1) {
+      skipped += 1;
+      continue;
+    }
+
+    if (item.tracking_number && existing.has(item.tracking_number)) {
+      skipped += 1;
+      continue;
+    }
+
+    await db.execute({
+      sql: `INSERT INTO shipments (
+        batch_id, sale_type, sale_id, tracking_number, remitente_id,
+        product_name, sku, color, voltage, quantity,
+        recipient_name, recipient_user, address, postal_code,
+        city, partido, province, reference, shipping_method,
+        carrier_code, carrier_name, assigned_carrier,
+        dispatch_date, delivery_date, status
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, 'pendiente'
+      )`,
+      args: [
+        asDbValue(batchId),
+        asDbValue(item.sale_type || null),
+        asDbValue(item.sale_id),
+        asDbValue(item.tracking_number),
+        null,
+        asDbValue(item.product_name || null),
+        asDbValue(item.sku || null),
+        null,
+        null,
+        asDbValue(item.quantity || 1),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        asDbValue(item.shipping_method || null),
+        null,
+        null,
+        null,
+        null,
+        null,
+      ],
+    });
+
+    inserted += 1;
+    if (item.tracking_number) {
+      existing.add(item.tracking_number);
+    }
+  }
+
+  await db.execute({
+    sql: "UPDATE daily_batches SET total_packages = (SELECT COUNT(*) FROM shipments WHERE batch_id = ?) WHERE id = ?",
+    args: [asDbValue(batchId), asDbValue(batchId)],
+  });
+
+  return { inserted, skipped };
+}
+
 export async function POST(request) {
   try {
     await ensureDb();
@@ -121,8 +224,10 @@ export async function POST(request) {
       sku: stringOrNull(raw?.sku, 120) || "SIN-SKU",
       tracking_number: stringOrNull(raw?.tracking_number, 120),
       label_fingerprint: stringOrNull(raw?.label_fingerprint, 128),
+      sale_type: stringOrNull(raw?.sale_type, 50),
       sale_id: stringOrNull(raw?.sale_id, 120),
       product_name: stringOrNull(raw?.product_name, 500),
+      quantity: Math.max(1, intOrDefault(raw?.quantity, 1)),
       shipping_method: stringOrNull(raw?.shipping_method, 50),
       client_reprint: Boolean(raw?.is_reprint),
     }));
@@ -169,6 +274,9 @@ export async function POST(request) {
       ? payload.source_files.map((x) => stringOrNull(x, 260)).filter(Boolean)
       : [];
     const skuOrder = sanitizeSkuOrder(payload?.sku_order, normalizedLabels);
+
+    const batchId = await getOrCreateTodayBatch(sourceFiles);
+    const legacyResult = await insertLegacyShipments(batchId, normalizedLabels);
 
     let insertResult;
     try {
@@ -244,9 +352,12 @@ export async function POST(request) {
       duplicate: false,
       job_id: jobId,
       print_job_id: printJobId,
+      batch_id: batchId,
       labels_total: labelsTotal,
       reprints_total: reprintsTotal,
       unique_skus_total: skusTotal,
+      shipments_inserted: legacyResult.inserted,
+      shipments_skipped: legacyResult.skipped,
     });
   } catch (error) {
     console.error("V2 intake error:", error);
