@@ -356,6 +356,7 @@ function buildJobPayload({
   printFilePath,
   knownTrackingIndex,
   isDryRun,
+  isSyncOnly,
   integrity,
 }) {
   const seenInThisJob = new Set();
@@ -416,6 +417,7 @@ function buildJobPayload({
     job_id: jobId,
     agent_version: AGENT_VERSION,
     is_dry_run: Boolean(isDryRun),
+    is_sync_only: Boolean(isSyncOnly),
     integrity,
     created_at: new Date().toISOString(),
     source_files: fileArgs,
@@ -535,7 +537,9 @@ async function main() {
   const config = loadConfig();
   const dryRunArg = process.argv.includes("--dry-run");
   const retryOnlyArg = process.argv.includes("--retry-only");
+  const syncOnlyArg = process.argv.includes("--sync-only");
   if (dryRunArg) config.dryRun = true;
+  if (syncOnlyArg) config.dryRun = false;
 
   if (!fs.existsSync(CONFIG_PATH) && fs.existsSync(EXAMPLE_CONFIG_PATH)) {
     logLine("Tip: copiar config.example.json a config.json para configurar sync.");
@@ -633,7 +637,7 @@ async function main() {
     logLine(`Orden SKU (top): ${top}`);
   }
 
-  if (!config.dryRun) {
+  if (!config.dryRun && !syncOnlyArg) {
     printFileToSharedPrinter(printFilePath, config.printerPath);
   }
 
@@ -647,6 +651,7 @@ async function main() {
     printFilePath,
     knownTrackingIndex,
     isDryRun: config.dryRun,
+    isSyncOnly: syncOnlyArg,
     integrity: integritySummary,
   });
 
@@ -656,7 +661,11 @@ async function main() {
     appendHistory(job);
   }
 
-  logLine(`${config.dryRun ? "Dry-run listo" : "Impresion enviada"}. Job: ${job.job_id}`);
+  if (syncOnlyArg) {
+    logLine(`Sync-only listo (sin impresion). Job: ${job.job_id}`);
+  } else {
+    logLine(`${config.dryRun ? "Dry-run listo" : "Impresion enviada"}. Job: ${job.job_id}`);
+  }
   logLine(`Etiquetas: ${job.totals.labels_total} | Reprints: ${job.totals.reprints_total}`);
   logLine(`TXT ordenado: ${printFilePath}`);
   if (previewPath) {

@@ -11,6 +11,10 @@ Este agente local mantiene drag-and-drop sobre `imprimir-v2.bat` y agrega:
 1. Copiar `config.example.json` a `config.json` (opcional para sync)
 2. Arrastrar uno o mas `.txt/.zpl` sobre `imprimir-v2.bat`
 
+Si necesitas reingestar a la app sin volver a imprimir:
+
+- usar `reingestar-sin-imprimir-v2.bat` (ejecuta `--sync-only`)
+
 ## Integridad de impresion
 
 - Antes de imprimir se valida que entrada y salida tengan el mismo set de etiquetas (hash/fingerprint).
@@ -41,6 +45,7 @@ Ejemplo de `syncUrl`:
 
 Tambien se puede ejecutar manualmente con `--dry-run` para no imprimir fisicamente.
 Tambien existe `--retry-only` para reintentar pendientes sin procesar archivos nuevos.
+Tambien existe `--sync-only` para sincronizar sin imprimir.
 
 ## Archivos locales generados
 
