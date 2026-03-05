@@ -67,7 +67,7 @@ async function getOrCreateBatch(sourceFiles, batchDate = null) {
   return Number(created.lastInsertRowid);
 }
 
-export async function POST(request) {
+async function runBackfill(request) {
   try {
     await ensureDb();
 
@@ -185,4 +185,12 @@ export async function POST(request) {
     console.error("V2 backfill error:", error);
     return NextResponse.json({ error: "Failed to backfill legacy shipments" }, { status: 500 });
   }
+}
+
+export async function POST(request) {
+  return runBackfill(request);
+}
+
+export async function GET(request) {
+  return runBackfill(request);
 }
