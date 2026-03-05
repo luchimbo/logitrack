@@ -192,5 +192,5 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
-  return runBackfill(request);
+  return NextResponse.json({ error: "Use POST to run backfill" }, { status: 405 });
 }
