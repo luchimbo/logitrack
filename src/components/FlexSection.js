@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
@@ -23,29 +23,36 @@ export default function FlexSection() {
     const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
     const [carriers, setCarriers] = useState([]);
+    const [health, setHealth] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    useEffect(() => {
-        async function fetchData() {
+    const loadData = useCallback(async (opts = {}) => {
+        const { silent = false } = opts;
+        if (!silent) {
             setLoading(true);
             setError(null);
-            try {
-                const qs = getTodayQueryString('shipping_method=flex');
-                const [shipmentsData, carriersData] = await Promise.all([
-                    api(`/shipments?${qs}`),
-                    api('/carriers'),
-                ]);
-                setShipments(shipmentsData);
-                setCarriers(carriersData);
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
         }
-        fetchData();
-    }, []);
+        try {
+            const qs = getTodayQueryString('shipping_method=flex');
+            const [shipmentsData, carriersData, healthData] = await Promise.all([
+                api(`/shipments?${qs}`),
+                api('/carriers'),
+                api(`/flex-health?${getTodayQueryString()}`),
+            ]);
+            setShipments(shipmentsData);
+            setCarriers(carriersData);
+            setHealth(healthData);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, [getTodayQueryString]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const handleStatusChange = async (id, status) => {
         try {
@@ -60,11 +67,8 @@ export default function FlexSection() {
     const handleReassign = async () => {
         try {
             const result = await api('/shipments/reassign-flex', { method: 'POST' });
-            toast(`Reasignación completada: ${result.reassigned || 0} envíos`, 'success');
-            // Refresh
-            const qs = getTodayQueryString('shipping_method=flex');
-            const data = await api(`/shipments?${qs}`);
-            setShipments(data);
+            toast(`Reasignación completada: ${result.updated || 0} envíos`, 'success');
+            await loadData({ silent: true });
         } catch (err) {
             toast('Error en reasignación', 'error');
         }
@@ -76,12 +80,20 @@ export default function FlexSection() {
 
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
-            setShipments(prev => prev.filter(s => s.id !== id));
+            await loadData({ silent: true });
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
         }
     };
+
+    const healthStatus = health?.status || 'green';
+    const healthStyles = {
+        green: { bg: 'var(--success-bg)', color: 'var(--success)', label: '🟢 OK' },
+        yellow: { bg: 'var(--warning-bg)', color: 'var(--warning)', label: '🟡 Atención' },
+        red: { bg: 'var(--danger-bg)', color: 'var(--danger)', label: '🔴 Crítico' },
+    };
+    const style = healthStyles[healthStatus] || healthStyles.green;
 
     if (loading && !shipments.length) {
         return (
@@ -134,8 +146,49 @@ export default function FlexSection() {
                     <h1 className="section-title">🚀 Flex</h1>
                     <p className="section-subtitle">{shipments.length} envíos flex — {assigned.length} asignados, {unassigned.length} sin asignar</p>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={handleReassign}>🔄 Reasignar por zonas</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-sm" onClick={() => loadData()} disabled={loading}>🔎 Verificar</button>
+                    <button className="btn btn-primary btn-sm" onClick={handleReassign}>🔄 Reasignar por zonas</button>
+                </div>
             </div>
+
+            {health && (
+                <div className="card" style={{ marginBottom: '14px', borderLeft: `3px solid ${style.color}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                Semáforo asignación Flex: <span className="badge" style={{ background: style.bg, color: style.color }}>{style.label}</span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                Total: {health.totals?.total_flex || 0} · Asignados: {health.totals?.assigned || 0} · Sin asignar: {health.totals?.unassigned || 0}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {(health.totals?.assignable_unassigned || 0) > 0 && (
+                                <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
+                                    {health.totals.assignable_unassigned} sin asignar (con zona)
+                                </span>
+                            )}
+                            {(health.totals?.without_partido || 0) > 0 && (
+                                <span className="badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+                                    {health.totals.without_partido} sin partido
+                                </span>
+                            )}
+                            {(health.totals?.unknown_zone_group || 0) > 0 && (
+                                <span className="badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+                                    {health.totals.unknown_zone_group} sin grupo de zona
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {Array.isArray(health.unknown_partidos) && health.unknown_partidos.length > 0 && (
+                        <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            Partidos sin mapeo de transportista: {health.unknown_partidos.slice(0, 6).map(p => `${p.partido} (${p.count})`).join(', ')}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="stats-grid">
                 <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total Flex</div></div>
