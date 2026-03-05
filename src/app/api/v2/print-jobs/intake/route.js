@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
+import { parseZplFile } from "@/lib/zplParser";
+import { assignCarrier } from "@/lib/zoneMapper";
 
 const MAX_LABELS = 5000;
 const CHUNK_SIZE = 300;
@@ -111,6 +113,31 @@ async function getOrCreateBatch(sourceFiles, batchDate = null) {
   return Number(result.lastInsertRowid);
 }
 
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string") {
+      const s = value.trim();
+      if (!s) continue;
+      return s;
+    }
+    return value;
+  }
+  return null;
+}
+
+function parseShipmentFromRawBlock(rawBlock) {
+  const block = stringOrNull(rawBlock, 40000);
+  if (!block) return null;
+
+  try {
+    const parsed = parseZplFile(`^XA${block}^XZ`);
+    return parsed[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function insertLegacyShipments(batchId, normalizedLabels) {
   const trackings = uniqueNonEmpty(normalizedLabels.map((x) => x.tracking_number));
   const existing = await getExistingValues("shipments", "tracking_number", trackings);
@@ -127,6 +154,48 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
     if (item.tracking_number && existing.has(item.tracking_number)) {
       skipped += 1;
       continue;
+    }
+
+    const parsedShipment = parseShipmentFromRawBlock(item.raw_block);
+
+    const shipment = {
+      sale_type: pickFirst(parsedShipment?.sale_type, item.sale_type),
+      sale_id: pickFirst(parsedShipment?.sale_id, item.sale_id),
+      tracking_number: pickFirst(parsedShipment?.tracking_number, item.tracking_number),
+      remitente_id: pickFirst(parsedShipment?.remitente_id, item.remitente_id),
+      product_name: pickFirst(parsedShipment?.product_name, item.product_name),
+      sku: pickFirst(parsedShipment?.sku, item.sku),
+      color: pickFirst(parsedShipment?.color, item.color),
+      voltage: pickFirst(parsedShipment?.voltage, item.voltage),
+      quantity: Math.max(1, intOrDefault(pickFirst(parsedShipment?.quantity, item.quantity), 1)),
+      recipient_name: pickFirst(parsedShipment?.recipient_name, item.recipient_name),
+      recipient_user: pickFirst(parsedShipment?.recipient_user, item.recipient_user),
+      address: pickFirst(parsedShipment?.address, item.address),
+      postal_code: pickFirst(parsedShipment?.postal_code, item.postal_code),
+      city: pickFirst(parsedShipment?.city, item.city),
+      partido: pickFirst(parsedShipment?.partido, item.partido),
+      province: pickFirst(parsedShipment?.province, item.province),
+      reference: pickFirst(parsedShipment?.reference, item.reference),
+      shipping_method: pickFirst(parsedShipment?.shipping_method, item.shipping_method),
+      carrier_code: pickFirst(parsedShipment?.carrier_code, item.carrier_code),
+      carrier_name: pickFirst(parsedShipment?.carrier_name, item.carrier_name),
+      assigned_carrier: pickFirst(parsedShipment?.assigned_carrier, item.assigned_carrier),
+      dispatch_date: pickFirst(parsedShipment?.dispatch_date, item.dispatch_date),
+      delivery_date: pickFirst(parsedShipment?.delivery_date, item.delivery_date),
+    };
+
+    if (!shipment.product_name) {
+      shipment.product_name =
+        pickFirst(item.product_name, shipment.sku, shipment.tracking_number, "Etiqueta sin producto") ||
+        "Etiqueta sin producto";
+    }
+
+    if ((shipment.shipping_method || "").toLowerCase() === "flex" && shipment.partido && !shipment.assigned_carrier) {
+      try {
+        shipment.assigned_carrier = await assignCarrier(shipment.partido);
+      } catch {
+        shipment.assigned_carrier = null;
+      }
     }
 
     await db.execute({
@@ -147,35 +216,35 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
       )`,
       args: [
         asDbValue(batchId),
-        asDbValue(item.sale_type || null),
-        asDbValue(item.sale_id),
-        asDbValue(item.tracking_number),
-        null,
-        asDbValue(item.product_name || null),
-        asDbValue(item.sku || null),
-        null,
-        null,
-        asDbValue(item.quantity || 1),
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        asDbValue(item.shipping_method || null),
-        null,
-        null,
-        null,
-        null,
-        null,
+        asDbValue(shipment.sale_type),
+        asDbValue(shipment.sale_id),
+        asDbValue(shipment.tracking_number),
+        asDbValue(shipment.remitente_id),
+        asDbValue(shipment.product_name),
+        asDbValue(shipment.sku),
+        asDbValue(shipment.color),
+        asDbValue(shipment.voltage),
+        asDbValue(shipment.quantity),
+        asDbValue(shipment.recipient_name),
+        asDbValue(shipment.recipient_user),
+        asDbValue(shipment.address),
+        asDbValue(shipment.postal_code),
+        asDbValue(shipment.city),
+        asDbValue(shipment.partido),
+        asDbValue(shipment.province),
+        asDbValue(shipment.reference),
+        asDbValue(shipment.shipping_method),
+        asDbValue(shipment.carrier_code),
+        asDbValue(shipment.carrier_name),
+        asDbValue(shipment.assigned_carrier),
+        asDbValue(shipment.dispatch_date),
+        asDbValue(shipment.delivery_date),
       ],
     });
 
     inserted += 1;
-    if (item.tracking_number) {
-      existing.add(item.tracking_number);
+    if (shipment.tracking_number) {
+      existing.add(shipment.tracking_number);
     }
   }
 
@@ -309,11 +378,28 @@ export async function POST(request) {
       sku: stringOrNull(raw?.sku, 120) || "SIN-SKU",
       tracking_number: stringOrNull(raw?.tracking_number, 120),
       label_fingerprint: stringOrNull(raw?.label_fingerprint, 128),
+      raw_block: stringOrNull(raw?.raw_block, 40000),
       sale_type: stringOrNull(raw?.sale_type, 50),
       sale_id: stringOrNull(raw?.sale_id, 120),
       product_name: stringOrNull(raw?.product_name, 500),
       quantity: Math.max(1, intOrDefault(raw?.quantity, 1)),
+      remitente_id: stringOrNull(raw?.remitente_id, 120),
+      color: stringOrNull(raw?.color, 120),
+      voltage: stringOrNull(raw?.voltage, 120),
+      recipient_name: stringOrNull(raw?.recipient_name, 200),
+      recipient_user: stringOrNull(raw?.recipient_user, 120),
+      address: stringOrNull(raw?.address, 500),
+      postal_code: stringOrNull(raw?.postal_code, 40),
+      city: stringOrNull(raw?.city, 160),
+      partido: stringOrNull(raw?.partido, 120),
+      province: stringOrNull(raw?.province, 120),
+      reference: stringOrNull(raw?.reference, 300),
       shipping_method: stringOrNull(raw?.shipping_method, 50),
+      carrier_code: stringOrNull(raw?.carrier_code, 80),
+      carrier_name: stringOrNull(raw?.carrier_name, 120),
+      assigned_carrier: stringOrNull(raw?.assigned_carrier, 120),
+      dispatch_date: stringOrNull(raw?.dispatch_date, 120),
+      delivery_date: stringOrNull(raw?.delivery_date, 120),
       client_reprint: Boolean(raw?.is_reprint),
     }));
 

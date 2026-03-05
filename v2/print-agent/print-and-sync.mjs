@@ -159,6 +159,55 @@ function parseSingleLabel(block) {
   return rows[0] || null;
 }
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const s = String(value).trim();
+    if (!s) continue;
+    return s;
+  }
+  return null;
+}
+
+function extractSkuFromRawBlock(rawBlock) {
+  const m = String(rawBlock || "").match(/SKU:\s*([^\^|]+)/i);
+  return m ? m[1].trim() : null;
+}
+
+function extractTrackingFromRawBlock(rawBlock) {
+  const text = String(rawBlock || "");
+  const jsonId = text.match(/"id"\s*:\s*"(\d+)"/);
+  if (jsonId) return jsonId[1];
+  const barcodeId = text.match(/\^FD>:(\d+)\^FS/);
+  if (barcodeId) return barcodeId[1];
+  return null;
+}
+
+function detectShippingMethodFromRawBlock(rawBlock) {
+  const text = String(rawBlock || "");
+  if (text.includes("Domicilio:") || text.includes("Ciudad de destino:") || /\^BCN,/.test(text)) {
+    return "colecta";
+  }
+  if (text.includes("sender_id") || text.includes("hash_code") || /Env.{1,3}o Flex/.test(text)) {
+    return "flex";
+  }
+  return null;
+}
+
+function buildParsedLabel(rawBlock) {
+  const parsed = parseSingleLabel(rawBlock);
+  const fallback = {
+    sku: extractSkuFromRawBlock(rawBlock),
+    tracking_number: extractTrackingFromRawBlock(rawBlock),
+    shipping_method: detectShippingMethodFromRawBlock(rawBlock),
+  };
+
+  return {
+    parsed: { ...fallback, ...(parsed || {}) },
+    parserMatched: Boolean(parsed),
+  };
+}
+
 function sortLabelsBySkuFrequency(labels) {
   const bySku = new Map();
 
@@ -247,11 +296,28 @@ function buildJobPayload({
       sku: label.skuNorm,
       tracking_number: tracking,
       label_fingerprint: fingerprint,
+      raw_block: label.rawBlock,
       sale_type: label.parsed?.sale_type || null,
       sale_id: label.parsed?.sale_id || null,
       product_name: label.parsed?.product_name || null,
       quantity: Number(label.parsed?.quantity) || 1,
+      remitente_id: label.parsed?.remitente_id || null,
+      color: label.parsed?.color || null,
+      voltage: label.parsed?.voltage || null,
+      recipient_name: label.parsed?.recipient_name || null,
+      recipient_user: label.parsed?.recipient_user || null,
+      address: label.parsed?.address || null,
+      postal_code: firstNonEmpty(label.parsed?.postal_code),
+      city: label.parsed?.city || null,
+      partido: label.parsed?.partido || null,
+      province: label.parsed?.province || null,
+      reference: label.parsed?.reference || null,
       shipping_method: label.parsed?.shipping_method || null,
+      carrier_code: label.parsed?.carrier_code || null,
+      carrier_name: label.parsed?.carrier_name || null,
+      assigned_carrier: label.parsed?.assigned_carrier || null,
+      dispatch_date: label.parsed?.dispatch_date || null,
+      delivery_date: label.parsed?.delivery_date || null,
       is_reprint: isReprint,
     };
   });
@@ -409,14 +475,19 @@ async function main() {
   logLine(`Archivos recibidos: ${fileArgs.length}`);
 
   const extracted = [];
+  let parserMisses = 0;
   for (const filePath of fileArgs) {
     const buffer = fs.readFileSync(filePath);
     const text = decodeLabelText(buffer);
     const blocks = extractZplBlocks(text);
 
     for (const rawBlock of blocks) {
-      const parsed = parseSingleLabel(rawBlock);
-      if (!parsed || !parsed.product_name) continue;
+      const { parsed, parserMatched } = buildParsedLabel(rawBlock);
+      const hasIdentity = Boolean(parsed?.tracking_number || parsed?.sku);
+      if (!parserMatched && !hasIdentity) {
+        continue;
+      }
+      if (!parserMatched) parserMisses += 1;
       extracted.push({
         sourceFile: path.basename(filePath),
         rawBlock,
@@ -428,7 +499,7 @@ async function main() {
   }
 
   if (!extracted.length) {
-    throw new Error("No se detectaron etiquetas validas en los archivos");
+    throw new Error("No se detectaron bloques ZPL imprimibles en los archivos");
   }
 
   const { ordered, sortedGroups } = sortLabelsBySkuFrequency(extracted);
@@ -446,6 +517,9 @@ async function main() {
   }
 
   logLine(`Etiquetas parseadas: ${ordered.length}`);
+  if (parserMisses > 0) {
+    logLine(`Advertencia: ${parserMisses} etiqueta(s) con parseo parcial (se imprimen igual).`);
+  }
   if (sortedGroups.length) {
     const top = sortedGroups
       .slice(0, 5)
@@ -470,9 +544,11 @@ async function main() {
     isDryRun: config.dryRun,
   });
 
-  updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
-  saveKnownTrackings(knownTrackingIndex);
-  appendHistory(job);
+  if (!config.dryRun) {
+    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
+    saveKnownTrackings(knownTrackingIndex);
+    appendHistory(job);
+  }
 
   logLine(`${config.dryRun ? "Dry-run listo" : "Impresion enviada"}. Job: ${job.job_id}`);
   logLine(`Etiquetas: ${job.totals.labels_total} | Reprints: ${job.totals.reprints_total}`);
@@ -482,7 +558,7 @@ async function main() {
   }
 
   if (config.dryRun) {
-    logLine("Dry-run activo: sync omitido.");
+    logLine("Dry-run activo: sync e historial local omitidos.");
     return;
   }
 
