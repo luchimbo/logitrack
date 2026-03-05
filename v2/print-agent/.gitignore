@@ -1,0 +1,6 @@
+config.json
+data/*.json
+data/*.jsonl
+data/*.txt
+data/*.log
+!data/.gitkeep

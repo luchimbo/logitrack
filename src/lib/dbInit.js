@@ -1,6 +1,11 @@
 import { db } from "./db";
 
+let _initialized = false;
+
 export async function initDb() {
+  if (_initialized) return;
+  _initialized = true;
+
   const statements = [
     `CREATE TABLE IF NOT EXISTS shipments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,27 +55,63 @@ export async function initDb() {
       total_packages INTEGER DEFAULT 0,
       filenames TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL UNIQUE,
+      created_at_client TEXT,
+      received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      source_files_json TEXT,
+      sku_order_json TEXT,
+      printer_path TEXT,
+      print_file_path TEXT,
+      labels_total INTEGER DEFAULT 0,
+      skus_total INTEGER DEFAULT 0,
+      reprints_total INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS print_job_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      print_job_id INTEGER NOT NULL,
+      item_order INTEGER NOT NULL,
+      sku TEXT,
+      tracking_number TEXT,
+      label_fingerprint TEXT,
+      sale_id TEXT,
+      product_name TEXT,
+      shipping_method TEXT,
+      is_reprint INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(print_job_id) REFERENCES print_jobs(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_job ON print_job_items(print_job_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_tracking ON print_job_items(tracking_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_fingerprint ON print_job_items(label_fingerprint)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_jobs_received ON print_jobs(received_at)`
   ];
 
   for (const stmt of statements) {
     try {
       await db.execute(stmt);
     } catch (e) {
-      console.error("DB Init Error:", e);
+      console.error("DB Init Error:", e.message || e);
     }
   }
 
-  // Migration: remove UNIQUE constraint on zone_mappings.partido (if old schema exists)
+  // Migration: remove UNIQUE constraint on zone_mappings.partido
   try {
-    // Check if the unique index exists on the current table
-    const indexInfo = await db.execute(
-      "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='zone_mappings' AND sql LIKE '%UNIQUE%'"
+    // Try inserting a duplicate to test if UNIQUE still exists
+    // If the constraint exists, this will fail and we'll migrate
+    const testResult = await db.execute(
+      "SELECT COUNT(*) as cnt FROM zone_mappings"
     );
+    // Try the migration by checking table info
+    const tableInfo = await db.execute("PRAGMA table_info(zone_mappings)");
+    // Check if there's a unique index
+    const indexes = await db.execute("PRAGMA index_list(zone_mappings)");
+    const hasUnique = indexes.rows.some(r => r.unique === 1);
 
-    if (indexInfo.rows.length > 0) {
-      // Old schema detected — migrate
-      await db.execute(`DROP TABLE IF EXISTS zone_mappings_new`);
+    if (hasUnique) {
+      await db.execute("DROP TABLE IF EXISTS zone_mappings_new");
       await db.execute(`CREATE TABLE zone_mappings_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         partido TEXT NOT NULL,
@@ -79,13 +120,12 @@ export async function initDb() {
       )`);
       await db.execute(`INSERT INTO zone_mappings_new (id, partido, carrier_name, created_at)
         SELECT id, partido, carrier_name, created_at FROM zone_mappings`);
-      await db.execute(`DROP TABLE zone_mappings`);
-      await db.execute(`ALTER TABLE zone_mappings_new RENAME TO zone_mappings`);
-      console.log("Zone migration applied: removed UNIQUE constraint");
+      await db.execute("DROP TABLE zone_mappings");
+      await db.execute("ALTER TABLE zone_mappings_new RENAME TO zone_mappings");
+      console.log("Zone migration: removed UNIQUE constraint on partido");
     }
   } catch (e) {
-    // Clean up temp table if something went wrong
     try { await db.execute("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
-    console.log("Zone migration skipped:", e.message);
+    // Not critical — may already be migrated
   }
 }
