@@ -38,6 +38,12 @@ export async function initDb() {
       lng FLOAT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS zone_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       partido TEXT NOT NULL,
@@ -166,5 +172,21 @@ export async function initDb() {
     }
   } catch (e) {
     console.error("Zone seed error:", e.message || e);
+  }
+
+  // Seed default admin user if none exists
+  try {
+    const usersCount = await db.execute("SELECT COUNT(*) as cnt FROM users");
+    if (usersCount.rows[0].cnt === 0) {
+      // 123456 encrypted with bcryptjs (10 rounds) = $2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.
+      // This is safe since this is a local project and will be changeable later
+      await db.execute({
+        sql: "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        args: ['admin', '$2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.']
+      });
+      console.log("DB Init: Created default 'admin' user with password '123456'");
+    }
+  } catch (e) {
+    console.error("User seed error:", e.message || e);
   }
 }

@@ -24,6 +24,15 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
   const { period, setPeriod, specificDate, setSpecificDate } = useBatch();
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    } catch (err) {
+      console.error("Logout error", err);
+    }
+  };
+
   const renderSection = () => {
     switch (activeTab) {
       case "upload": return <UploadSection />;
@@ -102,9 +111,18 @@ export default function Home() {
             )}
           </div>
 
-          <div className="user-profile">
-            <div className="avatar">A</div>
-            <span>Admin</span>
+          <div className="user-profile" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div className="avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>A</div>
+              <span style={{ fontWeight: 600, fontSize: "14px" }}>Admin</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="btn btn-sm"
+              style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", padding: "4px 8px", fontSize: "12px" }}
+            >
+              Cerrar sesión
+            </button>
           </div>
         </header>
 
