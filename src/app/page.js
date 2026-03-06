@@ -8,6 +8,7 @@ import ColectaSection from "@/components/ColectaSection";
 import PickingList from "@/components/PickingList";
 import CarrierView from "@/components/CarrierView";
 import Dashboard from "@/components/Dashboard";
+import MapSection from "@/components/MapSection";
 import { useBatch } from "@/components/BatchContext";
 
 const PERIODS = [
@@ -32,6 +33,7 @@ export default function Home() {
       case "zoneConfig": return <ZoneConfig />;
       case "carrierView": return <CarrierView />;
       case "dashboard": return <Dashboard />;
+      case "map": return <MapSection />;
       default: return <div>Página no encontrada</div>;
     }
   };
@@ -48,6 +50,7 @@ export default function Home() {
             { id: "pickingList", icon: "📋", label: "Lista de Picking" },
             { id: "flex", icon: "🚀", label: "Logística Flex" },
             { id: "colecta", icon: "📦", label: "Colecta" },
+            { id: "map", icon: "📍", label: "Mapa" },
             { id: "dashboard", icon: "📊", label: "Dashboard" },
             { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
             { id: "carrierView", icon: "🚛", label: "Transportistas" },

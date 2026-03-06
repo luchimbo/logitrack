@@ -34,6 +34,8 @@ export async function initDb() {
       dispatch_date TEXT,
       delivery_date TEXT,
       status TEXT DEFAULT 'pendiente',
+      lat FLOAT,
+      lng FLOAT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS zone_mappings (
@@ -95,6 +97,19 @@ export async function initDb() {
     } catch (e) {
       console.error("DB Init Error:", e.message || e);
     }
+  }
+
+  // Migration: add lat and lng to shipments
+  try {
+    const tableInfo = await db.execute("PRAGMA table_info(shipments)");
+    const cols = tableInfo.rows.map(r => r.name);
+    if (!cols.includes('lat')) {
+      await db.execute("ALTER TABLE shipments ADD COLUMN lat FLOAT");
+      await db.execute("ALTER TABLE shipments ADD COLUMN lng FLOAT");
+      console.log("Migration: added lat and lng columns to shipments table");
+    }
+  } catch (e) {
+    console.error("Migration error (lat/lng):", e.message || e);
   }
 
   // Migration: remove UNIQUE constraint on zone_mappings.partido
