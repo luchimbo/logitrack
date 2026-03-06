@@ -17,6 +17,7 @@ const PARTIDOS = [
     { id: 'moron', name: 'Morón', zone: 'gba1' },
     { id: 'avellaneda', name: 'Avellaneda', zone: 'gba1' },
     { id: 'lanus', name: 'Lanús', zone: 'gba1' },
+    { id: 'la_matanza_norte', name: 'La Matanza Norte', zone: 'gba1' },
     // GBA 2
     { id: 'tigre', name: 'Tigre', zone: 'gba2' },
     { id: 'malvinas_argentinas', name: 'Malvinas Arg.', zone: 'gba2' },
@@ -24,6 +25,7 @@ const PARTIDOS = [
     { id: 'san_miguel', name: 'San Miguel', zone: 'gba2' },
     { id: 'moreno', name: 'Moreno', zone: 'gba2' },
     { id: 'merlo', name: 'Merlo', zone: 'gba2' },
+    { id: 'la_matanza_sur', name: 'La Matanza Sur', zone: 'gba2' },
     { id: 'la_matanza', name: 'La Matanza', zone: 'gba2' },
     { id: 'ezeiza', name: 'Ezeiza', zone: 'gba2' },
     { id: 'esteban_echeverria', name: 'E. Echeverría', zone: 'gba2' },
@@ -35,6 +37,7 @@ const PARTIDOS = [
     // GBA 3
     { id: 'escobar', name: 'Escobar', zone: 'gba3' },
     { id: 'pilar', name: 'Pilar', zone: 'gba3' },
+    { id: 'lujan', name: 'Luján', zone: 'gba3' },
     { id: 'general_rodriguez', name: 'Gral. Rodríguez', zone: 'gba3' },
     { id: 'marcos_paz', name: 'Marcos Paz', zone: 'gba3' },
     { id: 'canuelas', name: 'Cañuelas', zone: 'gba3' },
