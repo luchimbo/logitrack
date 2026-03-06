@@ -26,6 +26,7 @@ export default function FlexSection() {
     const [health, setHealth] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [selectedZone, setSelectedZone] = useState(null);
 
     const loadData = useCallback(async (opts = {}) => {
         const { silent = false } = opts;
@@ -131,6 +132,25 @@ export default function FlexSection() {
     const assigned = shipments.filter(s => s.assigned_carrier);
     const unassigned = shipments.filter(s => !s.assigned_carrier);
 
+    // Group by zone
+    const shipmentsByZone = {
+        'CABA': [],
+        'GBA 1': [],
+        'GBA 2': [],
+        'GBA 3': [],
+        'Otra': [],
+        'Sin Partido': []
+    };
+    shipments.forEach(s => {
+        const p = s.partido;
+        let zone = 'Sin Partido';
+        if (p) {
+            zone = PARTIDO_ZONES[p] || 'Otra';
+        }
+        if (!shipmentsByZone[zone]) shipmentsByZone[zone] = [];
+        shipmentsByZone[zone].push(s);
+    });
+
     // Group by carrier
     const byCarrier = {};
     assigned.forEach(s => {
@@ -195,6 +215,85 @@ export default function FlexSection() {
                 <div className="stat-card card success"><div className="stat-value">{assigned.length}</div><div className="stat-label">Asignados</div></div>
                 {unassigned.length > 0 && (
                     <div className="stat-card card danger"><div className="stat-value">{unassigned.length}</div><div className="stat-label">Sin Asignar</div></div>
+                )}
+            </div>
+
+            {/* Zone Explorer UI */}
+            <div className="card mb-md">
+                <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700 }}>🗺️ Explorador de Zonas</h3>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                    Hacé clic en una zona para ver qué envíos están asignados a ella y revisar si el partido fue detectado correctamente.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: selectedZone ? '16px' : '0' }}>
+                    {Object.keys(shipmentsByZone).map(z => (
+                        <button
+                            key={z}
+                            className={`btn btn-sm ${selectedZone === z ? 'btn-primary' : ''}`}
+                            style={{
+                                background: selectedZone === z ? 'var(--accent)' : 'var(--surface)',
+                                color: selectedZone === z ? '#fff' : 'var(--text-primary)',
+                                border: '1px solid var(--border)',
+                                cursor: 'pointer'
+                            }}
+                            onClick={() => setSelectedZone(selectedZone === z ? null : z)}
+                        >
+                            {z} <span className="badge" style={{ background: 'rgba(0,0,0,0.1)', color: 'inherit', marginLeft: '6px' }}>{shipmentsByZone[z]?.length || 0}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {selectedZone && (
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Destino</th>
+                                    <th>Partido Detectado</th>
+                                    <th>Transportista</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {shipmentsByZone[selectedZone]?.length === 0 ? (
+                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>No hay envíos en esta zona</td></tr>
+                                ) : (
+                                    shipmentsByZone[selectedZone]?.map(s => (
+                                        <tr key={s.id}>
+                                            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                            <td>{s.city || 'N/A'}, {s.province || ''}</td>
+                                            <td>
+                                                <span style={{ fontFamily: "monospace", fontSize: "12px", background: "var(--bg-secondary)", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                                                    {s.partido || '—'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {s.assigned_carrier ? (
+                                                    <span className="badge" style={{
+                                                        background: carriers.find(c => c.name === s.assigned_carrier)?.color ? `${carriers.find(c => c.name === s.assigned_carrier)?.color}22` : 'var(--bg-secondary)',
+                                                        color: carriers.find(c => c.name === s.assigned_carrier)?.color || 'var(--text-primary)',
+                                                        border: `1px solid ${carriers.find(c => c.name === s.assigned_carrier)?.color || 'var(--border)'}`
+                                                    }}>
+                                                        {carriers.find(c => c.name === s.assigned_carrier)?.display_name || s.assigned_carrier}
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>Sin asignar</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
+                                                    <option value="pendiente">🕒 Pendiente</option>
+                                                    <option value="encontrado">🔍 Encontrado</option>
+                                                    <option value="empaquetado">📦 Empaquetado</option>
+                                                    <option value="despachado">✅ Despachado</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -281,19 +380,19 @@ export default function FlexSection() {
                                                 <option value="pendiente">🕒 Pendiente</option>
                                                 <option value="encontrado">🔍 Encontrado</option>
                                                 <option value="empaquetado">📦 Empaquetado</option>
-                                                    <option value="despachado">✅ Despachado</option>
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <button
-                                                    className="btn btn-sm"
-                                                    style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
-                                                    onClick={() => handleDeleteShipment(s.id)}
-                                                >
-                                                    🗑️ Eliminar
-                                                </button>
-                                            </td>
-                                        </tr>
+                                                <option value="despachado">✅ Despachado</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="btn btn-sm"
+                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                onClick={() => handleDeleteShipment(s.id)}
+                                            >
+                                                🗑️ Eliminar
+                                            </button>
+                                        </td>
+                                    </tr>
                                 ))}
                             </tbody>
                         </table>
