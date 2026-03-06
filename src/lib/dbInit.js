@@ -3,7 +3,7 @@ import { db } from "./db";
 let _initialized = false;
 
 export async function initDb() {
-  if (_initialized) return;
+  // if (_initialized) return;
   _initialized = true;
 
   const statements = [
@@ -174,17 +174,23 @@ export async function initDb() {
     console.error("Zone seed error:", e.message || e);
   }
 
-  // Seed default admin user if none exists
+  // Seed default admin user and fix hash if needed
   try {
-    const usersCount = await db.execute("SELECT COUNT(*) as cnt FROM users");
+    const adminHash = '$2b$10$36jNNjQ/Ve39sS9a.yJ7MMmYKusO2maa7HKWAo39Ry'; // 123456
+    const usersCount = await db.execute("SELECT COUNT(*) as cnt FROM users WHERE username = 'admin'");
     if (usersCount.rows[0].cnt === 0) {
-      // 123456 encrypted with bcryptjs (10 rounds) = $2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.
-      // This is safe since this is a local project and will be changeable later
       await db.execute({
         sql: "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-        args: ['admin', '$2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.']
+        args: ['admin', adminHash]
       });
       console.log("DB Init: Created default 'admin' user with password '123456'");
+    } else {
+      // Force update of password hash to correct one just in case it was deployed with the broken hash
+      const brokenHash = '$2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.';
+      await db.execute({
+        sql: "UPDATE users SET password_hash = ? WHERE username = 'admin' AND password_hash = ?",
+        args: [adminHash, brokenHash]
+      });
     }
   } catch (e) {
     console.error("User seed error:", e.message || e);
