@@ -27,15 +27,6 @@ export default function CarrierView() {
         fetchData();
     }, []);
 
-    const handleStatusChange = async (id, status) => {
-        try {
-            await api(`/shipments?id=${id}&status=${status}`, { method: 'PATCH' });
-            setShipments(prev => prev.map(s => s.id === id ? { ...s, status } : s));
-            toast(`Envío #${id} → ${status}`, 'success');
-        } catch (err) {
-            toast('Error actualizando estado', 'error');
-        }
-    };
 
     const handleDeleteShipment = async (id) => {
         const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
@@ -129,12 +120,6 @@ export default function CarrierView() {
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
                                         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                                            <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
-                                                <option value="pendiente">🕒 Pendiente</option>
-                                                <option value="encontrado">🔍 Encontrado</option>
-                                                <option value="empaquetado">📦 Empaquetado</option>
-                                                <option value="despachado">✅ Despachado</option>
-                                            </select>
                                             <button
                                                 className="btn btn-sm"
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}

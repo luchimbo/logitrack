@@ -55,15 +55,7 @@ export default function FlexSection() {
         loadData();
     }, [loadData]);
 
-    const handleStatusChange = async (id, status) => {
-        try {
-            await api(`/shipments?id=${id}&status=${status}`, { method: 'PATCH' });
-            setShipments(prev => prev.map(s => s.id === id ? { ...s, status } : s));
-            toast(`Envío #${id} → ${status}`, 'success');
-        } catch (err) {
-            toast('Error actualizando estado', 'error');
-        }
-    };
+
 
     const handleReassign = async () => {
         try {
@@ -251,7 +243,6 @@ export default function FlexSection() {
                                     <th>Destino</th>
                                     <th>Partido Detectado</th>
                                     <th>Transportista</th>
-                                    <th>Estado</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -279,14 +270,6 @@ export default function FlexSection() {
                                                 ) : (
                                                     <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>Sin asignar</span>
                                                 )}
-                                            </td>
-                                            <td>
-                                                <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
-                                                    <option value="pendiente">🕒 Pendiente</option>
-                                                    <option value="encontrado">🔍 Encontrado</option>
-                                                    <option value="empaquetado">📦 Empaquetado</option>
-                                                    <option value="despachado">✅ Despachado</option>
-                                                </select>
                                             </td>
                                         </tr>
                                     ))
@@ -329,20 +312,12 @@ export default function FlexSection() {
 
                         <div className="table-container">
                             <table>
-                                <thead><tr><th>Producto</th><th>Destino</th><th>Estado</th><th>Acciones</th></tr></thead>
+                                <thead><tr><th>Producto</th><th>Destino</th><th>Acciones</th></tr></thead>
                                 <tbody>
                                     {items.map(s => (
                                         <tr key={s.id}>
                                             <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                             <td>{s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</td>
-                                            <td>
-                                                <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
-                                                    <option value="pendiente">🕒 Pendiente</option>
-                                                    <option value="encontrado">🔍 Encontrado</option>
-                                                    <option value="empaquetado">📦 Empaquetado</option>
-                                                    <option value="despachado">✅ Despachado</option>
-                                                </select>
-                                            </td>
                                             <td>
                                                 <button
                                                     className="btn btn-sm"
@@ -368,21 +343,13 @@ export default function FlexSection() {
                     </h3>
                     <div className="table-container">
                         <table>
-                            <thead><tr><th>Producto</th><th>Destino</th><th>Partido</th><th>Estado</th><th>Acciones</th></tr></thead>
+                            <thead><tr><th>Producto</th><th>Destino</th><th>Partido</th><th>Acciones</th></tr></thead>
                             <tbody>
                                 {unassigned.map(s => (
                                     <tr key={s.id}>
                                         <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                         <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                         <td>{s.partido || '—'}</td>
-                                        <td>
-                                            <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
-                                                <option value="pendiente">🕒 Pendiente</option>
-                                                <option value="encontrado">🔍 Encontrado</option>
-                                                <option value="empaquetado">📦 Empaquetado</option>
-                                                <option value="despachado">✅ Despachado</option>
-                                            </select>
-                                        </td>
                                         <td>
                                             <button
                                                 className="btn btn-sm"
