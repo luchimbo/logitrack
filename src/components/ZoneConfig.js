@@ -30,7 +30,7 @@ const PARTIDOS = [
     { id: 'ezeiza', name: 'Ezeiza', zone: 'gba2' },
     { id: 'esteban_echeverria', name: 'E. Echeverría', zone: 'gba2' },
     { id: 'almirante_brown', name: 'A. Brown', zone: 'gba2' },
-    { id: 'lomas_de_zamora', name: 'Lomas de Zamora', zone: 'gba2' },
+    { id: 'lomas_de_zamora', name: 'Lomas de Zamora', zone: 'gba1' },
     { id: 'quilmes', name: 'Quilmes', zone: 'gba2' },
     { id: 'berazategui', name: 'Berazategui', zone: 'gba2' },
     { id: 'florencio_varela', name: 'F. Varela', zone: 'gba2' },

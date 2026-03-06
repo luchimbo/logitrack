@@ -27,7 +27,7 @@ const ZONE_GROUPS = {
   ezeiza: "GBA 2",
   esteban_echeverria: "GBA 2",
   almirante_brown: "GBA 2",
-  lomas_de_zamora: "GBA 2",
+  lomas_de_zamora: "GBA 1",
   quilmes: "GBA 2",
   berazategui: "GBA 2",
   florencio_varela: "GBA 2",
