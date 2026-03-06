@@ -42,6 +42,18 @@ export default function CarrierView() {
         }
     };
 
+    const getCarrierSelectStyle = (carrierName) => {
+        const c = carriers.find(x => x.name === carrierName);
+        if (!c || !c.color) {
+            return { fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--danger)", background: "var(--danger-bg)", color: "var(--danger)", fontWeight: 600, cursor: "pointer", outline: "none" };
+        }
+        return {
+            fontSize: "11px", padding: "4px", borderRadius: "var(--radius)",
+            border: `1px solid ${c.color}60`, background: `${c.color}15`, color: c.color,
+            fontWeight: 600, cursor: "pointer", outline: "none"
+        };
+    };
+
     const handleDeleteShipment = async (id) => {
         const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
         if (!ok) return;
@@ -135,13 +147,13 @@ export default function CarrierView() {
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
                                         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                                             <select
-                                                style={{ fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                                                style={getCarrierSelectStyle(s.assigned_carrier)}
                                                 value={s.assigned_carrier || ''}
                                                 onChange={(e) => handleCarrierChange(s.id, e.target.value)}
                                             >
-                                                <option value="">Sin asignar</option>
+                                                <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
                                                 {carriers.map(c => (
-                                                    <option key={c.name} value={c.name}>{c.display_name}</option>
+                                                    <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                                 ))}
                                             </select>
                                             <button
