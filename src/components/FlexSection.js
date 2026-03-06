@@ -55,7 +55,15 @@ export default function FlexSection() {
         loadData();
     }, [loadData]);
 
-
+    const handleCarrierChange = async (id, newCarrier) => {
+        try {
+            await api(`/shipments?id=${id}&assigned_carrier=${encodeURIComponent(newCarrier)}`, { method: 'PATCH' });
+            toast(`Transportista actualizado`, 'success');
+            await loadData({ silent: true });
+        } catch (err) {
+            toast('Error actualizando transportista', 'error');
+        }
+    };
 
     const handleReassign = async () => {
         try {
@@ -259,17 +267,16 @@ export default function FlexSection() {
                                                 </span>
                                             </td>
                                             <td>
-                                                {s.assigned_carrier ? (
-                                                    <span className="badge" style={{
-                                                        background: carriers.find(c => c.name === s.assigned_carrier)?.color ? `${carriers.find(c => c.name === s.assigned_carrier)?.color}22` : 'var(--bg-secondary)',
-                                                        color: carriers.find(c => c.name === s.assigned_carrier)?.color || 'var(--text-primary)',
-                                                        border: `1px solid ${carriers.find(c => c.name === s.assigned_carrier)?.color || 'var(--border)'}`
-                                                    }}>
-                                                        {carriers.find(c => c.name === s.assigned_carrier)?.display_name || s.assigned_carrier}
-                                                    </span>
-                                                ) : (
-                                                    <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>Sin asignar</span>
-                                                )}
+                                                <select
+                                                    style={{ fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                                                    value={s.assigned_carrier || ''}
+                                                    onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                                >
+                                                    <option value="">Sin asignar</option>
+                                                    {carriers.map(c => (
+                                                        <option key={c.name} value={c.name}>{c.display_name}</option>
+                                                    ))}
+                                                </select>
                                             </td>
                                         </tr>
                                     ))
@@ -318,7 +325,17 @@ export default function FlexSection() {
                                         <tr key={s.id}>
                                             <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                             <td>{s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</td>
-                                            <td>
+                                            <td style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                                <select
+                                                    style={{ fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                                                    value={s.assigned_carrier || ''}
+                                                    onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                                >
+                                                    <option value="">Sin asignar</option>
+                                                    {carriers.map(c => (
+                                                        <option key={c.name} value={c.name}>{c.display_name}</option>
+                                                    ))}
+                                                </select>
                                                 <button
                                                     className="btn btn-sm"
                                                     style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
@@ -350,7 +367,17 @@ export default function FlexSection() {
                                         <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                         <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                         <td>{s.partido || '—'}</td>
-                                        <td>
+                                        <td style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                            <select
+                                                style={{ fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                                                value={s.assigned_carrier || ''}
+                                                onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                            >
+                                                <option value="">Sin asignar</option>
+                                                {carriers.map(c => (
+                                                    <option key={c.name} value={c.name}>{c.display_name}</option>
+                                                ))}
+                                            </select>
                                             <button
                                                 className="btn btn-sm"
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}

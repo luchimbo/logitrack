@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function GET(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
@@ -52,33 +54,44 @@ export async function GET(request) {
 
 export async function PATCH(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         const status = searchParams.get('status');
+        const assigned_carrier = searchParams.get('assigned_carrier');
 
-        if (!id || !status) {
-            return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
+        if (!id) {
+            return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
         }
 
-        const validStatuses = ["pendiente", "encontrado", "empaquetado", "despachado"];
-        if (!validStatuses.includes(status)) {
-            return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+        if (status) {
+            const validStatuses = ["pendiente", "encontrado", "empaquetado", "despachado"];
+            if (!validStatuses.includes(status)) {
+                return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+            }
+            await db.execute({
+                sql: "UPDATE shipments SET status = ? WHERE id = ?",
+                args: [status, id]
+            });
         }
 
-        await db.execute({
-            sql: "UPDATE shipments SET status = ? WHERE id = ?",
-            args: [status, id]
-        });
+        if (assigned_carrier !== null) {
+            await db.execute({
+                sql: "UPDATE shipments SET assigned_carrier = ? WHERE id = ?",
+                args: [assigned_carrier || null, id]
+            });
+        }
 
-        return NextResponse.json({ success: true, id, status });
+        return NextResponse.json({ success: true, id, status, assigned_carrier });
     } catch (error) {
         console.error("Error updating shipment:", error);
-        return NextResponse.json({ error: "Failed to update status" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to update shipment" }, { status: 500 });
     }
 }
 
 export async function DELETE(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const batch_id = searchParams.get('batch_id');
         const period = searchParams.get('period');

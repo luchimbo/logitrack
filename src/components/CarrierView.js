@@ -7,6 +7,7 @@ import { useBatch } from "./BatchContext";
 export default function CarrierView() {
     const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
+    const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -16,8 +17,12 @@ export default function CarrierView() {
             setError(null);
             try {
                 const qs = getTodayQueryString('shipping_method=flex');
-                const data = await api(`/shipments?${qs}`);
-                setShipments(data);
+                const [shipmentsData, carriersData] = await Promise.all([
+                    api(`/shipments?${qs}`),
+                    api('/carriers')
+                ]);
+                setShipments(shipmentsData);
+                setCarriers(carriersData);
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -27,6 +32,15 @@ export default function CarrierView() {
         fetchData();
     }, []);
 
+    const handleCarrierChange = async (id, newCarrier) => {
+        try {
+            await api(`/shipments?id=${id}&assigned_carrier=${encodeURIComponent(newCarrier)}`, { method: 'PATCH' });
+            setShipments(prev => prev.map(s => s.id === id ? { ...s, assigned_carrier: newCarrier || null } : s));
+            toast(`Transportista actualizado`, 'success');
+        } catch (err) {
+            toast('Error actualizando transportista', 'error');
+        }
+    };
 
     const handleDeleteShipment = async (id) => {
         const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
@@ -120,6 +134,16 @@ export default function CarrierView() {
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
                                         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                            <select
+                                                style={{ fontSize: "11px", padding: "4px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                                                value={s.assigned_carrier || ''}
+                                                onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                            >
+                                                <option value="">Sin asignar</option>
+                                                {carriers.map(c => (
+                                                    <option key={c.name} value={c.name}>{c.display_name}</option>
+                                                ))}
+                                            </select>
                                             <button
                                                 className="btn btn-sm"
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
