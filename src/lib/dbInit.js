@@ -42,6 +42,7 @@ export async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS zone_mappings (
@@ -150,6 +151,21 @@ export async function initDb() {
     // Not critical — may already be migrated
   }
 
+  // Migration: add role to users table and ensure admin role
+  try {
+    const tableInfo = await db.execute("PRAGMA table_info(users)");
+    const cols = tableInfo.rows.map(r => r.name);
+
+    if (!cols.includes('role')) {
+      await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+      console.log("Migration: added role column to users table");
+    }
+
+    await db.execute("UPDATE users SET role = 'admin' WHERE username = 'admin'");
+  } catch (e) {
+    console.error("Migration error (users.role):", e.message || e);
+  }
+
   // Seed critical sub-zones for La Matanza split
   try {
     const requiredMappings = [
@@ -180,8 +196,8 @@ export async function initDb() {
     const usersCount = await db.execute("SELECT COUNT(*) as cnt FROM users WHERE username = 'admin'");
     if (usersCount.rows[0].cnt === 0) {
       await db.execute({
-        sql: "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-        args: ['admin', adminHash]
+        sql: "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        args: ['admin', adminHash, 'admin']
       });
       console.log("DB Init: Created default 'admin' user with password '123456'");
     } else {

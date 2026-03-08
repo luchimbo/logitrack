@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UploadSection from "@/components/UploadSection";
 import ZoneConfig from "@/components/ZoneConfig";
 import FlexSection from "@/components/FlexSection";
@@ -9,6 +9,7 @@ import PickingList from "@/components/PickingList";
 import CarrierView from "@/components/CarrierView";
 import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
+import UserManagementSection from "@/components/UserManagementSection";
 import { useBatch } from "@/components/BatchContext";
 
 const PERIODS = [
@@ -22,7 +23,25 @@ const PERIODS = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
+  const [currentUser, setCurrentUser] = useState(null);
   const { period, setPeriod, specificDate, setSpecificDate } = useBatch();
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) return;
+        const data = await res.json();
+        setCurrentUser(data.user || null);
+      } catch {
+        setCurrentUser(null);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  const isAdmin = currentUser?.role === "admin";
 
   const handleLogout = async () => {
     try {
@@ -43,9 +62,25 @@ export default function Home() {
       case "carrierView": return <CarrierView />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
+      case "userManagement": return isAdmin ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
   };
+
+  const navLinks = [
+    { id: "upload", icon: "📦", label: "Subir Etiquetas" },
+    { id: "pickingList", icon: "📋", label: "Lista de Picking" },
+    { id: "flex", icon: "🚀", label: "Logística Flex" },
+    { id: "colecta", icon: "📦", label: "Colecta" },
+    { id: "map", icon: "📍", label: "Mapa" },
+    { id: "dashboard", icon: "📊", label: "Dashboard" },
+    { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
+    { id: "carrierView", icon: "🚛", label: "Transportistas" },
+  ];
+
+  if (isAdmin) {
+    navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
+  }
 
   return (
     <>
@@ -54,16 +89,7 @@ export default function Home() {
           <h2>LogiTrack</h2>
         </div>
         <ul className="nav-links">
-          {[
-            { id: "upload", icon: "📦", label: "Subir Etiquetas" },
-            { id: "pickingList", icon: "📋", label: "Lista de Picking" },
-            { id: "flex", icon: "🚀", label: "Logística Flex" },
-            { id: "colecta", icon: "📦", label: "Colecta" },
-            { id: "map", icon: "📍", label: "Mapa" },
-            { id: "dashboard", icon: "📊", label: "Dashboard" },
-            { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
-            { id: "carrierView", icon: "🚛", label: "Transportistas" },
-          ].map((link) => (
+          {navLinks.map((link) => (
             <li key={link.id}>
               <a
                 href="#"
@@ -113,8 +139,13 @@ export default function Home() {
 
           <div className="user-profile" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div className="avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>A</div>
-              <span style={{ fontWeight: 600, fontSize: "14px" }}>Admin</span>
+              <div className="avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
+                {(currentUser?.username?.[0] || "U").toUpperCase()}
+              </div>
+              <span style={{ fontWeight: 600, fontSize: "14px" }}>
+                {currentUser?.username || "Usuario"}
+                {currentUser?.role ? ` (${currentUser.role})` : ""}
+              </span>
             </div>
             <button
               onClick={handleLogout}

@@ -16,7 +16,7 @@ export async function POST(request) {
         }
 
         const result = await db.execute({
-            sql: "SELECT id, username, password_hash FROM users WHERE username = ?",
+            sql: "SELECT id, username, password_hash, role FROM users WHERE username = ?",
             args: [username]
         });
 
@@ -32,7 +32,7 @@ export async function POST(request) {
         }
 
         // Crear token JWT con la librería 'jose'
-        const token = await new SignJWT({ id: user.id, username: user.username, role: 'admin' })
+        const token = await new SignJWT({ id: user.id, username: user.username, role: user.role || 'user' })
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
             .setExpirationTime('30d') // Expira en 30 días
