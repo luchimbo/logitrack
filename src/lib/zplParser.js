@@ -45,6 +45,7 @@ const PARTIDO_MAP = {
     "escobar": "escobar",
     "pilar": "pilar",
     "villa rosa": "villa_rosa",
+    "matheu": "villa_rosa",
     "lujan": "lujan",
     "luján": "lujan",
     "derqui": "pilar",
@@ -211,6 +212,7 @@ const LOCALITY_TO_PARTIDO = {
     "MAQUINISTA SAVIO": "escobar",
     // Pilar
     "LUJAN": "lujan",
+    "MATHEU": "villa_rosa",
     "DEL VISO": "pilar",
     "VILLA ROSA": "villa_rosa",
     "PRESIDENTE DERQUI": "pilar",
