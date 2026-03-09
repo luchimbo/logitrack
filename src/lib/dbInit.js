@@ -88,6 +88,7 @@ export async function initDb() {
       sale_id TEXT,
       product_name TEXT,
       shipping_method TEXT,
+      raw_block TEXT,
       is_reprint INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(print_job_id) REFERENCES print_jobs(id)
@@ -117,6 +118,16 @@ export async function initDb() {
     }
   } catch (e) {
     console.error("Migration error (lat/lng):", e.message || e);
+  }
+
+  // Migration: add raw_block to print_job_items
+  try {
+    await db.execute("ALTER TABLE print_job_items ADD COLUMN raw_block TEXT");
+  } catch (e) {
+    const msg = String(e?.message || "").toLowerCase();
+    if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+      console.error("Migration error (print_job_items.raw_block):", e.message || e);
+    }
   }
 
   // Migration: remove UNIQUE constraint on zone_mappings.partido

@@ -85,13 +85,13 @@ async function runBackfill(request) {
       pji.sale_id,
       pji.product_name,
       pji.shipping_method,
+      pji.is_reprint,
       pj.created_at_client,
       pj.source_files_json
     FROM print_job_items pji
     JOIN print_jobs pj ON pj.id = pji.print_job_id
     LEFT JOIN shipments s ON s.tracking_number = pji.tracking_number
-    WHERE pji.is_reprint = 0
-      AND pji.tracking_number IS NOT NULL
+    WHERE pji.tracking_number IS NOT NULL
       AND s.id IS NULL
     ORDER BY pji.id ASC`);
 

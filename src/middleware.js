@@ -6,6 +6,15 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'logitrack
 export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
+    // Permitir flujo de print-agent V2 sin cookie de sesion (usa token por header en las rutas)
+    if (
+        pathname.startsWith('/api/v2/print-jobs/intake') ||
+        pathname.startsWith('/api/v2/print-jobs/backfill') ||
+        pathname.startsWith('/api/v2/print-jobs/recover')
+    ) {
+        return NextResponse.next();
+    }
+
     // Ignorar rutas públicas, assets estáticos e imágenes
     if (
         pathname.startsWith('/_next') ||

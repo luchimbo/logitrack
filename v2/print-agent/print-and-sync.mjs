@@ -454,13 +454,20 @@ async function syncJob(job, config) {
       });
       clearTimeout(timeout);
 
+      const bodyText = await response.text();
+      let bodyJson = null;
+      try {
+        bodyJson = bodyText ? JSON.parse(bodyText) : null;
+      } catch {
+        bodyJson = null;
+      }
+
       if (!response.ok) {
-        const body = await response.text();
-        errors.push(`${url} -> HTTP ${response.status} ${body}`);
+        errors.push(`${url} -> HTTP ${response.status} ${bodyText}`);
         continue;
       }
 
-      return { ok: true, url };
+      return { ok: true, url, body: bodyJson };
     } catch (error) {
       errors.push(`${url} -> ${error.message || "Sync fallida"}`);
     }
@@ -484,7 +491,10 @@ async function retryPendingJobs(config) {
         last_attempt_at: new Date().toISOString(),
       });
     } else {
-      logLine(`Reintento OK: ${pending.job.job_id}`);
+      const metrics = result.body
+        ? `inserted=${result.body.shipments_inserted ?? "?"}, skipped=${result.body.shipments_skipped ?? "?"}`
+        : "sin metrics";
+      logLine(`Reintento OK: ${pending.job.job_id} (${metrics})`);
     }
   }
 
@@ -656,8 +666,6 @@ async function main() {
   });
 
   if (!config.dryRun) {
-    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
-    saveKnownTrackings(knownTrackingIndex);
     appendHistory(job);
   }
 
@@ -682,7 +690,13 @@ async function main() {
     queueJobForRetry(job, syncResult.reason);
     logLine(`Sync pendiente: ${syncResult.reason}`);
   } else {
-    logLine(`Sync OK (${syncResult.url})`);
+    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
+    saveKnownTrackings(knownTrackingIndex);
+
+    const metrics = syncResult.body
+      ? `inserted=${syncResult.body.shipments_inserted ?? "?"}, skipped=${syncResult.body.shipments_skipped ?? "?"}, recovered=${syncResult.body.shipments_recovered_from_reprint ?? "?"}, duplicate=${syncResult.body.duplicate === true ? "yes" : "no"}`
+      : "sin metrics";
+    logLine(`Sync OK (${syncResult.url}) ${metrics}`);
   }
 }
 

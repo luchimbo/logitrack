@@ -417,6 +417,7 @@ async function backfillExistingJobToLegacy(jobId) {
       item_order,
       sku,
       tracking_number,
+      raw_block,
       sale_id,
       product_name,
       shipping_method,
@@ -431,6 +432,7 @@ async function backfillExistingJobToLegacy(jobId) {
     item_order: intOrDefault(row.item_order, 0),
     sku: stringOrNull(row.sku, 120) || "SIN-SKU",
     tracking_number: stringOrNull(row.tracking_number, 120),
+    raw_block: stringOrNull(row.raw_block, 40000),
     label_fingerprint: null,
     sale_type: null,
     sale_id: stringOrNull(row.sale_id, 120),
@@ -446,6 +448,7 @@ async function backfillExistingJobToLegacy(jobId) {
     batchId,
     inserted: legacyResult.inserted,
     skipped: legacyResult.skipped,
+    recovered_from_reprint: legacyResult.recovered_from_reprint || 0,
   };
 }
 
@@ -505,6 +508,7 @@ export async function POST(request) {
         batch_id: backfill.batchId,
         shipments_inserted: backfill.inserted,
         shipments_skipped: backfill.skipped,
+        shipments_recovered_from_reprint: backfill.recovered_from_reprint || 0,
       });
     }
 
@@ -550,7 +554,7 @@ export async function POST(request) {
     const seenFingerprintsInJob = new Set();
 
     const normalizedLabels = labels.map((label) => {
-      let isReprint = label.client_reprint;
+      let isReprint = false;
 
       if (label.tracking_number) {
         if (knownTrackings.has(label.tracking_number) || seenTrackingsInJob.has(label.tracking_number)) {
@@ -638,8 +642,8 @@ export async function POST(request) {
       await db.execute({
         sql: `INSERT INTO print_job_items (
           print_job_id, item_order, sku, tracking_number, label_fingerprint,
-          sale_id, product_name, shipping_method, is_reprint
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sale_id, product_name, shipping_method, raw_block, is_reprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           asDbValue(printJobId),
           asDbValue(item.item_order),
@@ -649,6 +653,7 @@ export async function POST(request) {
           asDbValue(item.sale_id),
           asDbValue(item.product_name),
           asDbValue(item.shipping_method),
+          asDbValue(item.raw_block),
           asDbValue(item.is_reprint),
         ],
       });
