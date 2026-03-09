@@ -104,11 +104,18 @@ async function runBackfill(request) {
     const seenTrackings = new Set();
     const touchedBatchIds = new Set();
     let inserted = 0;
+    let failed = 0;
 
     for (const row of rows) {
       const tracking = stringOrNull(row.tracking_number, 120);
       if (!tracking || seenTrackings.has(tracking)) continue;
       seenTrackings.add(tracking);
+
+      const productName =
+        stringOrNull(row.product_name, 500) ||
+        stringOrNull(row.sku, 120) ||
+        tracking ||
+        "Etiqueta sin producto";
 
       const sourceFiles = parseJsonOrFallback(row.source_files_json, []);
       const batchDate = extractDateOnly(row.created_at_client);
@@ -120,52 +127,56 @@ async function runBackfill(request) {
         batchCache.set(batchKey, batchId);
       }
 
-      await db.execute({
-        sql: `INSERT INTO shipments (
-          batch_id, sale_type, sale_id, tracking_number, remitente_id,
-          product_name, sku, color, voltage, quantity,
-          recipient_name, recipient_user, address, postal_code,
-          city, partido, province, reference, shipping_method,
-          carrier_code, carrier_name, assigned_carrier,
-          dispatch_date, delivery_date, status
-        ) VALUES (
-          ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?, ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?, ?, ?,
-          ?, ?, 'pendiente'
-        )`,
-        args: [
-          asDbValue(batchId),
-          null,
-          asDbValue(stringOrNull(row.sale_id, 120)),
-          asDbValue(tracking),
-          null,
-          asDbValue(stringOrNull(row.product_name, 500)),
-          asDbValue(stringOrNull(row.sku, 120)),
-          null,
-          null,
-          1,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          asDbValue(stringOrNull(row.shipping_method, 50)),
-          null,
-          null,
-          null,
-          null,
-          null,
-        ],
-      });
+      try {
+        await db.execute({
+          sql: `INSERT INTO shipments (
+            batch_id, sale_type, sale_id, tracking_number, remitente_id,
+            product_name, sku, color, voltage, quantity,
+            recipient_name, recipient_user, address, postal_code,
+            city, partido, province, reference, shipping_method,
+            carrier_code, carrier_name, assigned_carrier,
+            dispatch_date, delivery_date, status
+          ) VALUES (
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, 'pendiente'
+          )`,
+          args: [
+            asDbValue(batchId),
+            null,
+            asDbValue(stringOrNull(row.sale_id, 120)),
+            asDbValue(tracking),
+            null,
+            asDbValue(productName),
+            asDbValue(stringOrNull(row.sku, 120)),
+            null,
+            null,
+            1,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            asDbValue(stringOrNull(row.shipping_method, 50)),
+            null,
+            null,
+            null,
+            null,
+            null,
+          ],
+        });
 
-      inserted += 1;
-      touchedBatchIds.add(batchId);
+        inserted += 1;
+        touchedBatchIds.add(batchId);
+      } catch (e) {
+        failed += 1;
+      }
     }
 
     for (const batchId of touchedBatchIds) {
@@ -178,6 +189,7 @@ async function runBackfill(request) {
     return NextResponse.json({
       ok: true,
       inserted,
+      failed,
       batches_updated: touchedBatchIds.size,
       candidates: rows.length,
     });
