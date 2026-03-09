@@ -15,6 +15,8 @@ export async function GET(request) {
         const carrier = searchParams.get('carrier');
 
         let sql, args = [];
+        let orderBy = "id";
+        let columnPrefix = "";
 
         if (batch_id) {
             sql = "SELECT * FROM shipments WHERE batch_id = ?";
@@ -25,24 +27,26 @@ export async function GET(request) {
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE b.date >= ? AND b.date <= ?`;
             args.push(range.from, range.to);
+            orderBy = "s.id";
+            columnPrefix = "s.";
         } else {
             sql = "SELECT * FROM shipments WHERE 1=1";
         }
 
         if (status) {
-            sql += " AND s.status = ?";
+            sql += ` AND ${columnPrefix}status = ?`;
             args.push(status);
         }
         if (shipping_method) {
-            sql += " AND s.shipping_method = ?";
+            sql += ` AND ${columnPrefix}shipping_method = ?`;
             args.push(shipping_method);
         }
         if (carrier) {
-            sql += " AND s.assigned_carrier = ?";
+            sql += ` AND ${columnPrefix}assigned_carrier = ?`;
             args.push(carrier);
         }
 
-        sql += " ORDER BY s.id DESC";
+        sql += ` ORDER BY ${orderBy} DESC`;
 
         const result = await db.execute({ sql, args });
         return NextResponse.json(result.rows);
