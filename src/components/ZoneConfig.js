@@ -37,6 +37,7 @@ const PARTIDOS = [
     // GBA 3
     { id: 'escobar', name: 'Escobar', zone: 'gba3' },
     { id: 'pilar', name: 'Pilar', zone: 'gba3' },
+    { id: 'villa_rosa', name: 'Villa Rosa', zone: 'gba3' },
     { id: 'lujan', name: 'Luján', zone: 'gba3' },
     { id: 'general_rodriguez', name: 'Gral. Rodríguez', zone: 'gba3' },
     { id: 'marcos_paz', name: 'Marcos Paz', zone: 'gba3' },

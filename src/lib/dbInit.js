@@ -197,6 +197,25 @@ export async function initDb() {
         });
       }
     }
+
+    const villaRosaExists = await db.execute({
+      sql: "SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1",
+      args: ["villa_rosa"],
+    });
+
+    if (!villaRosaExists.rows.length) {
+      const pilarCarrier = await db.execute({
+        sql: "SELECT carrier_name FROM zone_mappings WHERE partido = ? ORDER BY id ASC LIMIT 1",
+        args: ["pilar"],
+      });
+
+      if (pilarCarrier.rows.length && pilarCarrier.rows[0].carrier_name) {
+        await db.execute({
+          sql: "INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)",
+          args: ["villa_rosa", pilarCarrier.rows[0].carrier_name],
+        });
+      }
+    }
   } catch (e) {
     console.error("Zone seed error:", e.message || e);
   }

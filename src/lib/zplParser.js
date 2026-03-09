@@ -44,6 +44,7 @@ const PARTIDO_MAP = {
     "florencio varela": "florencio_varela",
     "escobar": "escobar",
     "pilar": "pilar",
+    "villa rosa": "villa_rosa",
     "lujan": "lujan",
     "luján": "lujan",
     "derqui": "pilar",
@@ -211,7 +212,7 @@ const LOCALITY_TO_PARTIDO = {
     // Pilar
     "LUJAN": "lujan",
     "DEL VISO": "pilar",
-    "VILLA ROSA": "pilar",
+    "VILLA ROSA": "villa_rosa",
     "PRESIDENTE DERQUI": "pilar",
     "FATIMA": "pilar",
     "MANZANARES": "pilar",
