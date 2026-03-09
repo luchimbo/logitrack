@@ -34,6 +34,7 @@ const ZONE_GROUPS = {
   escobar: "GBA 3",
   pilar: "GBA 3",
   villa_rosa: "GBA 3",
+  matheu: "GBA 3",
   lujan: "GBA 3",
   general_rodriguez: "GBA 3",
   marcos_paz: "GBA 3",
