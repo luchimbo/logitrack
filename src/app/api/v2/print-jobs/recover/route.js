@@ -287,10 +287,19 @@ export async function POST(request) {
     const many = Array.isArray(body?.job_ids)
       ? body.job_ids.map((x) => stringOrNull(x, 120)).filter(Boolean)
       : [];
-    const jobIds = [...new Set([single, ...many].filter(Boolean))];
+    const recentLimit = Math.max(1, Math.min(100, intOrDefault(body?.recent_limit, 30)));
+    let jobIds = [...new Set([single, ...many].filter(Boolean))];
 
     if (!jobIds.length) {
-      return NextResponse.json({ error: "job_id or job_ids is required" }, { status: 400 });
+      const recentJobs = await db.execute({
+        sql: "SELECT job_id FROM print_jobs ORDER BY id DESC LIMIT ?",
+        args: [asDbValue(recentLimit)],
+      });
+      jobIds = recentJobs.rows.map((r) => stringOrNull(r.job_id, 120)).filter(Boolean);
+    }
+
+    if (!jobIds.length) {
+      return NextResponse.json({ error: "No print jobs found to recover" }, { status: 404 });
     }
 
     const results = [];
