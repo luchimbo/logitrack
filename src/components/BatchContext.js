@@ -9,9 +9,11 @@ export function BatchProvider({ children }) {
     const [batches, setBatches] = useState([]);
     const [currentBatchId, setCurrentBatchId] = useState(null);
 
-    // Period state: 'today' | 'date' | 'week' | 'month' | 'year' | 'all'
+    // Period state: 'today' | 'date' | 'range' | 'week' | 'month' | 'year' | 'all'
     const [period, setPeriod] = useState('today');
     const [specificDate, setSpecificDate] = useState(''); // for 'date' period
+    const [rangeFrom, setRangeFrom] = useState('');
+    const [rangeTo, setRangeTo] = useState('');
 
     useEffect(() => {
         async function fetchBatches() {
@@ -35,6 +37,10 @@ export function BatchProvider({ children }) {
         let qs = '';
         if (period === 'date' && specificDate) {
             qs = `period=date&date=${specificDate}`;
+        } else if (period === 'range') {
+            qs = `period=range`;
+            if (rangeFrom) qs += `&from=${rangeFrom}`;
+            if (rangeTo) qs += `&to=${rangeTo}`;
         } else {
             qs = `period=${period}`;
         }
@@ -57,6 +63,10 @@ export function BatchProvider({ children }) {
             setPeriod,
             specificDate,
             setSpecificDate,
+            rangeFrom,
+            setRangeFrom,
+            rangeTo,
+            setRangeTo,
             getQueryString,
             getTodayQueryString,
             reloadBatches: async () => {

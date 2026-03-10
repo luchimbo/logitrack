@@ -9,6 +9,8 @@ export async function GET(request) {
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period') || 'today';
         const specificDate = searchParams.get('date');
+        const fromDate = searchParams.get('from');
+        const toDate = searchParams.get('to');
         const batch_id = searchParams.get('batch_id');
 
         let sql, args;
@@ -19,7 +21,7 @@ export async function GET(request) {
             args = [batch_id];
         } else {
             // New: filter by period via daily_batches.date
-            const range = getDateRange(period, specificDate);
+            const range = getDateRange(period, specificDate, fromDate, toDate);
             sql = `SELECT s.* FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE b.date >= ? AND b.date <= ?`;

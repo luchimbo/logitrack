@@ -1,7 +1,7 @@
 // src/lib/dateUtils.js
 // Computes SQL-friendly date ranges for period filtering
 
-export function getDateRange(period, specificDate) {
+export function getDateRange(period, specificDate, fromDate, toDate) {
     const now = new Date();
     // Format: YYYY-MM-DD
     const fmt = (d) => d.toISOString().slice(0, 10);
@@ -36,6 +36,15 @@ export function getDateRange(period, specificDate) {
 
         case 'all':
             return { from: '2000-01-01', to: '2099-12-31' };
+
+        case 'range': {
+            const safeFrom = fromDate || toDate || fmt(now);
+            const safeTo = toDate || fromDate || fmt(now);
+            if (safeFrom <= safeTo) {
+                return { from: safeFrom, to: safeTo };
+            }
+            return { from: safeTo, to: safeFrom };
+        }
 
         default:
             return { from: fmt(now), to: fmt(now) };

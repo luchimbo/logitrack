@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 
 export default function Dashboard() {
-    const { getQueryString, period, specificDate } = useBatch();
+    const { getQueryString, period, specificDate, rangeFrom, rangeTo } = useBatch();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -25,12 +25,17 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [period, specificDate]);
+    }, [period, specificDate, rangeFrom, rangeTo]);
 
     const periodLabel = () => {
         switch (period) {
             case 'today': return 'Hoy';
             case 'date': return specificDate || 'Fecha';
+            case 'range': {
+                const from = rangeFrom || '...';
+                const to = rangeTo || '...';
+                return `${from} a ${to}`;
+            }
             case 'week': return 'Esta semana';
             case 'month': return 'Este mes';
             case 'year': return 'Este año';
@@ -76,7 +81,7 @@ export default function Dashboard() {
         );
     }
 
-    const statusEntries = Object.entries(data.by_status || {});
+    const statusEntries = Object.entries(data.by_status || {}).filter(([status]) => String(status || '').toLowerCase() !== 'pendiente');
     const methodEntries = Object.entries(data.by_method || {});
     const carrierEntries = Object.entries(data.by_carrier || {}).sort((a, b) => b[1] - a[1]);
     const provinceEntries = Object.entries(data.by_province || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);

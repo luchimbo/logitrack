@@ -15,6 +15,7 @@ import { useBatch } from "@/components/BatchContext";
 const PERIODS = [
   { id: 'today', label: 'Hoy', icon: '📅' },
   { id: 'date', label: 'Fecha', icon: '🗓️' },
+  { id: 'range', label: 'Rango', icon: '🧭' },
   { id: 'week', label: 'Semana', icon: '📆' },
   { id: 'month', label: 'Mes', icon: '📊' },
   { id: 'year', label: 'Año', icon: '📈' },
@@ -24,7 +25,7 @@ const PERIODS = [
 export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
-  const { period, setPeriod, specificDate, setSpecificDate } = useBatch();
+  const { period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -132,6 +133,27 @@ export default function Home() {
                     onChange={(e) => setSpecificDate(e.target.value)}
                     max={new Date().toISOString().slice(0, 10)}
                   />
+                )}
+
+                {period === 'range' && (
+                  <>
+                    <input
+                      type="date"
+                      className="form-input date-input"
+                      value={rangeFrom}
+                      onChange={(e) => setRangeFrom(e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      title="Desde"
+                    />
+                    <input
+                      type="date"
+                      className="form-input date-input"
+                      value={rangeTo}
+                      onChange={(e) => setRangeTo(e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      title="Hasta"
+                    />
+                  </>
                 )}
               </>
             )}
