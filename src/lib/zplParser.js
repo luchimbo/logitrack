@@ -43,9 +43,11 @@ const PARTIDO_MAP = {
     "berazategui": "berazategui",
     "florencio varela": "florencio_varela",
     "escobar": "escobar",
+    "ingeniero maschwitz": "ingeniero_maschwitz",
     "pilar": "pilar",
     "villa rosa": "villa_rosa",
     "matheu": "villa_rosa",
+    "dique lujan": "dique_lujan",
     "lujan": "lujan",
     "luján": "lujan",
     "derqui": "pilar",
@@ -208,8 +210,10 @@ const LOCALITY_TO_PARTIDO = {
     // Escobar
     "BELEN DE ESCOBAR": "escobar",
     "GARIN": "escobar",
-    "INGENIERO MASCHWITZ": "escobar",
+    "INGENIERO MASCHWITZ": "ingeniero_maschwitz",
     "MAQUINISTA SAVIO": "escobar",
+    // Tigre
+    "DIQUE LUJAN": "dique_lujan",
     // Pilar
     "LUJAN": "lujan",
     "MATHEU": "villa_rosa",

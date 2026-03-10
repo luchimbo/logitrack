@@ -216,6 +216,26 @@ export async function initDb() {
         });
       }
     }
+
+    const forcedEntregoYa = ["dique_lujan", "ingeniero_maschwitz"];
+    for (const partido of forcedEntregoYa) {
+      await db.execute({
+        sql: "UPDATE zone_mappings SET carrier_name = ? WHERE partido = ?",
+        args: ["EntregoYa", partido],
+      });
+
+      const exists = await db.execute({
+        sql: "SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1",
+        args: [partido],
+      });
+
+      if (!exists.rows.length) {
+        await db.execute({
+          sql: "INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)",
+          args: [partido, "EntregoYa"],
+        });
+      }
+    }
   } catch (e) {
     console.error("Zone seed error:", e.message || e);
   }

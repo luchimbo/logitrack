@@ -16,6 +16,8 @@ function canonicalPartido(normName) {
     if (s.includes("la_matanza_norte")) return "la_matanza_norte";
     if (s.includes("la_matanza")) return "la_matanza";
     if (s.includes("villa_rosa") || s.includes("matheu")) return "villa_rosa";
+    if (s.includes("dique_lujan")) return "dique_lujan";
+    if (s.includes("ingeniero_maschwitz")) return "ingeniero_maschwitz";
 
     return s;
 }
