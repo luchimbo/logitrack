@@ -363,6 +363,10 @@ function normalizePartido(name) {
     // 1. Clean basic stuff
     name = name.trim().toLowerCase();
 
+    if (name.includes("la plata")) {
+        return "la_plata";
+    }
+
     // 2. Check direct mapping
     if (PARTIDO_MAP[name]) {
         return PARTIDO_MAP[name];

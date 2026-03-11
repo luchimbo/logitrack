@@ -57,6 +57,7 @@ function normalizeName(name) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+  if (s.includes("la_plata")) return "la_plata";
   return s;
 }
 

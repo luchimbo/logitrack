@@ -19,6 +19,19 @@ const PARTIDO_ZONES = {
     la_plata: 'GBA 3', berisso: 'GBA 3',
 };
 
+function normalizePartidoKey(value) {
+    if (!value) return '';
+    const normalized = String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    if (normalized.includes('la_plata')) return 'la_plata';
+    return normalized;
+}
+
 export default function FlexSection() {
     const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
@@ -155,7 +168,7 @@ export default function FlexSection() {
         'Sin Partido': []
     };
     shipments.forEach(s => {
-        const p = s.partido;
+        const p = normalizePartidoKey(s.partido);
         let zone = 'Sin Partido';
         if (p) {
             zone = PARTIDO_ZONES[p] || 'Otra';
