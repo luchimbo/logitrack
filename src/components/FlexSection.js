@@ -28,6 +28,7 @@ function normalizePartidoKey(value) {
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '');
 
+    if (normalized.includes('lisandro_olmos')) return 'la_plata';
     if (normalized.includes('la_plata')) return 'la_plata';
     return normalized;
 }

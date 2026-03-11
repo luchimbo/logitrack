@@ -238,6 +238,7 @@ const LOCALITY_TO_PARTIDO = {
     "ABASTO": "la_plata",
     "MELCHOR ROMERO": "la_plata",
     "SAN CARLOS": "la_plata",
+    "LISANDRO OLMOS": "la_plata",
     // Pte. Perón
     "GUERNICA": "pte_peron",
     // Ezeiza
