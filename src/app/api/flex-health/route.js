@@ -44,6 +44,7 @@ const ZONE_GROUPS = {
   san_vicente: "GBA 3",
   pte_peron: "GBA 3",
   ensenada: "GBA 3",
+  campana: "GBA 3",
   la_plata: "GBA 3",
   berisso: "GBA 3",
 };
@@ -57,6 +58,7 @@ function normalizeName(name) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+  if (s.includes("campana")) return "campana";
   if (s.includes("lisandro_olmos")) return "la_plata";
   if (s.includes("la_plata")) return "la_plata";
   return s;

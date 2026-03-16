@@ -217,7 +217,7 @@ export async function initDb() {
       }
     }
 
-    const forcedEntregoYa = ["dique_lujan", "ingeniero_maschwitz", "la_plata"];
+    const forcedEntregoYa = ["dique_lujan", "ingeniero_maschwitz", "la_plata", "campana"];
     for (const partido of forcedEntregoYa) {
       await db.execute({
         sql: "UPDATE zone_mappings SET carrier_name = ? WHERE partido = ?",

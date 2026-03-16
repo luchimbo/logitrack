@@ -61,6 +61,7 @@ const PARTIDO_MAP = {
     "pte. peron": "pte_peron",
     "presidente peron": "pte_peron",
     "ensenada": "ensenada",
+    "campana": "campana",
     "la plata": "la_plata",
     "berisso": "berisso",
 };
@@ -229,6 +230,7 @@ const LOCALITY_TO_PARTIDO = {
     "LA REJA": "moreno",
     "FRANCISCO ALVAREZ": "moreno",
     // La Plata
+    "CAMPANA": "campana",
     "CITY BELL": "la_plata",
     "GONNET": "la_plata",
     "MANUEL B GONNET": "la_plata",
@@ -363,6 +365,10 @@ function normalizePartido(name) {
 
     // 1. Clean basic stuff
     name = name.trim().toLowerCase();
+
+    if (name.includes("campana")) {
+        return "campana";
+    }
 
     if (name.includes("la plata")) {
         return "la_plata";

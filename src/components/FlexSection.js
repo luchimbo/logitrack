@@ -15,7 +15,7 @@ const PARTIDO_ZONES = {
     esteban_echeverria: 'GBA 2', almirante_brown: 'GBA 2', lomas_de_zamora: 'GBA 1',
     quilmes: 'GBA 2', berazategui: 'GBA 2', florencio_varela: 'GBA 2',
     escobar: 'GBA 3', ingeniero_maschwitz: 'GBA 3', pilar: 'GBA 3', villa_rosa: 'GBA 3', matheu: 'GBA 3', dique_lujan: 'GBA 3', lujan: 'GBA 3', general_rodriguez: 'GBA 3', marcos_paz: 'GBA 3',
-    canuelas: 'GBA 3', san_vicente: 'GBA 3', pte_peron: 'GBA 3', ensenada: 'GBA 3',
+    canuelas: 'GBA 3', san_vicente: 'GBA 3', pte_peron: 'GBA 3', ensenada: 'GBA 3', campana: 'GBA 3',
     la_plata: 'GBA 3', berisso: 'GBA 3',
 };
 
@@ -28,6 +28,7 @@ function normalizePartidoKey(value) {
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '');
 
+    if (normalized.includes('campana')) return 'campana';
     if (normalized.includes('lisandro_olmos')) return 'la_plata';
     if (normalized.includes('la_plata')) return 'la_plata';
     return normalized;
