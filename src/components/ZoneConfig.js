@@ -48,6 +48,7 @@ const PARTIDOS = [
     { id: 'pte_peron', name: 'Pte. Perón', zone: 'gba3' },
     { id: 'ensenada', name: 'Ensenada', zone: 'gba3' },
     { id: 'campana', name: 'Campana', zone: 'gba3' },
+    { id: 'zarate', name: 'Zárate', zone: 'gba3' },
     { id: 'la_plata', name: 'La Plata', zone: 'gba3' },
     { id: 'berisso', name: 'Berisso', zone: 'gba3' },
 ];
