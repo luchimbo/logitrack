@@ -462,6 +462,13 @@ function extractFdTexts(segment) {
     return texts;
 }
 
+function stripRepeatedLabelPrefix(value, label) {
+    let out = decodeZplHex(String(value || "")).trim();
+    const prefix = new RegExp(`^(?:${label}:\\s*)+`, "i");
+    out = out.replace(prefix, "").trim();
+    return out;
+}
+
 function isColectaLabel(content) {
     if (content.includes("Domicilio:")) return true;
     if (content.includes("Ciudad de destino:")) return true;
@@ -510,13 +517,15 @@ function parseFlexLabel(content) {
     const envioMatch = content.match(/\^FDEnvio:\s*(\d+)\^FS/);
     if (envioMatch) shipment.carrier_code = envioMatch[1];
 
-    const entregaMatch = content.match(/\^FD(\d{2}-[A-Za-z]{3})\^FS/);
+    const entregaMatch = content.match(/\^FD(\d{2}-[A-Za-z]{3}|\d{1,2}\s+[A-Z]{3})\^FS/);
     if (entregaMatch) shipment.dispatch_date = entregaMatch[1];
 
-    const cpMatch = content.match(/\^FDCP:\s*(\d+)\^FS/);
+    const cpMatch = content.match(/\^FDCP:\s*(\d+)\^FS/)
+        || content.match(/\^FDCP:\s*\^FS[\s\S]{0,120}?\^FD(\d{4,8})\^FS/);
     if (cpMatch) shipment.postal_code = cpMatch[1];
 
-    const zoneMatch = content.match(/\^FO\d+,485\^A0N,48,48\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/);
+    const zoneMatch = content.match(/\^FO\d+,485\^A0N,48,48\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/)
+        || content.match(/\^FO0,660\^A0N,40,40\^FB800,1,0,C\^FH\^FD(.+?)\^FS/);
     if (zoneMatch) {
         const zone = decodeZplHex(zoneMatch[1].trim());
         shipment.province = zone;
@@ -529,7 +538,8 @@ function parseFlexLabel(content) {
         }
     }
 
-    const barrioMatch = content.match(/\^FO\d+,580\^A0N,45,45\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/);
+    const barrioMatch = content.match(/\^FO\d+,580\^A0N,45,45\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/)
+        || content.match(/\^FO0,705\^A0N,40,40\^FB800,1,0,C\^FH\^FD(.+?)\^FS/);
     if (barrioMatch) {
         shipment.city = decodeZplHex(barrioMatch[1].trim());
     }
@@ -539,14 +549,14 @@ function parseFlexLabel(content) {
     }
 
     const dirMatch = content.match(/\^FDDireccion:\s*(.+?)\^FS/);
-    if (dirMatch) shipment.address = decodeZplHex(dirMatch[1].trim());
+    if (dirMatch) shipment.address = stripRepeatedLabelPrefix(dirMatch[1], "Direccion");
 
     // Check fallback address format
     const dirMatch2 = content.match(/Direccion:.*?\^FH\^FD(?:Direccion:\s*)?(.+?)\^FS/);
-    if (!dirMatch && dirMatch2) shipment.address = decodeZplHex(dirMatch2[1].trim());
+    if (!dirMatch && dirMatch2) shipment.address = stripRepeatedLabelPrefix(dirMatch2[1], "Direccion");
 
     const refMatch = content.match(/\^FDReferencia:\s*(.+?)\^FS/);
-    if (refMatch) shipment.reference = decodeZplHex(refMatch[1].trim());
+    if (refMatch) shipment.reference = stripRepeatedLabelPrefix(refMatch[1], "Referencia");
 
     const destMatch = content.match(/Destinatario:\s*(.+?)\^FS/);
     if (destMatch) {
@@ -574,16 +584,25 @@ function parseFlexLabel(content) {
         if (cpPos !== -1) {
             const candidates = [
                 content.indexOf("^FO0,700", cpPos),
+                content.indexOf("^FO0,705", cpPos),
                 content.indexOf("^FO0,715", cpPos),
+                content.indexOf("^FO0,755", cpPos),
+                content.indexOf("^FO0,770", cpPos),
+                content.indexOf("^FO0,820", cpPos),
                 content.indexOf("^FX 3 Horizontal Line", cpPos)
             ].filter(x => x !== -1);
 
             const endPos = candidates.length ? Math.min(...candidates) : content.length;
             const geoSegment = content.slice(cpPos, endPos);
             const geoTexts = extractFdTexts(geoSegment)
+                .filter(t => !/^CP:?$/i.test(t))
+                .filter(t => !/^\d{4,8}$/i.test(t))
                 .filter(t => !/^CP:\s*\d+$/i.test(t))
                 .filter(t => !/^Entrega:/i.test(t))
                 .filter(t => !/^\d{2}-[A-Za-z]{3}$/i.test(t))
+                .filter(t => !/^\d{1,2}\s+[A-Z]{3}$/i.test(t))
+                .filter(t => !/^(RESIDENCIAL|COMERCIAL)$/i.test(t))
+                .filter(t => /^(Direccion|Barrio|Referencia|Destinatario):?$/i.test(t) === false)
                 .filter(t => !/sender_id|hash_code/i.test(t));
 
             const uniqueGeo = [...new Set(geoTexts)];
