@@ -10,23 +10,11 @@ import CarrierView from "@/components/CarrierView";
 import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
-import { useBatch } from "@/components/BatchContext";
-
-const PERIODS = [
-  { id: 'today', label: 'Hoy', icon: '📅' },
-  { id: 'date', label: 'Fecha', icon: '🗓️' },
-  { id: 'range', label: 'Rango', icon: '🧭' },
-  { id: 'week', label: 'Semana', icon: '📆' },
-  { id: 'month', label: 'Mes', icon: '📊' },
-  { id: 'year', label: 'Año', icon: '📈' },
-  { id: 'all', label: 'Todo', icon: '🗃️' },
-];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -185,56 +173,6 @@ export default function Home() {
               ☰
             </button>
             <span className="topbar-title">{sectionTitle}</span>
-          </div>
-          
-          {/* Desktop Period Picker */}
-          <div className="period-picker desktop-only" style={{ marginLeft: 'auto' }}>
-            {activeTab === 'dashboard' && (
-              <>
-                {PERIODS.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`period-tab ${period === p.id ? 'active' : ''}`}
-                    onClick={() => setPeriod(p.id)}
-                    title={p.label}
-                  >
-                    <span className="period-icon">{p.icon}</span>
-                    <span className="period-label">{p.label}</span>
-                  </button>
-                ))}
-
-                {period === 'date' && (
-                  <input
-                    type="date"
-                    className="form-input date-input"
-                    value={specificDate}
-                    onChange={(e) => setSpecificDate(e.target.value)}
-                    max={new Date().toISOString().slice(0, 10)}
-                  />
-                )}
-
-                {period === 'range' && (
-                  <>
-                    <input
-                      type="date"
-                      className="form-input date-input"
-                      value={rangeFrom}
-                      onChange={(e) => setRangeFrom(e.target.value)}
-                      max={new Date().toISOString().slice(0, 10)}
-                      title="Desde"
-                    />
-                    <input
-                      type="date"
-                      className="form-input date-input"
-                      value={rangeTo}
-                      onChange={(e) => setRangeTo(e.target.value)}
-                      max={new Date().toISOString().slice(0, 10)}
-                      title="Hasta"
-                    />
-                  </>
-                )}
-              </>
-            )}
           </div>
         </header>
 

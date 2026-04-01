@@ -28,8 +28,6 @@ export default function LoginPage() {
                 throw new Error(data.error || "Error al iniciar sesión");
             }
 
-            // Exito: redirigir al Dashboard / Home
-            // Force a hard refresh to bypass Next.js client-side cache and load protected content
             window.location.href = "/";
         } catch (err) {
             setError(err.message);
@@ -45,27 +43,32 @@ export default function LoginPage() {
             minHeight: "100vh",
             background: "var(--bg-secondary)",
             padding: "0",
-            width: "100%"
+            width: "100vw",
+            margin: "0",
+            position: "fixed",
+            inset: "0"
         }}>
-            <div className="card login-card" style={{
+            <div style={{
                 width: "100%",
-                height: "100vh",
-                maxWidth: "none",
+                height: "100%",
+                maxWidth: "420px",
                 padding: "40px 24px",
+                background: "var(--surface)",
+                borderRadius: "0",
                 boxShadow: "none",
                 textAlign: "center",
-                margin: "0",
                 display: "flex",
                 flexDirection: "column",
-                justifyContent: "center"
+                justifyContent: "center",
+                margin: "0 auto"
             }}>
-                <div style={{ marginBottom: "32px" }}>
-                    <div style={{ fontSize: "48px", marginBottom: "12px" }}>📦</div>
-                    <h1 style={{ fontSize: "28px", color: "var(--text-primary)", fontWeight: 800, margin: 0 }}>LogiTrack</h1>
-                    <p style={{ color: "var(--text-muted)", fontSize: "15px", marginTop: "8px" }}>Inicia sesión para continuar</p>
+                <div style={{ marginBottom: "40px" }}>
+                    <div style={{ fontSize: "56px", marginBottom: "16px" }}>📦</div>
+                    <h1 style={{ fontSize: "32px", color: "var(--text)", fontWeight: 800, margin: 0 }}>LogiTrack</h1>
+                    <p style={{ color: "var(--text-muted)", fontSize: "16px", marginTop: "8px" }}>Inicia sesión para continuar</p>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px", textAlign: "left" }}>
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px", textAlign: "left", width: "100%" }}>
                     {error && (
                         <div style={{ background: "var(--danger-bg)", color: "var(--danger)", padding: "12px", borderRadius: "8px", fontSize: "14px", fontWeight: 600 }}>
                             ⚠️ {error}
@@ -103,7 +106,7 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         className="btn btn-primary"
-                        style={{ height: "48px", marginTop: "8px", fontWeight: 600, fontSize: "16px" }}
+                        style={{ height: "48px", marginTop: "8px", fontWeight: 600, fontSize: "16px", width: "100%" }}
                         disabled={loading}
                     >
                         {loading ? "Iniciando sesión..." : "Ingresar a LogiTrack"}
