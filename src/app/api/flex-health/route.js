@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getDateRange } from "@/lib/dateUtils";
 import { ensureDb } from "@/lib/ensureDb";
+import { requireWorkspaceActor } from "@/lib/auth";
 
 const ZONE_GROUPS = {
   capital_federal: "CABA",
@@ -73,6 +74,11 @@ function incrementCount(map, key) {
 export async function GET(request) {
   try {
     await ensureDb();
+    const authResult = await requireWorkspaceActor(request);
+    if (authResult.error) {
+      return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+    }
+    const workspaceId = authResult.actor.workspaceId;
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "today";
@@ -85,22 +91,22 @@ export async function GET(request) {
     if (batchId) {
       shipmentsSql = `SELECT id, batch_id, tracking_number, partido, city, province, postal_code, assigned_carrier
         FROM shipments
-        WHERE batch_id = ? AND shipping_method = 'flex'
+        WHERE workspace_id = ? AND batch_id = ? AND shipping_method = 'flex'
         ORDER BY id DESC`;
-      shipmentsArgs = [batchId];
+      shipmentsArgs = [workspaceId, batchId];
     } else {
       const range = getDateRange(period, specificDate);
       shipmentsSql = `SELECT s.id, s.batch_id, s.tracking_number, s.partido, s.city, s.province, s.postal_code, s.assigned_carrier
         FROM shipments s
         JOIN daily_batches b ON s.batch_id = b.id
-        WHERE b.date >= ? AND b.date <= ? AND s.shipping_method = 'flex'
+        WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ? AND s.shipping_method = 'flex'
         ORDER BY s.id DESC`;
-      shipmentsArgs = [range.from, range.to];
+      shipmentsArgs = [workspaceId, workspaceId, range.from, range.to];
     }
 
     const [shipmentsResult, mappingsResult] = await Promise.all([
       db.execute({ sql: shipmentsSql, args: shipmentsArgs }),
-      db.execute("SELECT partido, carrier_name FROM zone_mappings"),
+      db.execute({ sql: "SELECT partido, carrier_name FROM zone_mappings WHERE workspace_id = ?", args: [workspaceId] }),
     ]);
 
     const shipments = shipmentsResult.rows || [];

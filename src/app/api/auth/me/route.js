@@ -1,26 +1,29 @@
 import { NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'logitrack-super-secret-key-2026-local');
+import { getCurrentActor } from '@/lib/auth';
 
 export async function GET(request) {
-    try {
-        const token = request.cookies.get('auth_token')?.value;
-
-        if (!token) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-        }
-
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-
-        return NextResponse.json({
-            user: {
-                id: payload.id,
-                username: payload.username,
-                role: payload.role || 'user',
-            },
-        });
-    } catch {
-        return NextResponse.json({ error: 'Token invalido' }, { status: 401 });
+  try {
+    const actor = await getCurrentActor(request);
+    if (!actor) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
+
+    return NextResponse.json({
+      user: {
+        id: actor.id,
+        username: actor.username,
+        email: actor.email,
+        role: actor.role,
+        authType: actor.authType,
+        isGlobalAdmin: actor.isGlobalAdmin,
+        workspaceId: actor.workspaceId,
+        workspaceName: actor.workspaceName,
+        workspaceSlug: actor.workspaceSlug,
+        printingSetupCompleted: actor.printingSetupCompleted,
+      },
+    });
+  } catch (error) {
+    console.error('Auth me error:', error);
+    return NextResponse.json({ error: 'Error en el servidor' }, { status: 500 });
+  }
 }

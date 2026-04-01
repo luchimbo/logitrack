@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { getDateRange } from '@/lib/dateUtils';
+import { requireWorkspaceActor } from '@/lib/auth';
 
 // Helper delay to avoid spamming Nominatim
 const delay = ms => new Promise(res => setTimeout(res, ms));
@@ -9,6 +10,11 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 export async function GET(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
@@ -17,8 +23,8 @@ export async function GET(request) {
         let sql = `SELECT s.id, s.address, s.city, s.partido, s.province 
                    FROM shipments s
                    JOIN daily_batches b ON s.batch_id = b.id
-                   WHERE s.lat IS NULL OR s.lng IS NULL`;
-        let args = [];
+                   WHERE s.workspace_id = ? AND b.workspace_id = ? AND (s.lat IS NULL OR s.lng IS NULL)`;
+        let args = [workspaceId, workspaceId];
 
         if (period) {
             const range = getDateRange(period, specificDate);
@@ -42,6 +48,11 @@ export async function GET(request) {
 export async function POST(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         const lat = searchParams.get('lat');
@@ -52,8 +63,8 @@ export async function POST(request) {
         }
 
         await db.execute({
-            sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ?",
-            args: [parseFloat(lat), parseFloat(lng), id]
+            sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
+            args: [parseFloat(lat), parseFloat(lng), id, workspaceId]
         });
 
         return NextResponse.json({ success: true });

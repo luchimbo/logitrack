@@ -26,22 +26,32 @@ function canonicalPartido(normName) {
     return s;
 }
 
-export async function assignCarrier(partido) {
+export async function assignCarrier(partido, workspaceId = null) {
     if (!partido) return null;
     await ensureDb();
     const normPartido = canonicalPartido(normalizeName(partido));
-    const result = await db.execute({
-        sql: "SELECT carrier_name FROM zone_mappings WHERE partido = ?",
-        args: [normPartido]
-    });
+    const result = workspaceId
+        ? await db.execute({
+            sql: "SELECT carrier_name FROM zone_mappings WHERE workspace_id = ? AND partido = ?",
+            args: [workspaceId, normPartido]
+        })
+        : await db.execute({
+            sql: "SELECT carrier_name FROM zone_mappings WHERE partido = ?",
+            args: [normPartido]
+        });
     if (result.rows.length > 0) {
         return result.rows[0].carrier_name;
     }
     return null;
 }
 
-export async function getAllZones() {
+export async function getAllZones(workspaceId = null) {
     await ensureDb();
-    const result = await db.execute("SELECT id, partido, carrier_name FROM zone_mappings ORDER BY partido");
+    const result = workspaceId
+        ? await db.execute({
+            sql: "SELECT id, partido, carrier_name, workspace_id FROM zone_mappings WHERE workspace_id = ? ORDER BY partido",
+            args: [workspaceId],
+        })
+        : await db.execute("SELECT id, partido, carrier_name, workspace_id FROM zone_mappings ORDER BY partido");
     return result.rows;
 }

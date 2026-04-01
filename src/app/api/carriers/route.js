@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request) {
     try {
         await ensureDb();
-        const result = await db.execute("SELECT id, name, display_name, color FROM carriers ORDER BY name");
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const result = await db.execute({
+            sql: "SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name",
+            args: [authResult.actor.workspaceId],
+        });
         return NextResponse.json(result.rows);
     } catch (error) {
         console.error("Error fetching carriers:", error);
@@ -16,6 +24,11 @@ export async function GET() {
 export async function POST(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceAdmin(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const name = searchParams.get('name');
         const display_name = searchParams.get('display_name');
@@ -30,20 +43,20 @@ export async function POST(request) {
         const cleanColor = color || "#6366f1";
 
         const existing = await db.execute({
-            sql: "SELECT id FROM carriers WHERE name = ?",
-            args: [cleanName]
+            sql: "SELECT id FROM carriers WHERE workspace_id = ? AND name = ?",
+            args: [workspaceId, cleanName]
         });
 
         if (existing.rows.length > 0) {
             await db.execute({
-                sql: "UPDATE carriers SET display_name = ?, color = ? WHERE name = ?",
-                args: [cleanDisplay, cleanColor, cleanName]
+                sql: "UPDATE carriers SET display_name = ?, color = ? WHERE workspace_id = ? AND name = ?",
+                args: [cleanDisplay, cleanColor, workspaceId, cleanName]
             });
             return NextResponse.json({ id: existing.rows[0].id, name: cleanName, display_name: cleanDisplay, color: cleanColor });
         } else {
             const result = await db.execute({
-                sql: "INSERT INTO carriers (name, display_name, color) VALUES (?, ?, ?)",
-                args: [cleanName, cleanDisplay, cleanColor]
+                sql: "INSERT INTO carriers (workspace_id, name, display_name, color) VALUES (?, ?, ?, ?)",
+                args: [workspaceId, cleanName, cleanDisplay, cleanColor]
             });
             return NextResponse.json({ id: Number(result.lastInsertRowid), name: cleanName, display_name: cleanDisplay, color: cleanColor });
         }

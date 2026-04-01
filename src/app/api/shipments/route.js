@@ -2,10 +2,16 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
+import { requireWorkspaceActor } from '@/lib/auth';
 
 export async function GET(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
@@ -19,18 +25,19 @@ export async function GET(request) {
         let columnPrefix = "";
 
         if (batch_id) {
-            sql = "SELECT * FROM shipments WHERE batch_id = ?";
-            args.push(batch_id);
+            sql = "SELECT * FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+            args.push(workspaceId, batch_id);
         } else if (period) {
             const range = getDateRange(period, specificDate);
             sql = `SELECT s.* FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
-             WHERE b.date >= ? AND b.date <= ?`;
-            args.push(range.from, range.to);
+             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
+            args.push(workspaceId, workspaceId, range.from, range.to);
             orderBy = "s.id";
             columnPrefix = "s.";
         } else {
-            sql = "SELECT * FROM shipments WHERE 1=1";
+            sql = "SELECT * FROM shipments WHERE workspace_id = ?";
+            args.push(workspaceId);
         }
 
         if (status) {
@@ -59,6 +66,11 @@ export async function GET(request) {
 export async function PATCH(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         const status = searchParams.get('status');
@@ -74,15 +86,15 @@ export async function PATCH(request) {
                 return NextResponse.json({ error: "Invalid status" }, { status: 400 });
             }
             await db.execute({
-                sql: "UPDATE shipments SET status = ? WHERE id = ?",
-                args: [status, id]
+                sql: "UPDATE shipments SET status = ? WHERE id = ? AND workspace_id = ?",
+                args: [status, id, workspaceId]
             });
         }
 
         if (assigned_carrier !== null) {
             await db.execute({
-                sql: "UPDATE shipments SET assigned_carrier = ? WHERE id = ?",
-                args: [assigned_carrier || null, id]
+                sql: "UPDATE shipments SET assigned_carrier = ? WHERE id = ? AND workspace_id = ?",
+                args: [assigned_carrier || null, id, workspaceId]
             });
         }
 
@@ -96,23 +108,28 @@ export async function PATCH(request) {
 export async function DELETE(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const batch_id = searchParams.get('batch_id');
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
 
         if (batch_id) {
-            await db.execute({ sql: "DELETE FROM shipments WHERE batch_id = ?", args: [batch_id] });
+            await db.execute({ sql: "DELETE FROM shipments WHERE workspace_id = ? AND batch_id = ?", args: [workspaceId, batch_id] });
         } else if (period) {
             const range = getDateRange(period, specificDate);
             await db.execute({
                 sql: `DELETE FROM shipments WHERE batch_id IN (
-                    SELECT id FROM daily_batches WHERE date >= ? AND date <= ?
+                    SELECT id FROM daily_batches WHERE workspace_id = ? AND date >= ? AND date <= ?
                 )`,
-                args: [range.from, range.to]
+                args: [workspaceId, range.from, range.to]
             });
         } else {
-            await db.execute("DELETE FROM shipments");
+            await db.execute({ sql: "DELETE FROM shipments WHERE workspace_id = ?", args: [workspaceId] });
         }
 
         return NextResponse.json({ success: true });

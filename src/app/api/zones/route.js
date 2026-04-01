@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { normalizeName, getAllZones } from '@/lib/zoneMapper';
+import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request) {
     try {
-        const zones = await getAllZones();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const zones = await getAllZones(authResult.actor.workspaceId);
         return NextResponse.json(zones);
     } catch (error) {
         console.error("Error fetching zones:", error);
@@ -14,6 +19,11 @@ export async function GET() {
 
 export async function POST(request) {
     try {
+        const authResult = await requireWorkspaceAdmin(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const partido = searchParams.get('partido');
         const carrier_name = searchParams.get('carrier_name');
@@ -26,8 +36,8 @@ export async function POST(request) {
 
         // Check if this exact combo already exists
         const existing = await db.execute({
-            sql: "SELECT id FROM zone_mappings WHERE partido = ? AND carrier_name = ?",
-            args: [normPartido, carrier_name]
+            sql: "SELECT id FROM zone_mappings WHERE workspace_id = ? AND partido = ? AND carrier_name = ?",
+            args: [workspaceId, normPartido, carrier_name]
         });
 
         if (existing.rows.length > 0) {
@@ -36,8 +46,8 @@ export async function POST(request) {
 
         // Insert new mapping (allow multiple carriers per partido)
         await db.execute({
-            sql: "INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)",
-            args: [normPartido, carrier_name]
+            sql: "INSERT INTO zone_mappings (workspace_id, partido, carrier_name) VALUES (?, ?, ?)",
+            args: [workspaceId, normPartido, carrier_name]
         });
 
         return NextResponse.json({ partido: normPartido, carrier_name });

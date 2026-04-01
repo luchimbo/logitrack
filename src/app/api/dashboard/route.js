@@ -2,10 +2,16 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
+import { requireWorkspaceActor } from '@/lib/auth';
 
 export async function GET(request) {
     try {
         await ensureDb();
+        const authResult = await requireWorkspaceActor(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+        const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period') || 'today';
         const specificDate = searchParams.get('date');
@@ -17,15 +23,15 @@ export async function GET(request) {
 
         if (batch_id) {
             // Legacy: filter by specific batch
-            sql = "SELECT * FROM shipments WHERE batch_id = ?";
-            args = [batch_id];
+            sql = "SELECT * FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+            args = [workspaceId, batch_id];
         } else {
             // New: filter by period via daily_batches.date
             const range = getDateRange(period, specificDate, fromDate, toDate);
             sql = `SELECT s.* FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
-             WHERE b.date >= ? AND b.date <= ?`;
-            args = [range.from, range.to];
+             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
+            args = [workspaceId, workspaceId, range.from, range.to];
         }
 
         const result = await db.execute({ sql, args });

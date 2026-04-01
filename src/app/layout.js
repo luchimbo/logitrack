@@ -1,5 +1,6 @@
 import "./globals.css";
 import { BatchProvider } from "@/components/BatchContext";
+import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata = {
   title: "LogiTrack | Gestión",
@@ -10,9 +11,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <body>
-        <BatchProvider>
-          {children}
-        </BatchProvider>
+        <ClerkProvider>
+          <BatchProvider>
+            {children}
+          </BatchProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

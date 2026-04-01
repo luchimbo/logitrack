@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClerk } from "@clerk/nextjs";
 import UploadSection from "@/components/UploadSection";
 import ZoneConfig from "@/components/ZoneConfig";
 import FlexSection from "@/components/FlexSection";
@@ -12,6 +13,7 @@ import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
 
 export default function Home() {
+  const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,13 +53,33 @@ export default function Home() {
   }, [sidebarOpen]);
 
   const isAdmin = currentUser?.role === "admin";
+  const canUseUpload = currentUser?.isGlobalAdmin === true;
+  const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
+  const canManageUsers = canManageWorkspace;
+
+  useEffect(() => {
+    if (currentUser && !canUseUpload && activeTab === "upload") {
+      setActiveTab("dashboard");
+    }
+  }, [currentUser, canUseUpload, activeTab]);
 
   const handleLogout = async () => {
+    const isClerkUser = currentUser?.authType === "clerk";
+
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/login';
+      setCurrentUser(null);
+
+      if (isClerkUser) {
+        await signOut();
+        window.location.assign('/login');
+        return;
+      }
+
+      window.location.assign('/admin-login');
     } catch (err) {
       console.error("Logout error", err);
+      window.location.assign(isClerkUser ? '/login' : '/admin-login');
     }
   };
 
@@ -68,7 +90,7 @@ export default function Home() {
 
   const renderSection = () => {
     switch (activeTab) {
-      case "upload": return <UploadSection />;
+      case "upload": return canUseUpload ? <UploadSection /> : <div>No autorizado</div>;
       case "pickingList": return <PickingList />;
       case "flex": return <FlexSection />;
       case "colecta": return <ColectaSection />;
@@ -76,13 +98,12 @@ export default function Home() {
       case "carrierView": return <CarrierView />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
-      case "userManagement": return isAdmin ? <UserManagementSection /> : <div>No autorizado</div>;
+      case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
   };
 
   const navLinks = [
-    { id: "upload", icon: "📦", label: "Subir Etiquetas" },
     { id: "pickingList", icon: "📋", label: "Lista de Picking" },
     { id: "flex", icon: "🚀", label: "Logística Flex" },
     { id: "colecta", icon: "📦", label: "Colecta" },
@@ -92,7 +113,11 @@ export default function Home() {
     { id: "carrierView", icon: "🚛", label: "Transportistas" },
   ];
 
-  if (isAdmin) {
+  if (canUseUpload) {
+    navLinks.unshift({ id: "upload", icon: "📦", label: "Subir Etiquetas" });
+  }
+
+  if (canManageUsers) {
     navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
   }
 
@@ -141,8 +166,10 @@ export default function Home() {
             <div className="user-profile" style={{ justifyContent: 'flex-start' }}>
               <div className="avatar">{currentUser.username?.[0]?.toUpperCase()}</div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.username}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{currentUser.role}</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.email || currentUser.username}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {currentUser.workspaceName ? `${currentUser.workspaceName} · ` : ''}{currentUser.role}
+                </div>
               </div>
             </div>
             <button 
@@ -174,6 +201,15 @@ export default function Home() {
             </button>
             <span className="topbar-title">{sectionTitle}</span>
           </div>
+          {currentUser && (
+            <button
+              onClick={handleLogout}
+              className="btn btn-ghost btn-sm"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Cerrar sesión
+            </button>
+          )}
         </header>
 
         <div className="content-area">

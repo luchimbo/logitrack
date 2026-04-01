@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { requireGlobalAdmin } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request) {
     try {
+        const authResult = await requireGlobalAdmin(request);
+        if (authResult.error) {
+            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+        }
+
         const correctHash = await bcrypt.hash("123456", 10);
 
         // Crear tabla por las dudas
