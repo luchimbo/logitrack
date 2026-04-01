@@ -198,6 +198,15 @@ tr:hover td{background:var(--surface-hover)}
 .date-input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:0.6;cursor:pointer}
 .nav-icon{font-size:16px;width:22px;text-align:center}
 
+/* Desktop/Mobile visibility helpers */
+.desktop-only{display:block}
+.mobile-only{display:none}
+
+@media(max-width:768px){
+  .desktop-only{display:none !important}
+  .mobile-only{display:block !important}
+}
+
 /* ========================
    MOBILE RESPONSIVE STYLES
    ======================== */
@@ -298,6 +307,10 @@ tr:hover td{background:var(--surface-hover)}
   .mobile-card-tracking{font-size:12px}
   .btn{width:100%}
   .mobile-card-actions .btn{width:auto;flex:1}
+  
+  /* Picking items - allow text wrapping */
+  .picking-name{white-space:normal;word-wrap:break-word;overflow-wrap:break-word;line-height:1.4}
+  .picking-info{min-width:0;flex:1}
 }
 
 /* Prevent body scroll when sidebar open */

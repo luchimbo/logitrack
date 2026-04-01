@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function GET(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');

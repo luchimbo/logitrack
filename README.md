@@ -1,5 +1,12 @@
 # LogiTrack
 
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB)
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
+![Turso/libSQL](https://img.shields.io/badge/Turso-libSQL-4F46E5)
+![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)
+![npm](https://img.shields.io/badge/Package_Manager-npm-CB3837?logo=npm&logoColor=white)
+
 Aplicacion web para operacion logistica diaria:
 
 - subida y parseo de etiquetas ZPL

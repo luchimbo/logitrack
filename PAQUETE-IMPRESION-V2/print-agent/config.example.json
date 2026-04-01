@@ -1,0 +1,7 @@
+{
+  "printerPath": "\\\\127.0.0.1\\ZDesigner ZD420-203dpi ZPL",
+  "syncUrl": "https://logitrack-tan.vercel.app/api/v2/print-jobs/intake",
+  "syncToken": "",
+  "retryBeforePrint": true,
+  "dryRun": false
+}

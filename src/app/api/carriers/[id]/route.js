@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function DELETE(request, { params }) {
     try {
+        await ensureDb();
         const { id } = await params;
         await db.execute({
             sql: "DELETE FROM carriers WHERE id = ?",

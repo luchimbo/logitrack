@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function GET() {
     try {
+        await ensureDb();
         const result = await db.execute("SELECT id, name, display_name, color FROM carriers ORDER BY name");
         return NextResponse.json(result.rows);
     } catch (error) {
@@ -13,6 +15,7 @@ export async function GET() {
 
 export async function POST(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const name = searchParams.get('name');
         const display_name = searchParams.get('display_name');

@@ -187,7 +187,8 @@ export default function Home() {
             <span className="topbar-title">{sectionTitle}</span>
           </div>
           
-          <div className="period-picker" style={{ marginLeft: 'auto' }}>
+          {/* Desktop Period Picker */}
+          <div className="period-picker desktop-only" style={{ marginLeft: 'auto' }}>
             {activeTab === 'dashboard' && (
               <>
                 {PERIODS.map((p) => (

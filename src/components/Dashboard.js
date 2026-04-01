@@ -6,11 +6,21 @@ import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function Dashboard() {
-    const { getQueryString, period, specificDate, rangeFrom, rangeTo } = useBatch();
+    const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const isMobile = useIsMobile();
+
+    const PERIODS = [
+        { id: 'today', label: 'Hoy', icon: '📅' },
+        { id: 'date', label: 'Fecha', icon: '🗓️' },
+        { id: 'range', label: 'Rango', icon: '🧭' },
+        { id: 'week', label: 'Semana', icon: '📆' },
+        { id: 'month', label: 'Mes', icon: '📊' },
+        { id: 'year', label: 'Año', icon: '📈' },
+        { id: 'all', label: 'Todo', icon: '🗃️' },
+    ];
 
     useEffect(() => {
         async function fetchData() {
@@ -96,6 +106,53 @@ export default function Dashboard() {
             <div className="section-header">
                 <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
                 <p className="section-subtitle">Resumen de operaciones del período</p>
+                
+                {/* Mobile Period Picker */}
+                {isMobile && (
+                    <div className="period-picker mobile-only" style={{ marginTop: '16px' }}>
+                        {PERIODS.map((p) => (
+                            <button
+                                key={p.id}
+                                className={`period-tab ${period === p.id ? 'active' : ''}`}
+                                onClick={() => setPeriod(p.id)}
+                                title={p.label}
+                            >
+                                <span className="period-icon">{p.icon}</span>
+                            </button>
+                        ))}
+
+                        {period === 'date' && (
+                            <input
+                                type="date"
+                                className="form-input date-input"
+                                value={specificDate}
+                                onChange={(e) => setSpecificDate(e.target.value)}
+                                max={new Date().toISOString().slice(0, 10)}
+                            />
+                        )}
+
+                        {period === 'range' && (
+                            <>
+                                <input
+                                    type="date"
+                                    className="form-input date-input"
+                                    value={rangeFrom}
+                                    onChange={(e) => setRangeFrom(e.target.value)}
+                                    max={new Date().toISOString().slice(0, 10)}
+                                    title="Desde"
+                                />
+                                <input
+                                    type="date"
+                                    className="form-input date-input"
+                                    value={rangeTo}
+                                    onChange={(e) => setRangeTo(e.target.value)}
+                                    max={new Date().toISOString().slice(0, 10)}
+                                    title="Hasta"
+                                />
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="stats-grid">

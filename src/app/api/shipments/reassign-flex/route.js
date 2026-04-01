@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { assignCarrier } from '@/lib/zoneMapper';
+import { ensureDb } from '@/lib/ensureDb';
 
 export async function POST(request) {
     try {
+        await ensureDb();
         const { searchParams } = new URL(request.url);
         const batch_id = searchParams.get('batch_id');
 
