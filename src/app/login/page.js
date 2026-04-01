@@ -44,16 +44,20 @@ export default function LoginPage() {
             justifyContent: "center",
             minHeight: "100vh",
             background: "var(--bg-secondary)",
-            padding: "16px",
+            padding: "0",
             width: "100%"
         }}>
             <div className="card login-card" style={{
                 width: "100%",
-                maxWidth: "480px",
-                padding: "32px 24px",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                height: "100vh",
+                maxWidth: "none",
+                padding: "40px 24px",
+                boxShadow: "none",
                 textAlign: "center",
-                margin: "0 auto"
+                margin: "0",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center"
             }}>
                 <div style={{ marginBottom: "32px" }}>
                     <div style={{ fontSize: "48px", marginBottom: "12px" }}>📦</div>
