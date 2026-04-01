@@ -12,6 +12,7 @@ import CarrierView from "@/components/CarrierView";
 import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
+import AdminOverviewSection from "@/components/AdminOverviewSection";
 
 export default function Home() {
   const { signOut } = useClerk();
@@ -102,6 +103,7 @@ export default function Home() {
       case "carrierView": return <CarrierView />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
+      case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -117,6 +119,10 @@ export default function Home() {
     { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
     { id: "carrierView", icon: "🚛", label: "Transportistas" },
   ];
+
+  if (currentUser?.isGlobalAdmin) {
+    navLinks.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
+  }
 
   if (canManageUsers) {
     navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
+import { logAudit } from '@/lib/audit';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'logitrack-super-secret-key-2026-local');
 
@@ -49,6 +50,15 @@ export async function POST(request) {
             secure: process.env.NODE_ENV === 'production',
             maxAge: 60 * 60 * 24 * 30, // 30 días en segundos
             sameSite: 'lax'
+        });
+
+        await logAudit({
+            workspaceId: null,
+            actorType: 'legacy-admin',
+            actorLabel: user.username,
+            action: 'admin_login',
+            entityType: 'user',
+            entityId: user.id,
         });
 
         return response;

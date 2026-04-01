@@ -58,6 +58,7 @@ export async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       clerk_user_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
+      last_seen_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS workspaces (
@@ -113,10 +114,25 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS daily_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER,
+      created_by_app_user_id INTEGER,
       date DATE DEFAULT CURRENT_DATE,
       total_packages INTEGER DEFAULT 0,
       filenames TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      app_user_id INTEGER,
+      actor_type TEXT NOT NULL,
+      actor_label TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(app_user_id) REFERENCES app_users(id)
     )`,
     `CREATE TABLE IF NOT EXISTS print_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,6 +169,9 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(app_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_printers_workspace ON workspace_printers(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_settings_workspace ON workspace_settings(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace_created ON audit_logs(workspace_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(app_user_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_print_job_items_job ON print_job_items(print_job_id)`,
     `CREATE INDEX IF NOT EXISTS idx_print_job_items_tracking ON print_job_items(tracking_number)`,
     `CREATE INDEX IF NOT EXISTS idx_print_job_items_fingerprint ON print_job_items(label_fingerprint)`,
@@ -211,10 +230,19 @@ export async function initDb() {
 
   await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
+  await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
   await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
+  await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
+
+  try {
+    await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
+  } catch (e) {
+    console.error("Index migration error:", e.message || e);
+  }
 
   let legacyWorkspaceId = null;
   try {

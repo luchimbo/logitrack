@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { jwtVerify } from "jose";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
+import { logAudit } from "@/lib/audit";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "logitrack-super-secret-key-2026-local");
 
@@ -13,6 +14,13 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
+}
+
+function shouldRefreshLastSeen(value) {
+  if (!value) return true;
+  const prev = new Date(value).getTime();
+  if (!Number.isFinite(prev)) return true;
+  return Date.now() - prev > 5 * 60 * 1000;
 }
 
 async function getLegacyWorkspaceId() {
@@ -62,13 +70,21 @@ async function bootstrapClerkUser() {
   }
 
   let appUserResult = await db.execute({
-    sql: "SELECT id, email FROM app_users WHERE clerk_user_id = ? LIMIT 1",
+    sql: "SELECT id, email, last_seen_at FROM app_users WHERE clerk_user_id = ? LIMIT 1",
     args: [clerkAuth.userId],
   });
 
   let appUserId;
+  let lastSeenTouched = false;
   if (appUserResult.rows.length) {
     appUserId = Number(appUserResult.rows[0].id);
+    if (shouldRefreshLastSeen(appUserResult.rows[0].last_seen_at)) {
+      await db.execute({
+        sql: "UPDATE app_users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [appUserId],
+      });
+      lastSeenTouched = true;
+    }
     if (appUserResult.rows[0].email !== email) {
       await db.execute({
         sql: "UPDATE app_users SET email = ? WHERE id = ?",
@@ -77,10 +93,11 @@ async function bootstrapClerkUser() {
     }
   } else {
     const insertedUser = await db.execute({
-      sql: "INSERT INTO app_users (clerk_user_id, email) VALUES (?, ?)",
+      sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
       args: [clerkAuth.userId, email],
     });
     appUserId = Number(insertedUser.lastInsertRowid);
+    lastSeenTouched = true;
   }
 
   let membershipResult = await db.execute({
@@ -117,11 +134,24 @@ async function bootstrapClerkUser() {
     args: [membership.workspace_id],
   });
 
+  if (lastSeenTouched) {
+    await logAudit({
+      workspaceId: Number(membership.workspace_id),
+      appUserId,
+      actorType: "clerk",
+      actorLabel: email,
+      action: "clerk_login",
+      entityType: "user",
+      entityId: appUserId,
+    });
+  }
+
   return {
     authType: "clerk",
     isAuthenticated: true,
     isGlobalAdmin: false,
     id: `clerk:${clerkAuth.userId}`,
+    appUserId,
     clerkUserId: clerkAuth.userId,
     email,
     username: email,
@@ -145,6 +175,7 @@ async function getLegacyAdminFromRequest(request) {
       isAuthenticated: true,
       isGlobalAdmin: payload.role === "admin",
       id: `legacy:${payload.id}`,
+      appUserId: null,
       username: payload.username,
       email: null,
       role: payload.role || "user",

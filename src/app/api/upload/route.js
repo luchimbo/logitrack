@@ -4,6 +4,7 @@ import { parseZplFile } from '@/lib/zplParser';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 function toDbValue(value) {
     if (value === undefined || value === null) return null;
@@ -22,6 +23,7 @@ export async function POST(request) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
         const workspaceId = authResult.actor.workspaceId;
+        const actor = authResult.actor;
         const formData = await request.formData();
         const files = formData.getAll('files');
 
@@ -65,8 +67,8 @@ export async function POST(request) {
             });
         } else {
             const result = await db.execute({
-                sql: "INSERT INTO daily_batches (workspace_id, filenames) VALUES (?, ?)",
-                args: [workspaceId, filenames.join(', ')]
+                sql: "INSERT INTO daily_batches (workspace_id, created_by_app_user_id, filenames) VALUES (?, ?, ?)",
+                args: [workspaceId, actor.appUserId, filenames.join(', ')]
             });
             batchId = Number(result.lastInsertRowid);
         }
@@ -150,6 +152,22 @@ export async function POST(request) {
         const finalBatch = await db.execute({
             sql: "SELECT total_packages FROM daily_batches WHERE id = ? AND workspace_id = ?",
             args: [batchId, workspaceId]
+        });
+
+        await logAudit({
+            workspaceId,
+            appUserId: actor.appUserId,
+            actorType: actor.authType,
+            actorLabel: actor.email || actor.username,
+            action: 'upload_labels',
+            entityType: 'batch',
+            entityId: batchId,
+            metadata: {
+                files: filenames,
+                parsed: saved,
+                skipped,
+                totalInBatch: finalBatch.rows[0].total_packages,
+            },
         });
 
         return NextResponse.json({
