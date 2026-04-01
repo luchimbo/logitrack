@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useClerk } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import UploadSection from "@/components/UploadSection";
 import ZoneConfig from "@/components/ZoneConfig";
 import FlexSection from "@/components/FlexSection";
@@ -14,24 +15,34 @@ import UserManagementSection from "@/components/UserManagementSection";
 
 export default function Home() {
   const { signOut } = useClerk();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
       try {
         const res = await fetch("/api/auth/me");
-        if (!res.ok) return;
+        if (!res.ok) {
+          setCurrentUser(null);
+          setAuthChecked(true);
+          router.replace("/login");
+          return;
+        }
         const data = await res.json();
         setCurrentUser(data.user || null);
+        setAuthChecked(true);
       } catch {
         setCurrentUser(null);
+        setAuthChecked(true);
+        router.replace("/login");
       }
     };
 
     loadUser();
-  }, []);
+  }, [router]);
 
   // Close sidebar when clicking outside or pressing escape
   useEffect(() => {
@@ -114,6 +125,20 @@ export default function Home() {
   // Get current section title
   const currentSection = navLinks.find(l => l.id === activeTab);
   const sectionTitle = currentSection?.label || 'LogiTrack';
+
+  if (!authChecked) {
+    return (
+      <main className="main-content" style={{ marginLeft: 0 }}>
+        <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <>
