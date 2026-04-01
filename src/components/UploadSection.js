@@ -202,17 +202,17 @@ export default function UploadSection() {
             {/* Today's data management */}
             <div className="mt-lg">
                 <div className="card">
-                    <div className="flex-between mb-md">
+                    <div className="flex-between mb-md" style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '12px' : '8px', alignItems: isMobile ? 'flex-start' : 'center' }}>
                         <h3 style={{ fontSize: '16px', fontWeight: 700 }}>
                             📋 Datos de Hoy — {todayShipments.length} envíos
                         </h3>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-ghost btn-sm" onClick={() => { setShowShipments(!showShipments); if (!showShipments) fetchTodayShipments(); }}>
+                        <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
+                            <button className="btn btn-ghost btn-sm" style={{ flex: isMobile ? 1 : 'none' }} onClick={() => { setShowShipments(!showShipments); if (!showShipments) fetchTodayShipments(); }}>
                                 {showShipments ? '🔼 Ocultar' : '🔽 Ver envíos'}
                             </button>
                             {todayShipments.length > 0 && (
-                                <button className="btn btn-sm" onClick={handleClearToday} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                                    🗑️ Limpiar todo hoy
+                                <button className="btn btn-sm" onClick={handleClearToday} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', flex: isMobile ? 1 : 'none' }}>
+                                    🗑️ {isMobile ? 'Limpiar' : 'Limpiar todo hoy'}
                                 </button>
                             )}
                         </div>

@@ -136,7 +136,7 @@ a{color:var(--accent);text-decoration:none} a:hover{color:var(--accent-hover)}
 .picking-checkbox{width:20px;height:20px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .picking-qty{min-width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:var(--accent-light);color:var(--accent);font-weight:800;font-size:16px;border-radius:var(--radius);flex-shrink:0}
 .picking-info{flex:1;min-width:0}
-.picking-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.picking-name{font-size:14px;font-weight:600;color:var(--text);white-space:normal;word-wrap:break-word;overflow-wrap:break-word;line-height:1.4}
 .picking-sku{font-size:12px;color:var(--text-muted);margin-top:2px}
 
 .chart-bar-container{display:flex;flex-direction:column;gap:10px}
@@ -269,8 +269,8 @@ tr:hover td{background:var(--surface-hover)}
   .upload-subtitle{font-size:12px}
   
   /* Period picker */
-  .period-picker{padding:3px;gap:2px}
-  .period-tab{padding:6px 10px;font-size:11px;min-height:36px}
+  .period-picker{padding:3px;gap:2px;flex-direction:row !important}
+  .period-picker .period-tab{padding:6px 10px;font-size:11px;min-height:36px}
   .period-icon{font-size:12px}
   .period-label{display:none}
   .date-input{width:120px;padding:8px 10px;font-size:14px;min-height:40px}
