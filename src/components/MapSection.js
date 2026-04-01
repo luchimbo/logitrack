@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import dynamic from "next/dynamic";
 
 // Next.js dynamic import for Leaflet because it relies on `window`
@@ -13,6 +14,7 @@ const MapWithNoSSR = dynamic(() => import("./MapComponent"), {
 
 export default function MapSection() {
     const { getTodayQueryString } = useBatch();
+    const isMobile = useIsMobile();
     const [view, setView] = useState('flex'); // 'flex' (AMBA) or 'colecta' (Argentina)
     const [shipments, setShipments] = useState([]);
     const [carriers, setCarriers] = useState([]);
@@ -147,7 +149,7 @@ export default function MapSection() {
                 </button>
             </div>
 
-            <div style={{ height: "600px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)" }}>
+            <div style={{ height: isMobile ? "400px" : "600px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)" }}>
                 {loading ? (
                     <div className="spinner" style={{ margin: "20% auto" }}></div>
                 ) : (

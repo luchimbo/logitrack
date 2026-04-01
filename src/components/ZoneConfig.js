@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 const PARTIDOS = [
     // CABA
@@ -71,6 +72,7 @@ export default function ZoneConfig() {
     const [zones, setZones] = useState([]);
     const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const isMobile = useIsMobile();
 
     // Form State
     const [newCarrier, setNewCarrier] = useState({ name: "", display_name: "", color: "#6366f1" });
@@ -248,7 +250,7 @@ export default function ZoneConfig() {
 
             <h3 style={{ marginBottom: "16px", fontSize: "18px", fontWeight: 700 }}>📍 Asignación de Partidos</h3>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
                 {ZONE_GROUPS.map(group => {
                     const groupColor = ZONE_COLORS[group.id];
                     const groupPartidos = PARTIDOS.filter(p => p.zone === group.id);

@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
     const [pickingList, setPickingList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         async function fetchData() {

@@ -25,6 +25,7 @@ const PERIODS = [
 export default function Home() {
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
 
   useEffect(() => {
@@ -42,6 +43,25 @@ export default function Home() {
     loadUser();
   }, []);
 
+  // Close sidebar when clicking outside or pressing escape
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    
+    if (sidebarOpen) {
+      document.body.classList.add('sidebar-open');
+      window.addEventListener('keydown', handleEscape);
+    } else {
+      document.body.classList.remove('sidebar-open');
+    }
+    
+    return () => {
+      document.body.classList.remove('sidebar-open');
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [sidebarOpen]);
+
   const isAdmin = currentUser?.role === "admin";
 
   const handleLogout = async () => {
@@ -51,6 +71,11 @@ export default function Home() {
     } catch (err) {
       console.error("Logout error", err);
     }
+  };
+
+  const handleNavClick = (tabId) => {
+    setActiveTab(tabId);
+    setSidebarOpen(false); // Close sidebar on mobile after navigation
   };
 
   const renderSection = () => {
@@ -83,11 +108,28 @@ export default function Home() {
     navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
   }
 
+  // Get current section title
+  const currentSection = navLinks.find(l => l.id === activeTab);
+  const sectionTitle = currentSection?.label || 'LogiTrack';
+
   return (
     <>
-      <nav className="sidebar">
+      {/* Mobile Sidebar Overlay */}
+      <div 
+        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <h2>LogiTrack</h2>
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Cerrar menú"
+          >
+            ✕
+          </button>
         </div>
         <ul className="nav-links">
           {navLinks.map((link) => (
@@ -97,7 +139,7 @@ export default function Home() {
                 className={`nav-link ${activeTab === link.id ? "active" : ""}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  setActiveTab(link.id);
+                  handleNavClick(link.id);
                 }}
               >
                 <span className="nav-icon">{link.icon}</span>
@@ -106,11 +148,46 @@ export default function Home() {
             </li>
           ))}
         </ul>
+        {currentUser && (
+          <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
+            <div className="user-profile" style={{ justifyContent: 'flex-start' }}>
+              <div className="avatar">{currentUser.username?.[0]?.toUpperCase()}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.username}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{currentUser.role}</div>
+              </div>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="btn btn-ghost"
+              style={{ 
+                width: '100%', 
+                marginTop: '12px', 
+                justifyContent: 'center',
+                padding: '12px',
+                fontSize: '13px'
+              }}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        )}
       </nav>
 
       <main className="main-content">
         <header className="topbar">
-          <div className="period-picker">
+          <div className="topbar-left">
+            <button 
+              className="mobile-menu-btn"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Abrir menú"
+            >
+              ☰
+            </button>
+            <span className="topbar-title">{sectionTitle}</span>
+          </div>
+          
+          <div className="period-picker" style={{ marginLeft: 'auto' }}>
             {activeTab === 'dashboard' && (
               <>
                 {PERIODS.map((p) => (
@@ -158,33 +235,12 @@ export default function Home() {
               </>
             )}
           </div>
-
-          <div className="user-profile" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div className="avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
-                {(currentUser?.username?.[0] || "U").toUpperCase()}
-              </div>
-              <span style={{ fontWeight: 600, fontSize: "14px" }}>
-                {currentUser?.username || "Usuario"}
-                {currentUser?.role ? ` (${currentUser.role})` : ""}
-              </span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="btn btn-sm"
-              style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", padding: "4px 8px", fontSize: "12px" }}
-            >
-              Cerrar sesión
-            </button>
-          </div>
         </header>
 
         <div className="content-area">
           {renderSection()}
         </div>
       </main>
-
-      <div id="toast-container" className="toast-container"></div>
     </>
   );
 }

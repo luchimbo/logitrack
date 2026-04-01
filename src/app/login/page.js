@@ -44,30 +44,30 @@ export default function LoginPage() {
             justifyContent: "center",
             minHeight: "100vh",
             background: "var(--bg-secondary)",
-            padding: "20px"
+            padding: "16px"
         }}>
-            <div className="card" style={{
-                maxWidth: "400px",
+            <div className="card login-card" style={{
                 width: "100%",
-                padding: "32px",
+                maxWidth: "100%",
+                padding: "24px",
                 boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
                 textAlign: "center"
             }}>
-                <div style={{ marginBottom: "24px" }}>
-                    <div style={{ fontSize: "40px", marginBottom: "8px" }}>📦</div>
-                    <h1 style={{ fontSize: "24px", color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>LogiTrack</h1>
-                    <p style={{ color: "var(--text-muted)", fontSize: "14px", marginTop: "4px" }}>Inicia sesión para continuar</p>
+                <div style={{ marginBottom: "32px" }}>
+                    <div style={{ fontSize: "48px", marginBottom: "12px" }}>📦</div>
+                    <h1 style={{ fontSize: "28px", color: "var(--text-primary)", fontWeight: 800, margin: 0 }}>LogiTrack</h1>
+                    <p style={{ color: "var(--text-muted)", fontSize: "15px", marginTop: "8px" }}>Inicia sesión para continuar</p>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px", textAlign: "left" }}>
                     {error && (
-                        <div style={{ background: "var(--danger-bg)", color: "var(--danger)", padding: "10px", borderRadius: "8px", fontSize: "13px", fontWeight: 600 }}>
+                        <div style={{ background: "var(--danger-bg)", color: "var(--danger)", padding: "12px", borderRadius: "8px", fontSize: "14px", fontWeight: 600 }}>
                             ⚠️ {error}
                         </div>
                     )}
 
                     <div>
-                        <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>USUARIO</label>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>USUARIO</label>
                         <input
                             type="text"
                             required
@@ -81,7 +81,7 @@ export default function LoginPage() {
                     </div>
 
                     <div>
-                        <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>CONTRASEÑA</label>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>CONTRASEÑA</label>
                         <input
                             type="password"
                             required
@@ -97,13 +97,13 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         className="btn btn-primary"
-                        style={{ height: "40px", marginTop: "8px", fontWeight: 600 }}
+                        style={{ height: "48px", marginTop: "8px", fontWeight: 600, fontSize: "16px" }}
                         disabled={loading}
                     >
                         {loading ? "Iniciando sesión..." : "Ingresar a LogiTrack"}
                     </button>
 
-                    <p style={{ fontSize: "11px", color: "var(--text-muted)", textAlign: "center", marginTop: "12px" }}>
+                    <p style={{ fontSize: "12px", color: "var(--text-muted)", textAlign: "center", marginTop: "16px" }}>
                         🔐 Acceso restringido.
                     </p>
                 </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function UserManagementSection() {
   const [username, setUsername] = useState("");
@@ -12,6 +13,7 @@ export default function UserManagementSection() {
   const [resetPasswords, setResetPasswords] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const isMobile = useIsMobile();
 
   const loadUsers = async () => {
     setLoadingUsers(true);
@@ -162,24 +164,75 @@ export default function UserManagementSection() {
         ) : users.length === 0 ? (
           <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No hay usuarios todavía.</p>
         ) : (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Usuario</th>
-                  <th>Rol</th>
-                  <th>Creado</th>
-                  <th>Nueva contraseña</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id || u.username}>
-                    <td>{u.username}</td>
-                    <td>{u.role || "user"}</td>
-                    <td>{u.created_at ? new Date(u.created_at).toLocaleString("es-AR") : "-"}</td>
-                    <td style={{ minWidth: "220px" }}>
+          <>
+            {/* Desktop Table */}
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Rol</th>
+                    <th>Creado</th>
+                    <th>Nueva contraseña</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id || u.username}>
+                      <td>{u.username}</td>
+                      <td>{u.role || "user"}</td>
+                      <td>{u.created_at ? new Date(u.created_at).toLocaleString("es-AR") : "-"}</td>
+                      <td style={{ minWidth: "220px" }}>
+                        <input
+                          type="password"
+                          minLength={6}
+                          className="form-input"
+                          placeholder="Mínimo 6 caracteres"
+                          value={resetPasswords[u.username] || ""}
+                          onChange={(e) =>
+                            setResetPasswords((prev) => ({
+                              ...prev,
+                              [u.username]: e.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleResetPassword(u.username)}
+                          disabled={resettingUser === u.username}
+                        >
+                          {resettingUser === u.username ? "Guardando..." : "Resetear"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="mobile-cards-container">
+              {users.map((u) => (
+                <div key={u.id || u.username} className="mobile-card">
+                  <div className="mobile-card-header">
+                    <div className="mobile-card-title">{u.username}</div>
+                    <span className="badge" style={{ background: "var(--accent-light)", color: "var(--accent)" }}>
+                      {u.role || "user"}
+                    </span>
+                  </div>
+                  <div className="mobile-card-body">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Creado</span>
+                      <span className="mobile-card-value">
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString("es-AR") : "-"}
+                      </span>
+                    </div>
+                    <div className="mobile-card-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
+                      <span className="mobile-card-label">Nueva contraseña</span>
                       <input
                         type="password"
                         minLength={6}
@@ -192,23 +245,24 @@ export default function UserManagementSection() {
                             [u.username]: e.target.value,
                           }))
                         }
+                        style={{ width: "100%" }}
                       />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleResetPassword(u.username)}
-                        disabled={resettingUser === u.username}
-                      >
-                        {resettingUser === u.username ? "Guardando..." : "Resetear"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                  <div className="mobile-card-actions">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handleResetPassword(u.username)}
+                      disabled={resettingUser === u.username}
+                    >
+                      {resettingUser === u.username ? "Guardando..." : "Resetear contraseña"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </section>

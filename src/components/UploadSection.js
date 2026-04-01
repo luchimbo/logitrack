@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
@@ -10,6 +11,7 @@ export default function UploadSection() {
     const [uploadResult, setUploadResult] = useState(null);
     const [todayShipments, setTodayShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
+    const isMobile = useIsMobile();
 
     const fileInputRef = useRef(null);
     const { batches, reloadBatches, setCurrentBatchId } = useBatch();
@@ -235,36 +237,75 @@ export default function UploadSection() {
 
                     {/* Individual shipments */}
                     {showShipments && todayShipments.length > 0 && (
-                        <div className="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Producto</th>
-                                        <th>Destinatario</th>
-                                        <th>Método</th>
-                                        <th>Estado</th>
-                                        <th style={{ width: '50px' }}></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {todayShipments.map(s => (
-                                        <tr key={s.id}>
-                                            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
-                                            <td>{s.recipient_name || 'N/A'}</td>
-                                            <td>
+                        <>
+                            {/* Desktop Table */}
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Producto</th>
+                                            <th>Destinatario</th>
+                                            <th>Método</th>
+                                            <th>Estado</th>
+                                            <th style={{ width: '50px' }}></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {todayShipments.map(s => (
+                                            <tr key={s.id}>
+                                                <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                                <td>{s.recipient_name || 'N/A'}</td>
+                                                <td>
+                                                    <span className={`badge ${s.shipping_method === 'flex' ? 'badge-flex' : 'badge-colecta'}`}>
+                                                        {s.shipping_method || 'colecta'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
+                                                <td>
+                                                    <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Mobile Cards */}
+                            <div className="mobile-cards-container">
+                                {todayShipments.map(s => (
+                                    <div key={s.id} className="mobile-card">
+                                        <div className="mobile-card-header">
+                                            <div className="mobile-card-title">{s.product_name}</div>
+                                        </div>
+                                        <div className="mobile-card-body">
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Destinatario</span>
+                                                <span className="mobile-card-value">{s.recipient_name || 'N/A'}</span>
+                                            </div>
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Método</span>
                                                 <span className={`badge ${s.shipping_method === 'flex' ? 'badge-flex' : 'badge-colecta'}`}>
                                                     {s.shipping_method || 'colecta'}
                                                 </span>
-                                            </td>
-                                            <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
-                                            <td>
-                                                <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                            </div>
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Estado</span>
+                                                <span className="mobile-card-value">{s.status}</span>
+                                            </div>
+                                        </div>
+                                        <div className="mobile-card-actions">
+                                            <button 
+                                                className="btn btn-sm" 
+                                                onClick={() => handleDeleteShipment(s.id)}
+                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                            >
+                                                🗑️ Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
                     )}
 
                     {showShipments && todayShipments.length === 0 && (

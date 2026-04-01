@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function Dashboard() {
     const { getQueryString, period, specificDate, rangeFrom, rangeTo } = useBatch();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         async function fetchData() {
@@ -113,7 +115,7 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px" }}>
                 {/* By Method */}
                 <div className="card">
                     <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📦 Por Método</h3>

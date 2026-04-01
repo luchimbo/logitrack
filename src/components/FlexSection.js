@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 // Reverse lookup: partido_id -> zone group name
 const PARTIDO_ZONES = {
@@ -43,6 +44,7 @@ export default function FlexSection() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedZone, setSelectedZone] = useState(null);
+    const isMobile = useIsMobile();
 
     const loadData = useCallback(async (opts = {}) => {
         const { silent = false } = opts;
@@ -272,30 +274,73 @@ export default function FlexSection() {
                 </div>
 
                 {selectedZone && (
-                    <div className="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Destino</th>
-                                    <th>Partido Detectado</th>
-                                    <th>Transportista</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {shipmentsByZone[selectedZone]?.length === 0 ? (
-                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>No hay envíos en esta zona</td></tr>
-                                ) : (
-                                    shipmentsByZone[selectedZone]?.map(s => (
-                                        <tr key={s.id}>
-                                            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
-                                            <td>{s.city || 'N/A'}, {s.province || ''}</td>
-                                            <td>
+                    <>
+                        {/* Desktop Table */}
+                        <div className="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th>Destino</th>
+                                        <th>Partido Detectado</th>
+                                        <th>Transportista</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {shipmentsByZone[selectedZone]?.length === 0 ? (
+                                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>No hay envíos en esta zona</td></tr>
+                                    ) : (
+                                        shipmentsByZone[selectedZone]?.map(s => (
+                                            <tr key={s.id}>
+                                                <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                                <td>{s.city || 'N/A'}, {s.province || ''}</td>
+                                                <td>
+                                                    <span style={{ fontFamily: "monospace", fontSize: "12px", background: "var(--bg-secondary)", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                                                        {s.partido || '—'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <select
+                                                        style={getCarrierSelectStyle(s.assigned_carrier)}
+                                                        value={s.assigned_carrier || ''}
+                                                        onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                                    >
+                                                        <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
+                                                        {carriers.map(c => (
+                                                            <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Mobile Cards */}
+                        <div className="mobile-cards-container">
+                            {shipmentsByZone[selectedZone]?.length === 0 ? (
+                                <p style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>No hay envíos en esta zona</p>
+                            ) : (
+                                shipmentsByZone[selectedZone]?.map(s => (
+                                    <div key={s.id} className="mobile-card">
+                                        <div className="mobile-card-header">
+                                            <div className="mobile-card-title">{s.product_name}</div>
+                                        </div>
+                                        <div className="mobile-card-body">
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Destino</span>
+                                                <span className="mobile-card-value">{s.city || 'N/A'}, {s.province || ''}</span>
+                                            </div>
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Partido</span>
                                                 <span style={{ fontFamily: "monospace", fontSize: "12px", background: "var(--bg-secondary)", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--border)" }}>
                                                     {s.partido || '—'}
                                                 </span>
-                                            </td>
-                                            <td>
+                                            </div>
+                                            <div className="mobile-card-row">
+                                                <span className="mobile-card-label">Transportista</span>
                                                 <select
                                                     style={getCarrierSelectStyle(s.assigned_carrier)}
                                                     value={s.assigned_carrier || ''}
@@ -306,13 +351,13 @@ export default function FlexSection() {
                                                         <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                                     ))}
                                                 </select>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -378,6 +423,46 @@ export default function FlexSection() {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Mobile Cards for Carrier Shipments */}
+                        <div className="mobile-cards-container">
+                            {items.map(s => (
+                                <div key={s.id} className="mobile-card">
+                                    <div className="mobile-card-header">
+                                        <div className="mobile-card-title">{s.product_name}</div>
+                                    </div>
+                                    <div className="mobile-card-body">
+                                        <div className="mobile-card-row">
+                                            <span className="mobile-card-label">Destino</span>
+                                            <span className="mobile-card-value">{s.city || 'N/A'}, {s.province || ''}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                            <span className="mobile-card-label">CP</span>
+                                            <span className="mobile-card-value">{s.postal_code || '—'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mobile-card-actions">
+                                        <select
+                                            style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
+                                            value={s.assigned_carrier || ''}
+                                            onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                        >
+                                            <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
+                                            {carriers.map(c => (
+                                                <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            className="btn btn-sm"
+                                            style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                            onClick={() => handleDeleteShipment(s.id)}
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 );
             })}
@@ -387,6 +472,7 @@ export default function FlexSection() {
                     <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700, color: "var(--danger)" }}>
                         ⚠️ Sin Asignar <span className="badge" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>{unassigned.length}</span>
                     </h3>
+                    {/* Desktop Table */}
                     <div className="table-container">
                         <table>
                             <thead><tr><th>Producto</th><th>Destino</th><th>Partido</th><th>Acciones</th></tr></thead>
@@ -419,6 +505,46 @@ export default function FlexSection() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="mobile-cards-container">
+                        {unassigned.map(s => (
+                            <div key={s.id} className="mobile-card">
+                                <div className="mobile-card-header">
+                                    <div className="mobile-card-title">{s.product_name}</div>
+                                </div>
+                                <div className="mobile-card-body">
+                                    <div className="mobile-card-row">
+                                        <span className="mobile-card-label">Destino</span>
+                                        <span className="mobile-card-value">{s.city || 'N/A'}, {s.province || ''}</span>
+                                    </div>
+                                    <div className="mobile-card-row">
+                                        <span className="mobile-card-label">Partido</span>
+                                        <span className="mobile-card-value">{s.partido || '—'}</span>
+                                    </div>
+                                </div>
+                                <div className="mobile-card-actions">
+                                    <select
+                                        style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
+                                        value={s.assigned_carrier || ''}
+                                        onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                    >
+                                        <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
+                                        {carriers.map(c => (
+                                            <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                        onClick={() => handleDeleteShipment(s.id)}
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
