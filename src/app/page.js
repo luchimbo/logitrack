@@ -53,15 +53,8 @@ export default function Home() {
   }, [sidebarOpen]);
 
   const isAdmin = currentUser?.role === "admin";
-  const canUseUpload = currentUser?.isGlobalAdmin === true;
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
   const canManageUsers = canManageWorkspace;
-
-  useEffect(() => {
-    if (currentUser && !canUseUpload && activeTab === "upload") {
-      setActiveTab("dashboard");
-    }
-  }, [currentUser, canUseUpload, activeTab]);
 
   const handleLogout = async () => {
     const isClerkUser = currentUser?.authType === "clerk";
@@ -90,7 +83,7 @@ export default function Home() {
 
   const renderSection = () => {
     switch (activeTab) {
-      case "upload": return canUseUpload ? <UploadSection /> : <div>No autorizado</div>;
+      case "upload": return <UploadSection />;
       case "pickingList": return <PickingList />;
       case "flex": return <FlexSection />;
       case "colecta": return <ColectaSection />;
@@ -104,6 +97,7 @@ export default function Home() {
   };
 
   const navLinks = [
+    { id: "upload", icon: "📦", label: "Subir Etiquetas" },
     { id: "pickingList", icon: "📋", label: "Lista de Picking" },
     { id: "flex", icon: "🚀", label: "Logística Flex" },
     { id: "colecta", icon: "📦", label: "Colecta" },
@@ -112,10 +106,6 @@ export default function Home() {
     { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
     { id: "carrierView", icon: "🚛", label: "Transportistas" },
   ];
-
-  if (canUseUpload) {
-    navLinks.unshift({ id: "upload", icon: "📦", label: "Subir Etiquetas" });
-  }
 
   if (canManageUsers) {
     navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });

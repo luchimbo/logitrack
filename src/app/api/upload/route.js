@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { parseZplFile } from '@/lib/zplParser';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
-import { requireGlobalAdmin } from '@/lib/auth';
+import { requireWorkspaceActor } from '@/lib/auth';
 
 function toDbValue(value) {
     if (value === undefined || value === null) return null;
@@ -17,7 +17,7 @@ function toDbValue(value) {
 export async function POST(request) {
     try {
         await ensureDb();
-        const authResult = await requireGlobalAdmin(request);
+        const authResult = await requireWorkspaceActor(request);
         if (authResult.error) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
