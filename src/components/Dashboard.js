@@ -12,6 +12,8 @@ export default function Dashboard() {
     const [error, setError] = useState(null);
     const [draftRangeFrom, setDraftRangeFrom] = useState(rangeFrom);
     const [draftRangeTo, setDraftRangeTo] = useState(rangeTo);
+    const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
+    const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
     const isMobile = useIsMobile();
 
     const PERIODS = [
@@ -27,9 +29,11 @@ export default function Dashboard() {
     useEffect(() => {
         setDraftRangeFrom(rangeFrom);
         setDraftRangeTo(rangeTo);
+        setAppliedRangeFrom(rangeFrom);
+        setAppliedRangeTo(rangeTo);
     }, [rangeFrom, rangeTo]);
 
-    const isRangeIncomplete = period === 'range' && (!rangeFrom || !rangeTo);
+    const isRangeIncomplete = period === 'range' && (!appliedRangeFrom || !appliedRangeTo);
     const isDraftRangeIncomplete = !draftRangeFrom || !draftRangeTo;
 
     const renderPeriodPicker = () => (
@@ -86,32 +90,36 @@ export default function Dashboard() {
             )}
 
             {period === 'range' && (
-                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px', flexDirection: isMobile ? 'column' : 'row' }}>
-                    <input
-                        type="date"
-                        className="form-input"
-                        style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                        value={draftRangeFrom}
-                        onChange={(e) => setDraftRangeFrom(e.target.value)}
-                        max={new Date().toISOString().slice(0, 10)}
-                    />
-                    <input
-                        type="date"
-                        className="form-input"
-                        style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                        value={draftRangeTo}
-                        onChange={(e) => setDraftRangeTo(e.target.value)}
-                        max={new Date().toISOString().slice(0, 10)}
-                    />
+                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', width: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
+                        <input
+                            type="date"
+                            className="form-input"
+                            style={{ flex: 1, padding: '10px', fontSize: '16px' }}
+                            value={draftRangeFrom}
+                            onChange={(e) => setDraftRangeFrom(e.target.value)}
+                            max={new Date().toISOString().slice(0, 10)}
+                        />
+                        <input
+                            type="date"
+                            className="form-input"
+                            style={{ flex: 1, padding: '10px', fontSize: '16px' }}
+                            value={draftRangeTo}
+                            onChange={(e) => setDraftRangeTo(e.target.value)}
+                            max={new Date().toISOString().slice(0, 10)}
+                        />
+                    </div>
                     <button
                         type="button"
                         className="btn btn-primary"
                         disabled={isDraftRangeIncomplete}
                         onClick={() => {
+                            setAppliedRangeFrom(draftRangeFrom);
+                            setAppliedRangeTo(draftRangeTo);
                             setRangeFrom(draftRangeFrom);
                             setRangeTo(draftRangeTo);
                         }}
-                        style={{ whiteSpace: 'nowrap' }}
+                        style={{ whiteSpace: 'nowrap', justifySelf: isMobile ? 'stretch' : 'start' }}
                     >
                         Aplicar
                     </button>
@@ -142,15 +150,15 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [period, specificDate, rangeFrom, rangeTo, isRangeIncomplete]);
+    }, [period, specificDate, appliedRangeFrom, appliedRangeTo, isRangeIncomplete]);
 
     const periodLabel = () => {
         switch (period) {
             case 'today': return 'Hoy';
             case 'date': return specificDate || 'Fecha';
             case 'range': {
-                const from = rangeFrom || '...';
-                const to = rangeTo || '...';
+                const from = appliedRangeFrom || '...';
+                const to = appliedRangeTo || '...';
                 return `${from} a ${to}`;
             }
             case 'week': return 'Esta semana';
