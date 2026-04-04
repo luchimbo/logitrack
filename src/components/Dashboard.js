@@ -230,6 +230,8 @@ export default function Dashboard() {
     const methodEntries = Object.entries(data.by_method || {});
     const carrierEntries = Object.entries(data.by_carrier || {}).sort((a, b) => b[1] - a[1]);
     const provinceEntries = Object.entries(data.by_province || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const topDays = data.daily_rankings?.top_days || [];
+    const lowDays = data.daily_rankings?.low_days || [];
 
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
@@ -310,6 +312,42 @@ export default function Dashboard() {
                                         <div className="chart-bar-fill info" style={{ width: `${(count / maxProv * 100).toFixed(0)}%` }}>
                                             {count}
                                         </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {period === 'range' && topDays.length > 0 && (
+                    <div className="card">
+                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🔥 Días con más envíos</h3>
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                            {topDays.map((day) => (
+                                <div key={`top-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                                    <div className="mobile-card-title">{day.date}</div>
+                                    <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Total</span><span className="mobile-card-value">{day.total}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Colecta</span><span className="mobile-card-value">{day.colecta}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{day.flex}</span></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {period === 'range' && lowDays.length > 0 && (
+                    <div className="card">
+                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🧊 Días con menos envíos</h3>
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                            {lowDays.map((day) => (
+                                <div key={`low-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                                    <div className="mobile-card-title">{day.date}</div>
+                                    <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Total</span><span className="mobile-card-value">{day.total}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Colecta</span><span className="mobile-card-value">{day.colecta}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{day.flex}</span></div>
                                     </div>
                                 </div>
                             ))}

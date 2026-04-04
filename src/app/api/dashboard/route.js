@@ -23,12 +23,12 @@ export async function GET(request) {
 
         if (batch_id) {
             // Legacy: filter by specific batch
-            sql = "SELECT * FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+            sql = "SELECT *, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?";
             args = [workspaceId, batch_id];
         } else {
             // New: filter by period via daily_batches.date
             const range = getDateRange(period, specificDate, fromDate, toDate);
-            sql = `SELECT s.* FROM shipments s
+            sql = `SELECT s.*, b.date AS batch_date FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
             args = [workspaceId, workspaceId, range.from, range.to];
@@ -54,6 +54,7 @@ export async function GET(request) {
         const by_method = {};
         const by_carrier = {};
         const by_province = {};
+        const by_day = {};
 
         for (const s of shipments) {
             total_units += Number(s.quantity) || 1;
@@ -66,6 +67,33 @@ export async function GET(request) {
             }
             const prov = s.province || "Desconocida";
             by_province[prov] = (by_province[prov] || 0) + 1;
+
+            if (period === 'range' && s.batch_date) {
+                if (!by_day[s.batch_date]) {
+                    by_day[s.batch_date] = { date: s.batch_date, total: 0, colecta: 0, flex: 0 };
+                }
+                by_day[s.batch_date].total += 1;
+                if (method === 'colecta') by_day[s.batch_date].colecta += 1;
+                if (method === 'flex') by_day[s.batch_date].flex += 1;
+            }
+        }
+
+        let daily_rankings = null;
+        if (period === 'range') {
+            const days = Object.values(by_day);
+            const limit = Math.min(days.length, 5);
+            const top_days = [...days]
+                .sort((a, b) => (b.total - a.total) || String(a.date).localeCompare(String(b.date)))
+                .slice(0, limit);
+            const low_days = [...days]
+                .sort((a, b) => (a.total - b.total) || String(a.date).localeCompare(String(b.date)))
+                .slice(0, limit);
+
+            daily_rankings = {
+                limit,
+                top_days,
+                low_days,
+            };
         }
 
         return NextResponse.json({
@@ -75,6 +103,7 @@ export async function GET(request) {
             by_method,
             by_carrier,
             by_province,
+            daily_rankings,
         });
     } catch (error) {
         console.error("Dashboard error:", error);
