@@ -22,8 +22,93 @@ export default function Dashboard() {
         { id: 'all', label: 'Todo', icon: '🗃️' },
     ];
 
+    const isRangeIncomplete = period === 'range' && (!rangeFrom || !rangeTo);
+
+    const renderPeriodPicker = () => (
+        <div style={{ 
+            marginTop: '16px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: isMobile ? '6px' : '8px',
+            background: 'var(--bg-secondary)',
+            padding: isMobile ? '8px' : '10px',
+            borderRadius: '12px',
+            border: '1px solid var(--border)'
+        }}>
+            {PERIODS.map((p) => (
+                <button
+                    key={p.id}
+                    onClick={() => setPeriod(p.id)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: isMobile ? '6px 10px' : '8px 12px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: period === p.id ? 'var(--accent)' : 'var(--surface)',
+                        color: period === p.id ? 'white' : 'var(--text)',
+                        fontSize: isMobile ? '12px' : '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        flex: isMobile ? '1 1 calc(50% - 6px)' : '0 0 auto',
+                        justifyContent: 'center',
+                        minWidth: isMobile ? '60px' : '88px'
+                    }}
+                >
+                    <span style={{ fontSize: '14px' }}>{p.icon}</span>
+                    <span>{p.label}</span>
+                </button>
+            ))}
+
+            {period === 'date' && (
+                <input
+                    type="date"
+                    className="form-input"
+                    style={{ 
+                        width: '100%', 
+                        marginTop: '8px',
+                        padding: '10px',
+                        fontSize: '16px'
+                    }}
+                    value={specificDate}
+                    onChange={(e) => setSpecificDate(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                />
+            )}
+
+            {period === 'range' && (
+                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px', flexDirection: isMobile ? 'column' : 'row' }}>
+                    <input
+                        type="date"
+                        className="form-input"
+                        style={{ flex: 1, padding: '10px', fontSize: '16px' }}
+                        value={rangeFrom}
+                        onChange={(e) => setRangeFrom(e.target.value)}
+                        max={new Date().toISOString().slice(0, 10)}
+                    />
+                    <input
+                        type="date"
+                        className="form-input"
+                        style={{ flex: 1, padding: '10px', fontSize: '16px' }}
+                        value={rangeTo}
+                        onChange={(e) => setRangeTo(e.target.value)}
+                        max={new Date().toISOString().slice(0, 10)}
+                    />
+                </div>
+            )}
+        </div>
+    );
+
     useEffect(() => {
         async function fetchData() {
+            if (isRangeIncomplete) {
+                setLoading(false);
+                setError(null);
+                setData(null);
+                return;
+            }
+
             setLoading(true);
             setError(null);
             try {
@@ -37,7 +122,7 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [period, specificDate, rangeFrom, rangeTo]);
+    }, [period, specificDate, rangeFrom, rangeTo, isRangeIncomplete]);
 
     const periodLabel = () => {
         switch (period) {
@@ -59,10 +144,11 @@ export default function Dashboard() {
     if (loading) {
         return (
             <div className="section active">
-                <div className="section-header">
-                    <h1 className="section-title">📊 Dashboard</h1>
-                </div>
-                <div className="spinner"></div>
+            <div className="section-header">
+                <h1 className="section-title">📊 Dashboard</h1>
+                {renderPeriodPicker()}
+            </div>
+            <div className="spinner"></div>
             </div>
         );
     }
@@ -70,10 +156,28 @@ export default function Dashboard() {
     if (error) {
         return (
             <div className="section active">
+            <div className="section-header">
+                <h1 className="section-title">📊 Dashboard</h1>
+                {renderPeriodPicker()}
+            </div>
+            <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+        </div>
+    );
+}
+
+    if (isRangeIncomplete) {
+        return (
+            <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">📊 Dashboard</h1>
+                    <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
+                    <p className="section-subtitle">Resumen de operaciones del período</p>
+                    {renderPeriodPicker()}
                 </div>
-                <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+                <div className="card">
+                    <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>
+                        Seleccioná ambas fechas para consultar el rango.
+                    </p>
+                </div>
             </div>
         );
     }
@@ -84,6 +188,7 @@ export default function Dashboard() {
                 <div className="section-header">
                     <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
                     <p className="section-subtitle">Resumen de operaciones</p>
+                    {renderPeriodPicker()}
                 </div>
                 <div className="empty-state">
                     <div className="empty-state-icon">📊</div>
@@ -106,80 +211,7 @@ export default function Dashboard() {
             <div className="section-header">
                 <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
                 <p className="section-subtitle">Resumen de operaciones del período</p>
-                
-                <div style={{ 
-                    marginTop: '16px',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: isMobile ? '6px' : '8px',
-                    background: 'var(--bg-secondary)',
-                    padding: isMobile ? '8px' : '10px',
-                    borderRadius: '12px',
-                    border: '1px solid var(--border)'
-                }}>
-                        {PERIODS.map((p) => (
-                            <button
-                                key={p.id}
-                                onClick={() => setPeriod(p.id)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    padding: isMobile ? '6px 10px' : '8px 12px',
-                                    borderRadius: '8px',
-                                    border: 'none',
-                                    background: period === p.id ? 'var(--accent)' : 'var(--surface)',
-                                    color: period === p.id ? 'white' : 'var(--text)',
-                                    fontSize: isMobile ? '12px' : '13px',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    flex: isMobile ? '1 1 calc(50% - 6px)' : '0 0 auto',
-                                    justifyContent: 'center',
-                                    minWidth: isMobile ? '60px' : '88px'
-                                }}
-                            >
-                                <span style={{ fontSize: '14px' }}>{p.icon}</span>
-                                <span>{p.label}</span>
-                            </button>
-                        ))}
-
-                        {period === 'date' && (
-                            <input
-                                type="date"
-                                className="form-input"
-                                style={{ 
-                                    width: '100%', 
-                                    marginTop: '8px',
-                                    padding: '10px',
-                                    fontSize: '16px'
-                                }}
-                                value={specificDate}
-                                onChange={(e) => setSpecificDate(e.target.value)}
-                                max={new Date().toISOString().slice(0, 10)}
-                            />
-                        )}
-
-                        {period === 'range' && (
-                            <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px', flexDirection: isMobile ? 'column' : 'row' }}>
-                                <input
-                                    type="date"
-                                    className="form-input"
-                                    style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                                    value={rangeFrom}
-                                    onChange={(e) => setRangeFrom(e.target.value)}
-                                    max={new Date().toISOString().slice(0, 10)}
-                                />
-                                <input
-                                    type="date"
-                                    className="form-input"
-                                    style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                                    value={rangeTo}
-                                    onChange={(e) => setRangeTo(e.target.value)}
-                                    max={new Date().toISOString().slice(0, 10)}
-                                />
-                            </div>
-                        )}
-                </div>
+                {renderPeriodPicker()}
             </div>
 
             <div className="stats-grid">
