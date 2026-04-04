@@ -10,6 +10,8 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [draftRangeFrom, setDraftRangeFrom] = useState(rangeFrom);
+    const [draftRangeTo, setDraftRangeTo] = useState(rangeTo);
     const isMobile = useIsMobile();
 
     const PERIODS = [
@@ -22,7 +24,13 @@ export default function Dashboard() {
         { id: 'all', label: 'Todo', icon: '🗃️' },
     ];
 
+    useEffect(() => {
+        setDraftRangeFrom(rangeFrom);
+        setDraftRangeTo(rangeTo);
+    }, [rangeFrom, rangeTo]);
+
     const isRangeIncomplete = period === 'range' && (!rangeFrom || !rangeTo);
+    const isDraftRangeIncomplete = !draftRangeFrom || !draftRangeTo;
 
     const renderPeriodPicker = () => (
         <div style={{ 
@@ -83,18 +91,30 @@ export default function Dashboard() {
                         type="date"
                         className="form-input"
                         style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                        value={rangeFrom}
-                        onChange={(e) => setRangeFrom(e.target.value)}
+                        value={draftRangeFrom}
+                        onChange={(e) => setDraftRangeFrom(e.target.value)}
                         max={new Date().toISOString().slice(0, 10)}
                     />
                     <input
                         type="date"
                         className="form-input"
                         style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-                        value={rangeTo}
-                        onChange={(e) => setRangeTo(e.target.value)}
+                        value={draftRangeTo}
+                        onChange={(e) => setDraftRangeTo(e.target.value)}
                         max={new Date().toISOString().slice(0, 10)}
                     />
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={isDraftRangeIncomplete}
+                        onClick={() => {
+                            setRangeFrom(draftRangeFrom);
+                            setRangeTo(draftRangeTo);
+                        }}
+                        style={{ whiteSpace: 'nowrap' }}
+                    >
+                        Aplicar
+                    </button>
                 </div>
             )}
         </div>
