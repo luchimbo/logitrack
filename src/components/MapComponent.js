@@ -3,6 +3,11 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useMemo } from 'react';
 
+const stadiaApiKey = process.env.NEXT_PUBLIC_STADIA_MAPS_API_KEY;
+const stadiaTileUrl = stadiaApiKey
+    ? `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${stadiaApiKey}`
+    : 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
+
 // Fix Leaflet marker icons not showing in Next.js
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -54,8 +59,8 @@ export default function MapComponent({ view, shipments, carriers }) {
     return (
         <MapContainer center={center} zoom={zoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
             <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+                url={stadiaTileUrl}
             />
             {shipments.map(s => {
                 const icon = customIcons[s.assigned_carrier || 'unassigned'];

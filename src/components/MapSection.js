@@ -75,21 +75,17 @@ export default function MapSection() {
                 const queryStr = qArr.join(", ");
 
                 try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}`, {
-                        headers: { "User-Agent": "Logistica-Local-Map/1.0" }
+                    const data = await api('/geocode', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: s.id, query: queryStr }),
                     });
-                    const data = await res.json();
 
-                    if (data && data.length > 0) {
-                        const { lat, lon } = data[0];
-                        await api(`/geocode?id=${s.id}&lat=${lat}&lng=${lon}`, { method: 'POST' });
+                    if (data?.success) {
+                        // noop: backend already updated coordinates
                     }
                 } catch (e) {
                     console.error("Geocoding failed for", s.address);
                 }
-
-                // Wait 1.5 seconds between queries to prevent Nominatim block
-                await new Promise(r => setTimeout(r, 1500));
             }
 
             toast("¡Geocodificación finalizada!", "success");

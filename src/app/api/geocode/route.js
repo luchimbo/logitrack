@@ -4,8 +4,34 @@ import { ensureDb } from '@/lib/ensureDb';
 import { getDateRange } from '@/lib/dateUtils';
 import { requireWorkspaceActor } from '@/lib/auth';
 
-// Helper delay to avoid spamming Nominatim
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const stadiaApiKey = process.env.STADIA_MAPS_API_KEY || process.env.NEXT_PUBLIC_STADIA_MAPS_API_KEY;
+
+async function geocodeWithStadia(query) {
+    if (!stadiaApiKey) {
+        throw new Error('STADIA_MAPS_API_KEY no configurada');
+    }
+
+    const url = `https://api.stadiamaps.com/geocoding/v1/search?text=${encodeURIComponent(query)}&size=1&api_key=${encodeURIComponent(stadiaApiKey)}`;
+    const res = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+    });
+
+    if (!res.ok) {
+        throw new Error(`Stadia geocoding error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const feature = data?.features?.[0];
+    const coordinates = feature?.geometry?.coordinates;
+
+    if (!Array.isArray(coordinates) || coordinates.length < 2) {
+        return null;
+    }
+
+    const [lng, lat] = coordinates;
+    return { lat, lng, raw: feature };
+}
 
 export async function GET(request) {
     try {
@@ -58,16 +84,35 @@ export async function POST(request) {
         const lat = searchParams.get('lat');
         const lng = searchParams.get('lng');
 
-        if (!id || !lat || !lng) {
+        if (id && lat && lng) {
+            await db.execute({
+                sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
+                args: [parseFloat(lat), parseFloat(lng), id, workspaceId]
+            });
+
+            return NextResponse.json({ success: true });
+        }
+
+        const body = await request.json();
+        const shipmentId = body?.id;
+        const query = String(body?.query || '').trim();
+
+        if (!shipmentId || !query) {
             return NextResponse.json({ error: "Missing required params" }, { status: 400 });
+        }
+
+        const geocoded = await geocodeWithStadia(query);
+
+        if (!geocoded) {
+            return NextResponse.json({ error: 'No se encontraron coordenadas' }, { status: 404 });
         }
 
         await db.execute({
             sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
-            args: [parseFloat(lat), parseFloat(lng), id, workspaceId]
+            args: [parseFloat(geocoded.lat), parseFloat(geocoded.lng), shipmentId, workspaceId]
         });
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, lat: geocoded.lat, lng: geocoded.lng });
     } catch (error) {
         console.error("Geocode POST Error:", error);
         return NextResponse.json({ error: "Failed to update coordinates" }, { status: 500 });
