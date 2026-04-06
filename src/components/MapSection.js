@@ -22,6 +22,17 @@ export default function MapSection() {
     const [geocodeLoading, setGeocodeLoading] = useState(false);
     const [unmappedConfig, setUnmappedConfig] = useState({ total: 0, current: 0 });
 
+    const isWithinArgentina = (lat, lng) => {
+        const latitude = Number(lat);
+        const longitude = Number(lng);
+        return Number.isFinite(latitude)
+            && Number.isFinite(longitude)
+            && latitude >= -55.2
+            && latitude <= -21.5
+            && longitude >= -73.7
+            && longitude <= -53.5;
+    };
+
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
@@ -58,37 +69,14 @@ export default function MapSection() {
                 return;
             }
 
-            setUnmappedConfig({ total: missing.length, current: 0 });
+            setUnmappedConfig({ total: missing.length, current: missing.length });
 
-            for (let i = 0; i < missing.length; i++) {
-                const s = missing[i];
-                setUnmappedConfig(prev => ({ ...prev, current: i + 1 }));
+            const result = await api('/geocode', {
+                method: 'POST',
+                body: JSON.stringify({ shipments: missing }),
+            });
 
-                // Build query
-                const qArr = [];
-                if (s.address) qArr.push(s.address.trim());
-                if (s.city) qArr.push(s.city.trim());
-                if (s.partido) qArr.push(s.partido.trim());
-                if (s.province && !s.province.includes('CABA')) qArr.push(s.province.trim());
-                qArr.push("Argentina");
-
-                const queryStr = qArr.join(", ");
-
-                try {
-                    const data = await api('/geocode', {
-                        method: 'POST',
-                        body: JSON.stringify({ id: s.id, query: queryStr }),
-                    });
-
-                    if (data?.success) {
-                        // noop: backend already updated coordinates
-                    }
-                } catch (e) {
-                    console.error("Geocoding failed for", s.address);
-                }
-            }
-
-            toast("¡Geocodificación finalizada!", "success");
+            toast(`¡Geocodificación finalizada! ${result.geocoded}/${result.processed} direcciones ubicadas`, "success");
             loadData(); // refresh map targets
         } catch (err) {
             toast('Error durante la geocodificación', 'error');
@@ -99,7 +87,7 @@ export default function MapSection() {
     };
 
 
-    const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null);
+    const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null && isWithinArgentina(s.lat, s.lng));
     const missingShipments = shipments.length - validShipments.length;
 
     return (
