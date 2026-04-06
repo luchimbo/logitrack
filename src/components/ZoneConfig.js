@@ -72,13 +72,16 @@ export default function ZoneConfig() {
     const [zones, setZones] = useState([]);
     const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [savingCarrier, setSavingCarrier] = useState(false);
+    const [savingZoneKey, setSavingZoneKey] = useState("");
+    const [savingGroup, setSavingGroup] = useState("");
     const isMobile = useIsMobile();
 
     // Form State
     const [newCarrier, setNewCarrier] = useState({ name: "", display_name: "", color: "#6366f1" });
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (showLoader = true) => {
+        if (showLoader) setLoading(true);
         try {
             const [zonesData, carriersData] = await Promise.all([
                 api('/zones'),
@@ -89,7 +92,7 @@ export default function ZoneConfig() {
         } catch (err) {
             toast("Error al cargar configuración", "error");
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
     };
 
@@ -103,25 +106,47 @@ export default function ZoneConfig() {
             return;
         }
         try {
+            setSavingCarrier(true);
             const params = new URLSearchParams({ name: newCarrier.name });
             if (newCarrier.display_name) params.append('display_name', newCarrier.display_name);
             if (newCarrier.color) params.append('color', newCarrier.color);
 
-            await fetch(`/api/carriers?${params.toString()}`, { method: 'POST' });
+            const response = await fetch(`/api/carriers?${params.toString()}`, { method: 'POST' });
+            const savedCarrier = await response.json();
+            if (!response.ok) {
+                throw new Error(savedCarrier.error || 'Error al guardar transportista');
+            }
+
+            setCarriers(prev => {
+                const exists = prev.some(c => c.id === savedCarrier.id || c.name === savedCarrier.name);
+                if (exists) {
+                    return prev.map(c => (c.id === savedCarrier.id || c.name === savedCarrier.name) ? savedCarrier : c);
+                }
+                return [...prev, savedCarrier].sort((a, b) => (a.display_name || a.name).localeCompare(b.display_name || b.name));
+            });
             toast('Transportista agregado', 'success');
             setNewCarrier({ name: "", display_name: "", color: "#6366f1" });
-            fetchData();
         } catch (err) {
             toast('Error al agregar transportista', 'error');
+        } finally {
+            setSavingCarrier(false);
         }
     };
 
     const handleDeleteCarrier = async (id) => {
         if (!confirm('¿Seguro que querés eliminar este transportista?')) return;
         try {
-            await fetch(`/api/carriers/${id}`, { method: 'DELETE' });
+            const carrierToDelete = carriers.find(c => c.id === id);
+            const response = await fetch(`/api/carriers/${id}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || 'Error eliminando transportista');
+            }
+            setCarriers(prev => prev.filter(c => c.id !== id));
+            if (carrierToDelete) {
+                setZones(prev => prev.filter(z => z.carrier_name !== carrierToDelete.name));
+            }
             toast('Transportista eliminado', 'success');
-            fetchData();
         } catch (err) {
             toast('Error al eliminar', 'error');
         }
@@ -130,9 +155,26 @@ export default function ZoneConfig() {
     const handleAssignZone = async (partidoId, carrierName) => {
         if (!carrierName) return;
         const params = new URLSearchParams({ partido: partidoId, carrier_name: carrierName });
-        await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
-        toast('Transportista asignado', 'success');
-        fetchData();
+        const saveKey = `${partidoId}:${carrierName}`;
+        try {
+            setSavingZoneKey(saveKey);
+            const response = await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Error asignando zona');
+            }
+
+            setZones(prev => {
+                const exists = prev.some(z => z.partido === payload.partido && z.carrier_name === payload.carrier_name);
+                if (exists) return prev;
+                return [...prev, { id: payload.id ?? `${payload.partido}-${payload.carrier_name}`, partido: payload.partido, carrier_name: payload.carrier_name }];
+            });
+            toast('Transportista asignado', 'success');
+        } catch (err) {
+            toast('Error al asignar transportista', 'error');
+        } finally {
+            setSavingZoneKey("");
+        }
     };
 
     const handleAssignGroup = async (groupId) => {
@@ -147,25 +189,43 @@ export default function ZoneConfig() {
         let assignedCount = 0;
 
         try {
+            setSavingGroup(groupId);
             for (const p of groupPartidos) {
                 const params = new URLSearchParams({ partido: p, carrier_name: carrier });
-                await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+                const response = await fetch(`/api/zones?${params.toString()}`, { method: 'POST' });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Error asignando zonas');
+                }
+                setZones(prev => {
+                    const exists = prev.some(z => z.partido === payload.partido && z.carrier_name === payload.carrier_name);
+                    if (exists) return prev;
+                    return [...prev, { id: payload.id ?? `${payload.partido}-${payload.carrier_name}`, partido: payload.partido, carrier_name: payload.carrier_name }];
+                });
                 assignedCount++;
             }
             toast(`${assignedCount} zonas de ${groupId} asignadas a ${carrier}`, 'success');
-            fetchData();
         } catch (err) {
             toast('Error asignando zonas masivamente', 'error');
+        } finally {
+            setSavingGroup("");
         }
     };
 
     const handleRemoveZone = async (zoneId) => {
         try {
-            await fetch(`/api/zones/${zoneId}`, { method: 'DELETE' });
+            setSavingZoneKey(String(zoneId));
+            const response = await fetch(`/api/zones/${zoneId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || 'Error removiendo zona');
+            }
+            setZones(prev => prev.filter(z => z.id !== zoneId));
             toast('Zona liberada', 'success');
-            fetchData();
         } catch (err) {
             toast('Error al remover zona', 'error');
+        } finally {
+            setSavingZoneKey("");
         }
     };
 
@@ -228,8 +288,8 @@ export default function ZoneConfig() {
                             style={{ height: "40px", padding: "4px" }}
                         />
                     </div>
-                    <button className="btn btn-primary" onClick={handleAddCarrier} style={{ height: "40px", alignSelf: "flex-end", marginBottom: "4px" }}>
-                        + Agregar
+                    <button className="btn btn-primary" onClick={handleAddCarrier} disabled={savingCarrier} style={{ height: "40px", alignSelf: "flex-end", marginBottom: "4px" }}>
+                        {savingCarrier ? 'Guardando...' : '+ Agregar'}
                     </button>
                 </div>
 
@@ -268,7 +328,7 @@ export default function ZoneConfig() {
                                         <option value="">— Asignar a todos —</option>
                                         {carriers.map(c => <option key={c.name} value={c.name}>{c.display_name || c.name}</option>)}
                                     </select>
-                                    <button className="btn btn-primary btn-sm" onClick={() => handleAssignGroup(group.id)} style={{ padding: "6px 12px", fontSize: "12px" }}>Aplicar</button>
+                                    <button className="btn btn-primary btn-sm" disabled={savingGroup === group.id} onClick={() => handleAssignGroup(group.id)} style={{ padding: "6px 12px", fontSize: "12px" }}>{savingGroup === group.id ? 'Aplicando...' : 'Aplicar'}</button>
                                 </div>
                             </div>
 
@@ -288,13 +348,14 @@ export default function ZoneConfig() {
                                                     return (
                                                         <span key={a.zone_id} className="badge badge-flex" style={{ fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                                                             🚛 {cDisplay}
-                                                            <button onClick={() => handleRemoveZone(a.zone_id)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "10px", padding: "0 2px" }}>✕</button>
+                                                            <button disabled={savingZoneKey === String(a.zone_id)} onClick={() => handleRemoveZone(a.zone_id)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "10px", padding: "0 2px", opacity: savingZoneKey === String(a.zone_id) ? 0.5 : 1 }}>✕</button>
                                                         </span>
                                                     );
                                                 })}
                                                 <select
                                                     className="form-select"
                                                     style={{ fontSize: "11px", padding: "4px", width: "120px", background: "var(--bg-secondary)" }}
+                                                    disabled={Boolean(savingZoneKey)}
                                                     onChange={(e) => { handleAssignZone(p.id, e.target.value); e.target.value = ''; }}
                                                     value=""
                                                 >
