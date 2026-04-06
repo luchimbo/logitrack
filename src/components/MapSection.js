@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -21,6 +21,7 @@ export default function MapSection() {
     const [loading, setLoading] = useState(false);
     const [geocodeLoading, setGeocodeLoading] = useState(false);
     const [unmappedConfig, setUnmappedConfig] = useState({ total: 0, current: 0 });
+    const autoGeocodeKeyRef = useRef("");
 
     const isWithinArgentina = (lat, lng) => {
         const latitude = Number(lat);
@@ -53,6 +54,17 @@ export default function MapSection() {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
+        if (loading || geocodeLoading || missing.length === 0) return;
+
+        const key = `${view}:${missing.map(s => s.id).join(',')}`;
+        if (autoGeocodeKeyRef.current === key) return;
+
+        autoGeocodeKeyRef.current = key;
+        geocodeMissing();
+    }, [shipments, view, loading, geocodeLoading]);
 
 
     const geocodeMissing = async () => {
@@ -101,18 +113,11 @@ export default function MapSection() {
                     </p>
                 </div>
                 {missingShipments > 0 && (
-                    <button
-                        className="btn btn-primary"
-                        onClick={geocodeMissing}
-                        disabled={geocodeLoading}
-                        style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                    >
-                        {geocodeLoading ? (
-                            <>⏳ Optimizando ({unmappedConfig.current}/{unmappedConfig.total})</>
-                        ) : (
-                            <>📍 Localizar {missingShipments} faltantes</>
-                        )}
-                    </button>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                        {geocodeLoading
+                            ? `⏳ Localizando automáticamente (${unmappedConfig.current}/${unmappedConfig.total})`
+                            : `📍 ${missingShipments} direcciones pendientes de ubicación automática`}
+                    </div>
                 )}
             </div>
 

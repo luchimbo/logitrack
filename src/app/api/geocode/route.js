@@ -4,8 +4,8 @@ import { ensureDb } from '@/lib/ensureDb';
 import { getDateRange } from '@/lib/dateUtils';
 import { requireWorkspaceActor } from '@/lib/auth';
 
-const stadiaApiKey = process.env.STADIA_MAPS_API_KEY || process.env.NEXT_PUBLIC_STADIA_MAPS_API_KEY;
-const GEOCODE_CONCURRENCY = 5;
+const GEOCODE_CONCURRENCY = 1;
+const GEOCODE_DELAY_MS = 1100;
 const ARGENTINA_BOUNDS = {
     minLat: -55.2,
     maxLat: -21.5,
@@ -19,6 +19,8 @@ function isWithinArgentina(lat, lng) {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
     return latitude >= ARGENTINA_BOUNDS.minLat && latitude <= ARGENTINA_BOUNDS.maxLat && longitude >= ARGENTINA_BOUNDS.minLng && longitude <= ARGENTINA_BOUNDS.maxLng;
 }
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function buildShipmentQuery(shipment) {
     const qArr = [];
@@ -36,7 +38,7 @@ async function geocodeShipment(workspaceId, shipment) {
         return { success: false, id: shipment.id, reason: 'empty_query' };
     }
 
-    const geocoded = await geocodeWithStadia(query);
+    const geocoded = await geocodeWithNominatim(query);
     if (!geocoded) {
         return { success: false, id: shipment.id, reason: 'not_found' };
     }
@@ -45,6 +47,8 @@ async function geocodeShipment(workspaceId, shipment) {
         sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
         args: [parseFloat(geocoded.lat), parseFloat(geocoded.lng), shipment.id, workspaceId]
     });
+
+    await delay(GEOCODE_DELAY_MS);
 
     return { success: true, id: shipment.id, lat: geocoded.lat, lng: geocoded.lng };
 }
@@ -65,30 +69,29 @@ async function geocodeShipmentsInBatches(workspaceId, shipments) {
     return results;
 }
 
-async function geocodeWithStadia(query) {
-    if (!stadiaApiKey) {
-        throw new Error('STADIA_MAPS_API_KEY no configurada');
-    }
-
-    const url = `https://api.stadiamaps.com/geocoding/v1/search?text=${encodeURIComponent(query)}&size=5&boundary.country=ARG&api_key=${encodeURIComponent(stadiaApiKey)}`;
+async function geocodeWithNominatim(query) {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ar&q=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
-        headers: { Accept: 'application/json' },
+        headers: {
+            Accept: 'application/json',
+            'User-Agent': 'LogiTrack/1.0 (geocoding)',
+            'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+        },
         cache: 'no-store',
     });
 
     if (!res.ok) {
-        throw new Error(`Stadia geocoding error ${res.status}`);
+        throw new Error(`Nominatim geocoding error ${res.status}`);
     }
 
     const data = await res.json();
-    const features = Array.isArray(data?.features) ? data.features : [];
+    const features = Array.isArray(data) ? data : [];
 
     for (const feature of features) {
-        const coordinates = feature?.geometry?.coordinates;
-        if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
-        const [lng, lat] = coordinates;
-        const countryCode = String(feature?.properties?.country_code || feature?.properties?.country_a || '').toUpperCase();
-        if ((countryCode === 'AR' || countryCode === 'ARG') && isWithinArgentina(lat, lng)) {
+        const lat = Number(feature?.lat);
+        const lng = Number(feature?.lon);
+        const countryCode = String(feature?.address?.country_code || '').toUpperCase();
+        if (countryCode === 'AR' && isWithinArgentina(lat, lng)) {
             return { lat, lng, raw: feature };
         }
     }
@@ -181,7 +184,7 @@ export async function POST(request) {
             return NextResponse.json({ error: "Missing required params" }, { status: 400 });
         }
 
-        const geocoded = await geocodeWithStadia(query);
+        const geocoded = await geocodeWithNominatim(query);
 
         if (!geocoded) {
             return NextResponse.json({ error: 'No se encontraron coordenadas' }, { status: 404 });
