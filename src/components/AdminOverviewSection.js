@@ -14,6 +14,9 @@ export default function AdminOverviewSection() {
   const [users, setUsers] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedUserDetail, setSelectedUserDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -54,6 +57,21 @@ export default function AdminOverviewSection() {
   useEffect(() => {
     load();
   }, []);
+
+  const loadUserDetail = async (userId) => {
+    setSelectedUserId(String(userId));
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo cargar el detalle del usuario');
+      setSelectedUserDetail(data);
+    } catch (err) {
+      setError(err.message || 'Error inesperado');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   if (loading) {
     return <div className="spinner"></div>;
@@ -129,10 +147,153 @@ export default function AdminOverviewSection() {
                 <div className="mobile-card-row"><span className="mobile-card-label">Paquetes subidos</span><span className="mobile-card-value">{u.packages_uploaded || 0}</span></div>
                 <div className="mobile-card-row"><span className="mobile-card-label">Última actividad</span><span className="mobile-card-value">{formatDate(u.last_activity_at)}</span></div>
               </div>
+              <div className="mobile-card-actions">
+                <button className="btn btn-primary btn-sm" onClick={() => loadUserDetail(u.id)}>
+                  {selectedUserId === String(u.id) ? 'Recargar detalle' : 'Ver detalle'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      {selectedUserId && (
+        <div className="card" style={{ marginBottom: "20px" }}>
+          <div className="flex-between mb-md" style={{ alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: '4px' }}>Detalle por usuario</h3>
+              {selectedUserDetail?.user ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {selectedUserDetail.user.email} · {selectedUserDetail.workspace?.name || '-'}
+                </p>
+              ) : null}
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedUserId(""); setSelectedUserDetail(null); }}>
+              Cerrar detalle
+            </button>
+          </div>
+
+          {detailLoading ? (
+            <div className="spinner"></div>
+          ) : selectedUserDetail ? (
+            <div style={{ display: 'grid', gap: '18px' }}>
+              <div className="stats-grid">
+                <div className="stat-card card accent"><div className="stat-value">{selectedUserDetail.totals.shipments}</div><div className="stat-label">Envíos totales</div></div>
+                <div className="stat-card card info"><div className="stat-value">{selectedUserDetail.totals.batches}</div><div className="stat-label">Lotes workspace</div></div>
+                <div className="stat-card card success"><div className="stat-value">{selectedUserDetail.totals.userBatches}</div><div className="stat-label">Lotes creados</div></div>
+                <div className="stat-card card warning"><div className="stat-value">{selectedUserDetail.totals.userPackages}</div><div className="stat-label">Paquetes subidos</div></div>
+                <div className="stat-card card accent"><div className="stat-value">{selectedUserDetail.today.total}</div><div className="stat-label">Hoy total</div></div>
+                <div className="stat-card card info"><div className="stat-value">{selectedUserDetail.today.flex}</div><div className="stat-label">Hoy flex</div></div>
+                <div className="stat-card card success"><div className="stat-value">{selectedUserDetail.today.colecta}</div><div className="stat-label">Hoy colecta</div></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Dashboard de hoy</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {Object.entries(selectedUserDetail.today.byCarrier || {}).map(([carrier, count]) => (
+                      <div key={carrier} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Carrier</span><span className="mobile-card-value">{carrier}</span></div>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{count}</span></div>
+                      </div>
+                    ))}
+                    {Object.entries(selectedUserDetail.today.byProvince || {}).slice(0, 5).map(([province, count]) => (
+                      <div key={province} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Provincia</span><span className="mobile-card-value">{province}</span></div>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Envíos</span><span className="mobile-card-value">{count}</span></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Horarios de uso</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {(selectedUserDetail.activityByHour || []).map((slot) => (
+                      <div key={slot.hour} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Hora</span><span className="mobile-card-value">{slot.hour}:00</span></div>
+                        <div className="mobile-card-row"><span className="mobile-card-label">Acciones</span><span className="mobile-card-value">{slot.count}</span></div>
+                      </div>
+                    ))}
+                    {(!selectedUserDetail.activityByHour || selectedUserDetail.activityByHour.length === 0) && (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Sin actividad registrada todavía.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Picking actual</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {[...(selectedUserDetail.picking.colecta || []), ...(selectedUserDetail.picking.flex || [])].slice(0, 12).map((item, idx) => (
+                      <div key={`${item.product_name}-${idx}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-title">{item.product_name}</div>
+                        <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Método</span><span className="mobile-card-value">{item.shipping_method}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Cantidad</span><span className="mobile-card-value">{item.total_quantity}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Envíos</span><span className="mobile-card-value">{item.shipment_count}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Transportistas del workspace</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {(selectedUserDetail.carriers || []).map((carrier) => (
+                      <div key={carrier.id} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-title">{carrier.display_name || carrier.name}</div>
+                        <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Nombre</span><span className="mobile-card-value">{carrier.name}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Color</span><span className="mobile-card-value">{carrier.color || '-'}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Lotes recientes</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {(selectedUserDetail.recentBatches || []).map((batch) => (
+                      <div key={batch.id} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-title">Lote #{batch.id}</div>
+                        <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Fecha</span><span className="mobile-card-value">{batch.date}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Paquetes</span><span className="mobile-card-value">{batch.total_packages}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Archivos</span><span className="mobile-card-value">{batch.filenames || '-'}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Actividad reciente del usuario</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {(selectedUserDetail.recentActivity || []).map((item, idx) => (
+                      <div key={`${item.created_at}-${idx}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                        <div className="mobile-card-title">{item.action}</div>
+                        <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Actor</span><span className="mobile-card-value">{item.actor_label || item.actor_type}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Entidad</span><span className="mobile-card-value">{item.entity_type || '-'} {item.entity_id ? `#${item.entity_id}` : ''}</span></div>
+                          <div className="mobile-card-row"><span className="mobile-card-label">Fecha</span><span className="mobile-card-value">{formatDate(item.created_at)}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Seleccioná un usuario para ver su detalle operativo.</p>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: "20px" }}>
         <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "12px" }}>Workspaces</h3>
