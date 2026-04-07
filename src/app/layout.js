@@ -3,8 +3,8 @@ import { BatchProvider } from "@/components/BatchContext";
 import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata = {
-  title: "LogiTrack | Gestión",
-  description: "Sistema Avanzado de Logística",
+  title: "GeoModi | Gestión",
+  description: "Plataforma de gestión logística GeoModi",
 };
 
 export default function RootLayout({ children }) {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
+import GeoModiLogo from "@/components/GeoModiLogo";
 
 export default function SignUpPage() {
   return (
@@ -16,10 +17,10 @@ export default function SignUpPage() {
         padding: "24px",
       }}
     >
-      <div style={{ width: "100%", maxWidth: "460px" }}>
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <h1 style={{ fontSize: "32px", fontWeight: 800, marginBottom: "8px" }}>Crear cuenta</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: "15px" }}>Podés registrarte con email o Google. Cada cuenta crea un espacio aislado llamado Mi espacio.</p>
+        <div style={{ width: "100%", maxWidth: "460px" }}>
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+          <GeoModiLogo size="lg" centered />
+          <p style={{ color: "var(--text-muted)", fontSize: "15px", marginTop: "10px" }}>Podés registrarte con email o Google. Cada cuenta crea un espacio aislado llamado Mi espacio.</p>
         </div>
 
         <div className="clerk-auth-shell" style={{ display: "flex", justifyContent: "center" }}>

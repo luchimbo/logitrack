@@ -180,7 +180,7 @@ async function getLegacyAdminFromRequest(request) {
       email: null,
       role: payload.role || "user",
       workspaceId,
-      workspaceName: workspaceId ? "LogiTrack Legacy" : null,
+      workspaceName: workspaceId ? "GeoModi Legacy" : null,
       workspaceSlug: workspaceId ? "legacy" : null,
       printingSetupCompleted: true,
     };

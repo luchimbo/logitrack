@@ -254,7 +254,7 @@ export async function initDb() {
     if (legacyWorkspace.rows.length) {
       legacyWorkspaceId = Number(legacyWorkspace.rows[0].id);
     } else {
-      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["LogiTrack Legacy", "legacy"]);
+      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["GeoModi Legacy", "legacy"]);
       legacyWorkspaceId = Number(inserted.lastInsertRowid);
     }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import GeoModiLogo from "@/components/GeoModiLogo";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -32,7 +33,8 @@ export default function AdminLoginPage() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", background: "var(--bg-secondary)" }}>
       <div className="card" style={{ width: "100%", maxWidth: "420px", padding: "24px" }}>
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: 800, marginBottom: "8px" }}>Admin local</h1>
+          <GeoModiLogo size="md" centered />
+          <h1 style={{ fontSize: "28px", fontWeight: 800, marginTop: "12px", marginBottom: "8px" }}>Admin local</h1>
           <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>Acceso legacy para administración global.</p>
         </div>
 

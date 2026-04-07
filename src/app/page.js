@@ -14,6 +14,7 @@ import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
 import AdminOverviewSection from "@/components/AdminOverviewSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
+import GeoModiLogo from "@/components/GeoModiLogo";
 
 export default function Home() {
   const { signOut } = useClerk();
@@ -133,7 +134,7 @@ export default function Home() {
 
   // Get current section title
   const currentSection = navLinks.find(l => l.id === activeTab);
-  const sectionTitle = currentSection?.label || 'LogiTrack';
+  const sectionTitle = currentSection?.label || 'GeoModi';
 
   if (!authChecked) {
     return (
@@ -159,7 +160,7 @@ export default function Home() {
 
       <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2>LogiTrack</h2>
+          <GeoModiLogo size="sm" />
           <button 
             className="sidebar-close-btn"
             onClick={() => setSidebarOpen(false)}
