@@ -83,113 +83,116 @@ export default function PickingList() {
             const pdf = new jsPDF({ unit: "mm", format: "a4" });
             const pageHeight = pdf.internal.pageSize.getHeight();
             const pageWidth = pdf.internal.pageSize.getWidth();
-            const margin = 10;
+            const margin = 7;
             const contentWidth = pageWidth - (margin * 2);
-            const columnGap = 6;
-            const columnWidth = (contentWidth - columnGap) / 2;
-            let y = 14;
+            const columnGap = 4;
+            const columnWidth = (contentWidth - (columnGap * 2)) / 3;
+            let y = 10;
 
             const addPageIfNeeded = (requiredHeight = 10) => {
-                if (y + requiredHeight > pageHeight - 10) {
+                if (y + requiredHeight > pageHeight - 8) {
                     pdf.addPage();
-                    y = 14;
+                    y = 10;
                 }
             };
 
             const writeSectionTitle = (title, color) => {
-                addPageIfNeeded(10);
+                addPageIfNeeded(8);
                 pdf.setFillColor(color[0], color[1], color[2]);
-                pdf.roundedRect(margin, y, contentWidth, 8, 2, 2, 'F');
+                pdf.roundedRect(margin, y, contentWidth, 6, 1.5, 1.5, 'F');
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(11);
-                pdf.text(title, margin + 3, y + 5.4);
-                y += 10;
+                pdf.setFontSize(9);
+                pdf.text(title, margin + 2, y + 4.2);
+                y += 8;
             };
 
             const measureItemHeight = (item) => {
                 pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(9.2);
-                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 17);
+                pdf.setFontSize(7.4);
+                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 14);
 
                 pdf.setFont("helvetica", "normal");
-                pdf.setFontSize(7.2);
-                const detail = `SKU: ${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} envío${item.shipment_count > 1 ? 's' : ''}`;
-                const detailLines = pdf.splitTextToSize(detail, columnWidth - 17);
+                pdf.setFontSize(5.8);
+                const detail = `${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} env`;
+                const detailLines = pdf.splitTextToSize(detail, columnWidth - 14);
 
-                return 10 + (Math.min(titleLines.length, 2) * 3.8) + (Math.min(detailLines.length, 2) * 3.2);
+                return 7 + (Math.min(titleLines.length, 2) * 3) + (Math.min(detailLines.length, 1) * 2.4);
             };
 
             const writeItem = (item, x, topY, blockHeight) => {
                 pdf.setDrawColor(225, 232, 240);
-                pdf.roundedRect(x, topY, columnWidth, blockHeight, 1.5, 1.5);
+                pdf.roundedRect(x, topY, columnWidth, blockHeight, 1, 1);
 
                 pdf.setFillColor(255, 255, 255);
-                pdf.rect(x + 2.5, topY + 2.5, 4.5, 4.5, 'S');
+                pdf.rect(x + 1.8, topY + 1.8, 3.5, 3.5, 'S');
 
                 pdf.setFillColor(99, 102, 241);
-                pdf.roundedRect(x + 9, topY + 2, 8, 6, 1.5, 1.5, 'F');
+                pdf.roundedRect(x + 6.8, topY + 1.2, 6.2, 4.8, 1, 1, 'F');
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(8.6);
-                pdf.text(String(item.total_quantity), x + 13, topY + 6.2, { align: "center" });
+                pdf.setFontSize(6.8);
+                pdf.text(String(item.total_quantity), x + 9.9, topY + 4.6, { align: "center" });
 
                 pdf.setTextColor(20, 24, 35);
                 pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(9.2);
-                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 20);
-                pdf.text(titleLines.slice(0, 2), x + 20, topY + 5.4);
+                pdf.setFontSize(7.4);
+                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 15);
+                pdf.text(titleLines.slice(0, 2), x + 14.5, topY + 3.8);
 
                 pdf.setTextColor(90, 99, 116);
                 pdf.setFont("helvetica", "normal");
-                pdf.setFontSize(7.2);
-                const detail = `SKU: ${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} envío${item.shipment_count > 1 ? 's' : ''}`;
-                const detailLines = pdf.splitTextToSize(detail, columnWidth - 20);
-                const detailStartY = topY + 5.4 + (Math.min(titleLines.length, 2) * 3.8) + 0.8;
-                pdf.text(detailLines.slice(0, 2), x + 20, detailStartY);
+                pdf.setFontSize(5.8);
+                const detail = `${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} env`;
+                const detailLines = pdf.splitTextToSize(detail, columnWidth - 15);
+                const detailStartY = topY + 3.8 + (Math.min(titleLines.length, 2) * 3) + 0.5;
+                pdf.text(detailLines.slice(0, 1), x + 14.5, detailStartY);
             };
 
             const writeItemsGrid = (items) => {
-                for (let i = 0; i < items.length; i += 2) {
+                for (let i = 0; i < items.length; i += 3) {
                     const left = items[i];
                     const right = items[i + 1];
+                    const third = items[i + 2];
                     const leftHeight = left ? measureItemHeight(left) : 0;
                     const rightHeight = right ? measureItemHeight(right) : 0;
-                    const rowHeight = Math.max(leftHeight, rightHeight, 14);
+                    const thirdHeight = third ? measureItemHeight(third) : 0;
+                    const rowHeight = Math.max(leftHeight, rightHeight, thirdHeight, 10);
 
                     addPageIfNeeded(rowHeight + 2);
 
                     if (left) writeItem(left, margin, y, rowHeight);
                     if (right) writeItem(right, margin + columnWidth + columnGap, y, rowHeight);
+                    if (third) writeItem(third, margin + (columnWidth * 2) + (columnGap * 2), y, rowHeight);
 
                     y += rowHeight + 2;
                 }
             };
 
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(15);
+            pdf.setFontSize(12);
             pdf.setTextColor(20, 24, 35);
             pdf.text("Lista de Picking", margin, y);
-            y += 5;
+            y += 4;
 
             pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(8.5);
+            pdf.setFontSize(7);
             pdf.setTextColor(90, 99, 116);
             pdf.text(`Generado: ${new Date().toLocaleString("es-AR")}`, margin, y);
-            y += 5;
+            y += 4;
 
             pdf.setDrawColor(225, 232, 240);
             pdf.line(margin, y, pageWidth - margin, y);
-            y += 5;
+            y += 4;
 
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(9.5);
+            pdf.setFontSize(7.6);
             pdf.setTextColor(20, 24, 35);
             pdf.text(`Productos: ${totalProducts}`, margin, y);
-            pdf.text(`Unidades: ${totalUnits}`, margin + 34, y);
-            pdf.text(`Colecta: ${colectaItems.length} / ${colectaUnits}`, margin + 72, y);
-            pdf.text(`Flex: ${flexItems.length} / ${flexUnits}`, margin + 128, y);
-            y += 7;
+            pdf.text(`Unidades: ${totalUnits}`, margin + 26, y);
+            pdf.text(`Colecta: ${colectaItems.length}/${colectaUnits}`, margin + 58, y);
+            pdf.text(`Flex: ${flexItems.length}/${flexUnits}`, margin + 108, y);
+            y += 6;
 
             if (colectaItems.length > 0) {
                 writeSectionTitle(`Colecta · ${colectaItems.length} productos · ${colectaUnits} uds`, [245, 158, 11]);
