@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireGlobalAdmin } from '@/lib/auth';
-import { getZipnovaShipment, listZipnovaShipmentsByStatuses, normalizeZipnovaShipment, isZipnovaToday } from '@/lib/zipnovaClient';
+import { getZipnovaShipment, listZipnovaShipmentsByStatuses, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
 
 const PENDING_STATUSES = ['new'];
 const READY_STATUSES = ['documentation_ready', 'ready_to_ship'];
@@ -18,12 +18,12 @@ async function enrichShipments(shipments) {
   );
 }
 
-function filterToday(shipments, externalId) {
+function filterShipments(shipments, externalId) {
   return shipments.filter((shipment) => {
     if (externalId && String(shipment.external_id || '').toLowerCase() !== String(externalId).toLowerCase()) {
       return false;
     }
-    return isZipnovaToday(shipment.created_at);
+    return true;
   });
 }
 
@@ -45,8 +45,8 @@ export async function GET(request) {
     const pendingBase = pendingResults.flatMap((entry) => entry.response?.data || []);
     const readyBase = readyResults.flatMap((entry) => entry.response?.data || []);
 
-    const pendingToday = filterToday(await enrichShipments(pendingBase), externalId);
-    const readyToday = filterToday(await enrichShipments(readyBase), externalId);
+    const pendingToday = filterShipments(await enrichShipments(pendingBase), externalId);
+    const readyToday = filterShipments(await enrichShipments(readyBase), externalId);
 
     return NextResponse.json({
       pendingShipments: pendingToday,

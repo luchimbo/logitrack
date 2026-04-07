@@ -93,7 +93,7 @@ export default function ZipnovaSection() {
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">Zipnova</h2>
-        <p className="section-subtitle">Resumen de hoy dividido entre envíos nuevos pendientes y envíos listos para despacho (ya con etiqueta/documentación).</p>
+        <p className="section-subtitle">Resumen por estado actual dividido entre envíos nuevos pendientes y envíos listos para despacho (ya con etiqueta/documentación).</p>
       </div>
 
       {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
@@ -114,14 +114,14 @@ export default function ZipnovaSection() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
         <SummaryBlock
-          title="Pendientes de hoy"
+          title="Pendientes"
           shipments={pendingShipments}
-          emptyLabel="No hay envíos nuevos pendientes para hoy."
+          emptyLabel="No hay envíos nuevos pendientes."
         />
         <SummaryBlock
-          title="Listos para despachar hoy"
+          title="Listos para despachar"
           shipments={readyShipments}
-          emptyLabel="No hay envíos listos para despacho hoy."
+          emptyLabel="No hay envíos listos para despacho."
         />
       </div>
     </section>
