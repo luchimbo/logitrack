@@ -1,43 +1,40 @@
-export default function GeoModiLogo({ size = "md", withTagline = false, centered = false }) {
-  const sizes = {
-    sm: {
-      wordmark: "24px",
-      tagline: "11px",
-      gap: "4px",
-    },
-    md: {
-      wordmark: "34px",
-      tagline: "12px",
-      gap: "6px",
-    },
-    lg: {
-      wordmark: "44px",
-      tagline: "14px",
-      gap: "8px",
-    },
-  };
+const sizes = {
+  sm: { width: 120, gap: 4, tagline: 11 },
+  md: { width: 180, gap: 6, tagline: 12 },
+  lg: { width: 280, gap: 8, tagline: 14 },
+};
 
+export default function GeoModiLogo({ size = "md", withTagline = false, centered = false }) {
   const current = sizes[size] || sizes.md;
 
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: centered ? "center" : "flex-start", gap: current.gap }}>
-      <div
-        aria-label="GeoModi"
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: centered ? "center" : "flex-start",
+        gap: current.gap,
+      }}
+    >
+      <img
+        src="/logoGeoModi.png"
+        alt="GeoModi"
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          fontWeight: 900,
-          fontSize: current.wordmark,
-          letterSpacing: "-0.04em",
-          lineHeight: 1,
-          whiteSpace: "nowrap",
+          width: `${current.width}px`,
+          height: "auto",
+          display: "block",
+          maxWidth: "100%",
         }}
-      >
-        <span style={{ color: "#b8b3ff" }}>GEO</span>
-        <span style={{ color: "#f8fafc" }}>MODI</span>
-      </div>
+      />
       {withTagline ? (
-        <div style={{ color: "var(--text-muted)", fontSize: current.tagline, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <div
+          style={{
+            color: "var(--text-muted)",
+            fontSize: current.tagline,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
           Gestion Logistica
         </div>
       ) : null}
