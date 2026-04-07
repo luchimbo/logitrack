@@ -107,17 +107,17 @@ export default function PickingList() {
                 y += 8;
             };
 
-            const measureItemHeight = (item) => {
-                pdf.setFont("helvetica", "bold");
-                pdf.setFontSize(7.4);
-                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 14);
+            const truncateLine = (text, maxWidth, fontSize, fontStyle = "normal") => {
+                pdf.setFont("helvetica", fontStyle);
+                pdf.setFontSize(fontSize);
+                const value = String(text || "");
+                if (pdf.getTextWidth(value) <= maxWidth) return value;
 
-                pdf.setFont("helvetica", "normal");
-                pdf.setFontSize(5.8);
-                const detail = `${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} env`;
-                const detailLines = pdf.splitTextToSize(detail, columnWidth - 14);
-
-                return 7 + (Math.min(titleLines.length, 2) * 3) + (Math.min(detailLines.length, 1) * 2.4);
+                let output = value;
+                while (output.length > 0 && pdf.getTextWidth(`${output}...`) > maxWidth) {
+                    output = output.slice(0, -1);
+                }
+                return `${output}...`;
             };
 
             const writeItem = (item, x, topY, blockHeight) => {
@@ -135,18 +135,17 @@ export default function PickingList() {
                 pdf.text(String(item.total_quantity), x + 9.9, topY + 4.6, { align: "center" });
 
                 pdf.setTextColor(20, 24, 35);
+                const titleText = truncateLine(item.product_name || "Producto sin nombre", columnWidth - 15, 7.4, "bold");
                 pdf.setFont("helvetica", "bold");
                 pdf.setFontSize(7.4);
-                const titleLines = pdf.splitTextToSize(item.product_name || "Producto sin nombre", columnWidth - 15);
-                pdf.text(titleLines.slice(0, 2), x + 14.5, topY + 3.8);
+                pdf.text(titleText, x + 14.5, topY + 3.8);
 
                 pdf.setTextColor(90, 99, 116);
                 pdf.setFont("helvetica", "normal");
                 pdf.setFontSize(5.8);
                 const detail = `${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} env`;
-                const detailLines = pdf.splitTextToSize(detail, columnWidth - 15);
-                const detailStartY = topY + 3.8 + (Math.min(titleLines.length, 2) * 3) + 0.5;
-                pdf.text(detailLines.slice(0, 1), x + 14.5, detailStartY);
+                const detailText = truncateLine(detail, columnWidth - 15, 5.8, "normal");
+                pdf.text(detailText, x + 14.5, topY + 6.7);
             };
 
             const writeItemsGrid = (items) => {
@@ -154,10 +153,7 @@ export default function PickingList() {
                     const left = items[i];
                     const right = items[i + 1];
                     const third = items[i + 2];
-                    const leftHeight = left ? measureItemHeight(left) : 0;
-                    const rightHeight = right ? measureItemHeight(right) : 0;
-                    const thirdHeight = third ? measureItemHeight(third) : 0;
-                    const rowHeight = Math.max(leftHeight, rightHeight, thirdHeight, 10);
+                    const rowHeight = 9.2;
 
                     addPageIfNeeded(rowHeight + 2);
 
