@@ -53,9 +53,22 @@ export async function getZipnovaShipment(id) {
   return zipnovaFetch(`/shipments/${id}`);
 }
 
+function extractZipnovaProducts(shipment) {
+  const packages = Array.isArray(shipment?.packages) ? shipment.packages : [];
+  return packages.map((pkg, index) => ({
+    index,
+    sku: pkg?.description_1 || null,
+    name: pkg?.description_2 || pkg?.description_1 || 'Producto sin descripción',
+    extra: pkg?.description_3 || null,
+    quantity: 1,
+    weight: pkg?.weight || 0,
+  }));
+}
+
 export function normalizeZipnovaShipment(shipment) {
   const destination = shipment?.destination || {};
   const carrier = shipment?.carrier || shipment?.selected_rate?.carrier || null;
+  const products = extractZipnovaProducts(shipment);
 
   return {
     id: shipment?.id,
@@ -81,5 +94,6 @@ export function normalizeZipnovaShipment(shipment) {
     price: shipment?.price_incl_tax || shipment?.price || 0,
     carrier_name: carrier?.name || null,
     carrier_logo: carrier?.logo || null,
+    products,
   };
 }
