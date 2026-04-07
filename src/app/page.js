@@ -13,6 +13,7 @@ import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
 import AdminOverviewSection from "@/components/AdminOverviewSection";
+import ZipnovaSection from "@/components/ZipnovaSection";
 
 export default function Home() {
   const { signOut } = useClerk();
@@ -104,6 +105,7 @@ export default function Home() {
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
+      case "zipnova": return currentUser?.isGlobalAdmin ? <ZipnovaSection /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -122,6 +124,7 @@ export default function Home() {
 
   if (currentUser?.isGlobalAdmin) {
     navLinks.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
+    navLinks.push({ id: "zipnova", icon: "📮", label: "Zipnova" });
   }
 
   if (canManageUsers) {
