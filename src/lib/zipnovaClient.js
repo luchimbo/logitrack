@@ -49,6 +49,18 @@ export async function listZipnovaShipments({ page = 1, status = '', serviceType 
   return zipnovaFetch(`/shipments?${params.toString()}`);
 }
 
+export async function listZipnovaShipmentsByStatuses(statuses, options = {}) {
+  const normalized = [...new Set((statuses || []).filter(Boolean))];
+  const results = [];
+
+  for (const status of normalized) {
+    const response = await listZipnovaShipments({ ...options, status });
+    results.push({ status, response });
+  }
+
+  return results;
+}
+
 export async function getZipnovaShipment(id) {
   return zipnovaFetch(`/shipments/${id}`);
 }
@@ -96,4 +108,20 @@ export function normalizeZipnovaShipment(shipment) {
     carrier_logo: carrier?.logo || null,
     products,
   };
+}
+
+export function isZipnovaToday(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const today = formatter.format(new Date());
+  return formatter.format(date) === today;
 }

@@ -1,6 +1,31 @@
 import { NextResponse } from 'next/server';
 import { requireGlobalAdmin } from '@/lib/auth';
-import { getZipnovaShipment, listZipnovaShipments, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { getZipnovaShipment, listZipnovaShipmentsByStatuses, normalizeZipnovaShipment, isZipnovaToday } from '@/lib/zipnovaClient';
+
+const PENDING_STATUSES = ['new'];
+const READY_STATUSES = ['documentation_ready', 'ready_to_ship'];
+
+async function enrichShipments(shipments) {
+  return Promise.all(
+    shipments.map(async (shipment) => {
+      try {
+        const detailed = await getZipnovaShipment(shipment.id);
+        return normalizeZipnovaShipment(detailed);
+      } catch {
+        return normalizeZipnovaShipment(shipment);
+      }
+    })
+  );
+}
+
+function filterToday(shipments, externalId) {
+  return shipments.filter((shipment) => {
+    if (externalId && String(shipment.external_id || '').toLowerCase() !== String(externalId).toLowerCase()) {
+      return false;
+    }
+    return isZipnovaToday(shipment.created_at);
+  });
+}
 
 export async function GET(request) {
   try {
@@ -10,30 +35,22 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = Number(searchParams.get('page') || 1);
-    const status = searchParams.get('status') || 'new';
-    const serviceType = searchParams.get('service_type') || '';
-    const orderId = searchParams.get('order_id') || '';
     const externalId = searchParams.get('external_id') || '';
 
-    const result = await listZipnovaShipments({ page, status, serviceType, orderId, externalId });
+    const [pendingResults, readyResults] = await Promise.all([
+      listZipnovaShipmentsByStatuses(PENDING_STATUSES, { page: 1, externalId }),
+      listZipnovaShipmentsByStatuses(READY_STATUSES, { page: 1, externalId }),
+    ]);
 
-    const baseShipments = Array.isArray(result?.data) ? result.data : [];
-    const enriched = await Promise.all(
-      baseShipments.map(async (shipment) => {
-        try {
-          const detailed = await getZipnovaShipment(shipment.id);
-          return normalizeZipnovaShipment(detailed);
-        } catch {
-          return normalizeZipnovaShipment(shipment);
-        }
-      })
-    );
+    const pendingBase = pendingResults.flatMap((entry) => entry.response?.data || []);
+    const readyBase = readyResults.flatMap((entry) => entry.response?.data || []);
+
+    const pendingToday = filterToday(await enrichShipments(pendingBase), externalId);
+    const readyToday = filterToday(await enrichShipments(readyBase), externalId);
 
     return NextResponse.json({
-      shipments: enriched,
-      meta: result?.meta || null,
-      links: result?.links || null,
+      pendingShipments: pendingToday,
+      readyShipments: readyToday,
     });
   } catch (error) {
     console.error('Zipnova list error:', error);
