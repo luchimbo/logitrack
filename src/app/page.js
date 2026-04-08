@@ -15,6 +15,7 @@ import UserManagementSection from "@/components/UserManagementSection";
 import AdminOverviewSection from "@/components/AdminOverviewSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
 import GeoModiLogo from "@/components/GeoModiLogo";
+import OnboardingTour from "@/components/OnboardingTour";
 
 export default function Home() {
   const { signOut } = useClerk();
@@ -23,6 +24,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -36,6 +38,7 @@ export default function Home() {
         }
         const data = await res.json();
         setCurrentUser(data.user || null);
+        setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.isGlobalAdmin && !data.user.onboardingCompleted));
         setAuthChecked(true);
       } catch {
         setCurrentUser(null);
@@ -167,6 +170,7 @@ export default function Home() {
 
   return (
     <>
+      {showOnboarding && <OnboardingTour onClose={handleOnboardingClose} />}
       {/* Mobile Sidebar Overlay */}
       <div 
         className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
@@ -276,3 +280,17 @@ export default function Home() {
     </>
   );
 }
+  const handleOnboardingClose = async (completed) => {
+    try {
+      await fetch('/api/onboarding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+      });
+      setCurrentUser((prev) => prev ? { ...prev, onboardingCompleted: completed } : prev);
+    } catch (err) {
+      console.error('Onboarding update error', err);
+    } finally {
+      setShowOnboarding(false);
+    }
+  };

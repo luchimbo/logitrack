@@ -252,6 +252,7 @@ export default function Dashboard() {
     const provinceEntries = Object.entries(data.by_province || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
     const topDays = data.daily_rankings?.top_days || [];
     const lowDays = data.daily_rankings?.low_days || [];
+    const comparison = data.comparison;
 
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
@@ -332,6 +333,29 @@ export default function Dashboard() {
                                         <div className="chart-bar-fill info" style={{ width: `${(count / maxProv * 100).toFixed(0)}%` }}>
                                             {count}
                                         </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {comparison && ['today', 'week', 'month'].includes(period) && (
+                    <div className="card">
+                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📈 Comparativa</h3>
+                        <div style={{ display: 'grid', gap: '10px' }}>
+                            {[
+                                { label: 'Envíos', current: data.total_packages, previous: comparison.previous.total_packages, delta: comparison.delta.total_packages },
+                                { label: 'Unidades', current: data.total_units, previous: comparison.previous.total_units, delta: comparison.delta.total_units },
+                                { label: 'Flex', current: data.by_method.flex || 0, previous: comparison.previous.by_method.flex || 0, delta: comparison.delta.flex },
+                                { label: 'Colecta', current: data.by_method.colecta || 0, previous: comparison.previous.by_method.colecta || 0, delta: comparison.delta.colecta },
+                            ].map((item) => (
+                                <div key={item.label} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+                                    <div className="mobile-card-title">{item.label}</div>
+                                    <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Actual</span><span className="mobile-card-value">{item.current}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Período anterior</span><span className="mobile-card-value">{item.previous}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Variación</span><span className="mobile-card-value">{item.delta > 0 ? '+' : ''}{item.delta}%</span></div>
                                     </div>
                                 </div>
                             ))}

@@ -59,6 +59,7 @@ export async function initDb() {
       clerk_user_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
       last_seen_at DATETIME,
+      onboarding_completed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS workspaces (
@@ -236,6 +237,7 @@ export async function initDb() {
   await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
   await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
+  await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");

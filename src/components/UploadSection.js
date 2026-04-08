@@ -11,6 +11,7 @@ export default function UploadSection() {
     const [uploadResult, setUploadResult] = useState(null);
     const [todayShipments, setTodayShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
+    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const isMobile = useIsMobile();
 
     const fileInputRef = useRef(null);
@@ -21,6 +22,7 @@ export default function UploadSection() {
         try {
             const data = await api('/shipments?period=today');
             setTodayShipments(data);
+            setSelectedShipmentIds([]);
         } catch (err) {
             console.error("Failed to load shipments:", err);
         }
@@ -92,9 +94,40 @@ export default function UploadSection() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setTodayShipments(prev => prev.filter(s => s.id !== id));
+            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
             toast('Envío eliminado', 'success');
         } catch (err) {
             toast('Error al eliminar', 'error');
+        }
+    };
+
+    const toggleShipmentSelection = (id) => {
+        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedShipmentIds.length === todayShipments.length) {
+            setSelectedShipmentIds([]);
+            return;
+        }
+        setSelectedShipmentIds(todayShipments.map((shipment) => shipment.id));
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedShipmentIds.length) return;
+        if (!confirm(`¿Eliminar ${selectedShipmentIds.length} envíos seleccionados? Esta acción no se puede deshacer.`)) return;
+
+        try {
+            const result = await api('/shipments/bulk', {
+                method: 'DELETE',
+                body: JSON.stringify({ ids: selectedShipmentIds }),
+            });
+            setTodayShipments((prev) => prev.filter((shipment) => !selectedShipmentIds.includes(shipment.id)));
+            setSelectedShipmentIds([]);
+            toast(`${result.deleted || 0} envíos eliminados`, 'success');
+            await reloadBatches();
+        } catch (err) {
+            toast('Error al eliminar envíos seleccionados', 'error');
         }
     };
 
@@ -222,6 +255,26 @@ export default function UploadSection() {
                         </div>
                     </div>
 
+                    {showShipments && todayShipments.length > 0 && (
+                        <div className="card" style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
+                            <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                    {selectedShipmentIds.length > 0
+                                        ? `${selectedShipmentIds.length} envíos seleccionados`
+                                        : 'Seleccioná envíos para borrar varios de una vez'}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
+                                        {selectedShipmentIds.length === todayShipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                    </button>
+                                    <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                        🗑️ Eliminar seleccionados
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Today's batches */}
                     {todayBatches.length > 0 && (
                         <div style={{ marginBottom: '16px' }}>
@@ -247,6 +300,9 @@ export default function UploadSection() {
                                 <table>
                                     <thead>
                                         <tr>
+                                            <th style={{ width: '42px' }}>
+                                                <input type="checkbox" checked={todayShipments.length > 0 && selectedShipmentIds.length === todayShipments.length} onChange={toggleSelectAll} />
+                                            </th>
                                             <th>Producto</th>
                                             <th>Destinatario</th>
                                             <th>Método</th>
@@ -257,6 +313,9 @@ export default function UploadSection() {
                                     <tbody>
                                         {todayShipments.map(s => (
                                             <tr key={s.id}>
+                                                <td>
+                                                    <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} />
+                                                </td>
                                                 <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                                 <td>{s.recipient_name || 'N/A'}</td>
                                                 <td>
@@ -279,6 +338,7 @@ export default function UploadSection() {
                                 {todayShipments.map(s => (
                                     <div key={s.id} className="mobile-card">
                                         <div className="mobile-card-header">
+                                            <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} />
                                             <div className="mobile-card-title">{s.product_name}</div>
                                         </div>
                                         <div className="mobile-card-body">

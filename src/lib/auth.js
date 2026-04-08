@@ -70,7 +70,7 @@ async function bootstrapClerkUser() {
   }
 
   let appUserResult = await db.execute({
-    sql: "SELECT id, email, last_seen_at FROM app_users WHERE clerk_user_id = ? LIMIT 1",
+    sql: "SELECT id, email, last_seen_at, onboarding_completed FROM app_users WHERE clerk_user_id = ? LIMIT 1",
     args: [clerkAuth.userId],
   });
 
@@ -160,6 +160,7 @@ async function bootstrapClerkUser() {
     workspaceName: membership.workspace_name,
     workspaceSlug: membership.workspace_slug,
     printingSetupCompleted: Boolean(settings.rows[0]?.printing_setup_completed),
+    onboardingCompleted: Boolean(appUserResult.rows[0]?.onboarding_completed),
   };
 }
 
@@ -183,6 +184,7 @@ async function getLegacyAdminFromRequest(request) {
       workspaceName: workspaceId ? "GeoModi Legacy" : null,
       workspaceSlug: workspaceId ? "legacy" : null,
       printingSetupCompleted: true,
+      onboardingCompleted: true,
     };
   } catch {
     return null;

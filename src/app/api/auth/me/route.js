@@ -20,6 +20,7 @@ export async function GET(request) {
         workspaceName: actor.workspaceName,
         workspaceSlug: actor.workspaceSlug,
         printingSetupCompleted: actor.printingSetupCompleted,
+        onboardingCompleted: actor.onboardingCompleted,
       },
     });
   } catch (error) {
