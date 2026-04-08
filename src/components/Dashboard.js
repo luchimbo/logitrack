@@ -220,7 +220,7 @@ export default function Dashboard() {
                 </div>
                 <div className="empty-state">
                     <div className="empty-state-icon">📊</div>
-                    <p className="empty-state-text">Sin datos para el período seleccionado.</p>
+                    <p className="empty-state-text">Sin datos para el período seleccionado.<br />Probá cambiar el rango o cargar nuevas etiquetas para ver actividad.</p>
                 </div>
             </div>
         );

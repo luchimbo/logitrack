@@ -112,25 +112,40 @@ export default function Home() {
     }
   };
 
-  const navLinks = [
-    { id: "upload", icon: "📦", label: "Subir Etiquetas" },
-    { id: "pickingList", icon: "📋", label: "Lista de Picking" },
-    { id: "flex", icon: "🚀", label: "Logística Flex" },
-    { id: "colecta", icon: "📦", label: "Colecta" },
-    { id: "map", icon: "📍", label: "Mapa" },
-    { id: "dashboard", icon: "📊", label: "Dashboard" },
-    { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
-    { id: "carrierView", icon: "🚛", label: "Transportistas" },
+  const navGroups = [
+    {
+      title: "Operación",
+      items: [
+        { id: "upload", icon: "📦", label: "Subir Etiquetas" },
+        { id: "pickingList", icon: "📋", label: "Lista de Picking" },
+        { id: "flex", icon: "🚀", label: "Logística Flex" },
+        { id: "colecta", icon: "📦", label: "Colecta" },
+        { id: "map", icon: "📍", label: "Mapa" },
+        { id: "dashboard", icon: "📊", label: "Dashboard" },
+      ],
+    },
+    {
+      title: "Configuración",
+      items: [
+        { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
+        { id: "carrierView", icon: "🚛", label: "Transportistas" },
+      ],
+    },
   ];
 
-  if (currentUser?.isGlobalAdmin) {
-    navLinks.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
-    navLinks.push({ id: "zipnova", icon: "📮", label: "Zipnova" });
+  if (currentUser?.isGlobalAdmin || canManageUsers) {
+    const adminItems = [];
+    if (currentUser?.isGlobalAdmin) {
+      adminItems.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
+      adminItems.push({ id: "zipnova", icon: "📮", label: "Zipnova" });
+    }
+    if (canManageUsers) {
+      adminItems.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
+    }
+    navGroups.push({ title: "Administración", items: adminItems });
   }
 
-  if (canManageUsers) {
-    navLinks.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
-  }
+  const navLinks = navGroups.flatMap((group) => group.items);
 
   // Get current section title
   const currentSection = navLinks.find(l => l.id === activeTab);
@@ -169,23 +184,30 @@ export default function Home() {
             ✕
           </button>
         </div>
-        <ul className="nav-links">
-          {navLinks.map((link) => (
-            <li key={link.id}>
-              <a
-                href="#"
-                className={`nav-link ${activeTab === link.id ? "active" : ""}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick(link.id);
-                }}
-              >
-                <span className="nav-icon">{link.icon}</span>
-                {link.label}
-              </a>
-            </li>
+        <div className="nav-links">
+          {navGroups.map((group) => (
+            <div key={group.title} className="nav-group">
+              <div className="nav-group-title">{group.title}</div>
+              <ul className="nav-group-list">
+                {group.items.map((link) => (
+                  <li key={link.id}>
+                    <a
+                      href="#"
+                      className={`nav-link ${activeTab === link.id ? "active" : ""}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleNavClick(link.id);
+                      }}
+                    >
+                      <span className="nav-icon">{link.icon}</span>
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
         {currentUser && (
           <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
             <div className="user-profile" style={{ justifyContent: 'flex-start' }}>
@@ -224,7 +246,17 @@ export default function Home() {
             >
               ☰
             </button>
-            <span className="topbar-title">{sectionTitle}</span>
+            <div>
+              <div className="topbar-title">{sectionTitle}</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '2px' }} className="desktop-only">
+                {currentUser?.email || currentUser?.username}
+              </div>
+            </div>
+          </div>
+          <div className="topbar-context desktop-only">
+            <span className="topbar-chip">{currentUser?.workspaceName || 'Sin workspace'}</span>
+            <span className="topbar-chip subtle">{currentUser?.role || 'user'}</span>
+            {currentUser?.isGlobalAdmin ? <span className="topbar-chip accent">Admin maestro</span> : null}
           </div>
           {currentUser && (
             <button

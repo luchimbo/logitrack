@@ -130,7 +130,7 @@ export default function UploadSection() {
         <div id="section-upload" className="section active">
             <div className="section-header">
                 <h1 className="section-title">📦 Subir Etiquetas</h1>
-                <p className="section-subtitle">Arrastrá o seleccioná los archivos ZPL/TXT de etiquetas de MercadoLibre</p>
+                <p className="section-subtitle">Arrastrá o seleccioná archivos ZPL/TXT. Las etiquetas se procesan y entran directo a la operación del workspace actual.</p>
             </div>
 
             <div
@@ -189,6 +189,10 @@ export default function UploadSection() {
                                 ⚠️ {uploadResult.total_skipped} envíos duplicados omitidos (ya estaban cargados)
                             </p>
                         )}
+
+                        <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                            Revisá el total del lote y, si hace falta, abrí “Datos de Hoy” para validar los envíos cargados antes de seguir operando.
+                        </p>
 
                         <div className="flex-between gap-sm" style={{ flexWrap: 'wrap', marginTop: '16px' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
