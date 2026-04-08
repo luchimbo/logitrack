@@ -10,6 +10,8 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [draftSpecificDate, setDraftSpecificDate] = useState(specificDate);
+    const [appliedSpecificDate, setAppliedSpecificDate] = useState(specificDate);
     const [draftRangeFrom, setDraftRangeFrom] = useState(rangeFrom);
     const [draftRangeTo, setDraftRangeTo] = useState(rangeTo);
     const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
@@ -27,13 +29,16 @@ export default function Dashboard() {
     ];
 
     useEffect(() => {
+        setDraftSpecificDate(specificDate);
+        setAppliedSpecificDate(specificDate);
         setDraftRangeFrom(rangeFrom);
         setDraftRangeTo(rangeTo);
         setAppliedRangeFrom(rangeFrom);
         setAppliedRangeTo(rangeTo);
-    }, [rangeFrom, rangeTo]);
+    }, [specificDate, rangeFrom, rangeTo]);
 
     const isRangeIncomplete = period === 'range' && (!appliedRangeFrom || !appliedRangeTo);
+    const isDateIncomplete = period === 'date' && !appliedSpecificDate;
     const isDraftRangeIncomplete = !draftRangeFrom || !draftRangeTo;
 
     const renderPeriodPicker = () => (
@@ -74,19 +79,32 @@ export default function Dashboard() {
             ))}
 
             {period === 'date' && (
-                <input
-                    type="date"
-                    className="form-input"
-                    style={{ 
-                        width: '100%', 
-                        marginTop: '8px',
-                        padding: '10px',
-                        fontSize: '16px'
-                    }}
-                    value={specificDate}
-                    onChange={(e) => setSpecificDate(e.target.value)}
-                    max={new Date().toISOString().slice(0, 10)}
-                />
+                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                    <input
+                        type="date"
+                        className="form-input"
+                        style={{ 
+                            width: '100%', 
+                            padding: '10px',
+                            fontSize: '16px'
+                        }}
+                        value={draftSpecificDate}
+                        onChange={(e) => setDraftSpecificDate(e.target.value)}
+                        max={new Date().toISOString().slice(0, 10)}
+                    />
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={!draftSpecificDate}
+                        onClick={() => {
+                            setAppliedSpecificDate(draftSpecificDate);
+                            setSpecificDate(draftSpecificDate);
+                        }}
+                        style={{ whiteSpace: 'nowrap', justifySelf: isMobile ? 'stretch' : 'start' }}
+                    >
+                        Aplicar
+                    </button>
+                </div>
             )}
 
             {period === 'range' && (
@@ -150,12 +168,12 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [period, specificDate, appliedRangeFrom, appliedRangeTo, isRangeIncomplete]);
+    }, [period, appliedSpecificDate, appliedRangeFrom, appliedRangeTo, isRangeIncomplete]);
 
     const periodLabel = () => {
         switch (period) {
             case 'today': return 'Hoy';
-            case 'date': return specificDate || 'Fecha';
+            case 'date': return appliedSpecificDate || 'Fecha';
             case 'range': {
                 const from = appliedRangeFrom || '...';
                 const to = appliedRangeTo || '...';
@@ -193,7 +211,7 @@ export default function Dashboard() {
     );
 }
 
-    if (isRangeIncomplete) {
+    if (isDateIncomplete || isRangeIncomplete) {
         return (
             <div className="section active">
                 <div className="section-header">
@@ -203,7 +221,9 @@ export default function Dashboard() {
                 </div>
                 <div className="card">
                     <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>
-                        Seleccioná ambas fechas para consultar el rango.
+                        {period === 'date'
+                            ? 'Seleccioná una fecha y tocá Aplicar para consultar.'
+                            : 'Seleccioná ambas fechas para consultar el rango.'}
                     </p>
                 </div>
             </div>
