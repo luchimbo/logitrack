@@ -55,19 +55,7 @@ export default function MapSection() {
         loadData();
     }, [loadData]);
 
-    useEffect(() => {
-        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
-        if (loading || geocodeLoading || missing.length === 0) return;
-
-        const key = `${view}:${missing.map(s => s.id).join(',')}`;
-        if (autoGeocodeKeyRef.current === key) return;
-
-        autoGeocodeKeyRef.current = key;
-        geocodeMissing();
-    }, [shipments, view, loading, geocodeLoading]);
-
-
-    const geocodeMissing = async () => {
+    const geocodeMissing = useCallback(async () => {
         if (geocodeLoading) return;
         setGeocodeLoading(true);
         try {
@@ -96,7 +84,18 @@ export default function MapSection() {
             setGeocodeLoading(false);
             setUnmappedConfig({ total: 0, current: 0 });
         }
-    };
+    }, [geocodeLoading, getTodayQueryString, loadData]);
+
+    useEffect(() => {
+        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
+        if (loading || geocodeLoading || missing.length === 0) return;
+
+        const key = `${view}:${missing.map(s => s.id).join(',')}`;
+        if (autoGeocodeKeyRef.current === key) return;
+
+        autoGeocodeKeyRef.current = key;
+        geocodeMissing();
+    }, [geocodeLoading, geocodeMissing, loading, shipments, view]);
 
 
     const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null && isWithinArgentina(s.lat, s.lng));

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const sizes = {
   sm: { width: 120, gap: 4, tagline: 11 },
   md: { width: 180, gap: 6, tagline: 12 },
@@ -16,9 +18,11 @@ export default function GeoModiLogo({ size = "md", withTagline = false, centered
         gap: current.gap,
       }}
     >
-      <img
+      <Image
         src="/logoGeoModi.png"
         alt="GeoModi"
+        width={current.width}
+        height={Math.round(current.width * 0.3)}
         style={{
           width: `${current.width}px`,
           height: "auto",

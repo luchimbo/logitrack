@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 const BatchContext = createContext();
@@ -33,7 +33,7 @@ export function BatchProvider({ children }) {
     }, []);
 
     // Build query string based on active period
-    const getQueryString = (extra = '') => {
+    const getQueryString = useCallback((extra = '') => {
         let qs = '';
         if (period === 'date' && specificDate) {
             qs = `period=date&date=${specificDate}`;
@@ -46,13 +46,18 @@ export function BatchProvider({ children }) {
         }
         if (extra) qs += `&${extra}`;
         return qs;
-    };
+    }, [period, rangeFrom, rangeTo, specificDate]);
 
-    const getTodayQueryString = (extra = '') => {
+    const getTodayQueryString = useCallback((extra = '') => {
         let qs = 'period=today';
         if (extra) qs += `&${extra}`;
         return qs;
-    };
+    }, []);
+
+    const reloadBatches = useCallback(async () => {
+        const data = await api("/batches");
+        setBatches(data);
+    }, []);
 
     return (
         <BatchContext.Provider value={{
@@ -69,10 +74,7 @@ export function BatchProvider({ children }) {
             setRangeTo,
             getQueryString,
             getTodayQueryString,
-            reloadBatches: async () => {
-                const data = await api("/batches");
-                setBatches(data);
-            }
+            reloadBatches,
         }}>
             {children}
         </BatchContext.Provider>

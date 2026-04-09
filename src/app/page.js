@@ -98,6 +98,21 @@ export default function Home() {
     setSidebarOpen(false); // Close sidebar on mobile after navigation
   };
 
+  const handleOnboardingClose = async (completed) => {
+    try {
+      await fetch('/api/onboarding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+      });
+      setCurrentUser((prev) => prev ? { ...prev, onboardingCompleted: true } : prev);
+    } catch (err) {
+      console.error('Onboarding update error', err);
+    } finally {
+      setShowOnboarding(false);
+    }
+  };
+
   const renderSection = () => {
     switch (activeTab) {
       case "upload": return <UploadSection />;
@@ -170,7 +185,7 @@ export default function Home() {
 
   return (
     <>
-      {showOnboarding && <OnboardingTour onClose={handleOnboardingClose} />}
+      {showOnboarding && <OnboardingTour activeTab={activeTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
       {/* Mobile Sidebar Overlay */}
       <div 
         className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
@@ -280,17 +295,3 @@ export default function Home() {
     </>
   );
 }
-  const handleOnboardingClose = async (completed) => {
-    try {
-      await fetch('/api/onboarding', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed }),
-      });
-      setCurrentUser((prev) => prev ? { ...prev, onboardingCompleted: completed } : prev);
-    } catch (err) {
-      console.error('Onboarding update error', err);
-    } finally {
-      setShowOnboarding(false);
-    }
-  };

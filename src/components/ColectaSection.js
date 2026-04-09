@@ -27,7 +27,7 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, []);
+    }, [getTodayQueryString]);
 
 
     const handleDeleteShipment = async (id) => {

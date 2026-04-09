@@ -33,7 +33,7 @@ export default function PickingList() {
             }
         }
         fetchData();
-    }, []);
+    }, [getTodayQueryString]);
 
     if (loading && !pickingList.length) {
         return (

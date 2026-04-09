@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, toast } from "@/lib/api";
 
 function formatDate(value) {
@@ -19,7 +19,7 @@ export default function V2PrintJobsPage() {
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [detail, setDetail] = useState(null);
 
-  const loadJobs = async () => {
+  const loadJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -34,11 +34,11 @@ export default function V2PrintJobsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedJobId]);
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [loadJobs]);
 
   useEffect(() => {
     if (!selectedJobId) {

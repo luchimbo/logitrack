@@ -32,7 +32,7 @@ export default function CarrierView() {
             }
         }
         fetchData();
-    }, []);
+    }, [getTodayQueryString]);
 
     const handleCarrierChange = async (id, newCarrier) => {
         try {

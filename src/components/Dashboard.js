@@ -196,7 +196,7 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [period, appliedSpecificDate, appliedRangeFrom, appliedRangeTo, isRangeIncomplete]);
+    }, [getQueryString, isRangeIncomplete]);
 
     const periodLabel = () => {
         switch (period) {

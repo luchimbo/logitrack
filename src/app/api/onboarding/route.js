@@ -22,7 +22,7 @@ export async function PATCH(request) {
 
     await db.execute({
       sql: 'UPDATE app_users SET onboarding_completed = ? WHERE id = ?',
-      args: [completed ? 1 : 0, actor.appUserId],
+      args: [1, actor.appUserId],
     });
 
     await logAudit({
@@ -35,7 +35,7 @@ export async function PATCH(request) {
       entityId: actor.appUserId,
     });
 
-    return NextResponse.json({ success: true, onboarding_completed: completed });
+    return NextResponse.json({ success: true, onboarding_completed: true, dismissed: !completed });
   } catch (error) {
     console.error('Onboarding update error:', error);
     return NextResponse.json({ error: 'Error al actualizar onboarding' }, { status: 500 });
