@@ -151,7 +151,7 @@ export default function MapSection() {
                     <div className="spinner" style={{ margin: "20% auto" }}></div>
                 ) : (
                     <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-                        <MapWithNoSSR view={view} shipments={displayShipments} carriers={carriers} />
+                        <MapWithNoSSR view={view} shipments={displayShipments} carriers={carriers} isRefreshing={loading || geocodeLoading} />
                         {loading ? (
                             <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(9, 14, 26, 0.82)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', backdropFilter: 'blur(4px)' }}>
                                 Actualizando mapa...

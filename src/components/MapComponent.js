@@ -59,7 +59,7 @@ function buildMarkerIcon(color) {
   };
 }
 
-export default function MapComponent({ view, shipments, carriers }) {
+export default function MapComponent({ view, shipments, carriers, isRefreshing = false }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const mapElementRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -120,6 +120,10 @@ export default function MapComponent({ view, shipments, carriers }) {
   useEffect(() => {
     if (!mapInstanceRef.current || !window.google?.maps) return;
 
+    if (isRefreshing && shipments.length === 0 && markersRef.current.length > 0) {
+      return;
+    }
+
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = [];
 
@@ -159,7 +163,7 @@ export default function MapComponent({ view, shipments, carriers }) {
     } else if (shipments.length > 1) {
       mapInstanceRef.current.fitBounds(bounds, 60);
     }
-  }, [carrierMap, shipments]);
+  }, [carrierMap, isRefreshing, shipments]);
 
   if (configError || loadError) {
     return (
