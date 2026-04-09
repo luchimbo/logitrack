@@ -57,18 +57,12 @@ export default function MapSection() {
 
     const geocodeMissing = useCallback(async () => {
         if (geocodeLoading) return;
+
+        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
+        if (missing.length === 0) return;
+
         setGeocodeLoading(true);
         try {
-            // First fetch the missing ones based on current date
-            const qs = getTodayQueryString();
-            const { shipments: missing } = await api(`/geocode?${qs}`);
-
-            if (!missing || missing.length === 0) {
-                toast("No hay direcciones faltantes para geocodificar", "success");
-                setGeocodeLoading(false);
-                return;
-            }
-
             setUnmappedConfig({ total: missing.length, current: missing.length });
 
             const result = await api('/geocode', {
@@ -84,22 +78,24 @@ export default function MapSection() {
             setGeocodeLoading(false);
             setUnmappedConfig({ total: 0, current: 0 });
         }
-    }, [geocodeLoading, getTodayQueryString, loadData]);
+    }, [geocodeLoading, loadData, shipments]);
+
+    const invalidShipments = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
+    const invalidShipmentsKey = invalidShipments.map((shipment) => shipment.id).join(',');
 
     useEffect(() => {
-        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
-        if (loading || geocodeLoading || missing.length === 0) return;
+        if (loading || geocodeLoading || invalidShipments.length === 0) return;
 
-        const key = `${view}:${missing.map(s => s.id).join(',')}`;
+        const key = `${view}:${invalidShipmentsKey}`;
         if (autoGeocodeKeyRef.current === key) return;
 
         autoGeocodeKeyRef.current = key;
         geocodeMissing();
-    }, [geocodeLoading, geocodeMissing, loading, shipments, view]);
+    }, [geocodeLoading, geocodeMissing, invalidShipments.length, invalidShipmentsKey, loading, view]);
 
 
     const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null && isWithinArgentina(s.lat, s.lng));
-    const missingShipments = shipments.length - validShipments.length;
+    const missingShipments = invalidShipments.length;
 
     return (
         <div className="section active">
@@ -112,10 +108,17 @@ export default function MapSection() {
                     </p>
                 </div>
                 {missingShipments > 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                        {geocodeLoading
-                            ? `⏳ Localizando automáticamente (${unmappedConfig.current}/${unmappedConfig.total})`
-                            : `📍 ${missingShipments} direcciones pendientes de ubicación automática`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                            {geocodeLoading
+                                ? `⏳ Localizando automáticamente (${unmappedConfig.current}/${unmappedConfig.total})`
+                                : `📍 ${missingShipments} direcciones pendientes de ubicación automática`}
+                        </div>
+                        {!geocodeLoading ? (
+                            <button type="button" className="btn btn-sm btn-ghost" onClick={geocodeMissing}>
+                                Localizar ahora
+                            </button>
+                        ) : null}
                     </div>
                 )}
             </div>
