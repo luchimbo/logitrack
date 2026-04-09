@@ -41,6 +41,34 @@ export default function Dashboard() {
     const isDateIncomplete = period === 'date' && !appliedSpecificDate;
     const isDraftRangeIncomplete = !draftRangeFrom || !draftRangeTo;
 
+    const getComparisonMeta = () => {
+        switch (period) {
+            case 'today':
+                return {
+                    title: 'Hoy vs Ayer',
+                    currentLabel: 'Hoy',
+                    previousLabel: 'Ayer',
+                    description: 'Compara la actividad cargada hoy contra el día anterior.',
+                };
+            case 'week':
+                return {
+                    title: 'Esta semana vs Semana anterior',
+                    currentLabel: 'Esta semana',
+                    previousLabel: 'Semana anterior',
+                    description: 'Mide si el ritmo operativo semanal sube o baja frente a la semana previa.',
+                };
+            case 'month':
+                return {
+                    title: 'Este mes vs Mes anterior',
+                    currentLabel: 'Este mes',
+                    previousLabel: 'Mes anterior',
+                    description: 'Compara volumen y mix operativo del mes actual contra el mes pasado.',
+                };
+            default:
+                return null;
+        }
+    };
+
     const renderPeriodPicker = () => (
         <div style={{ 
             marginTop: '16px',
@@ -253,6 +281,7 @@ export default function Dashboard() {
     const topDays = data.daily_rankings?.top_days || [];
     const lowDays = data.daily_rankings?.low_days || [];
     const comparison = data.comparison;
+    const comparisonMeta = comparison ? getComparisonMeta() : null;
 
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
@@ -264,6 +293,29 @@ export default function Dashboard() {
                 <p className="section-subtitle">Resumen de operaciones del período</p>
                 {renderPeriodPicker()}
             </div>
+
+            {comparison && comparisonMeta && (
+                <div className="card" style={{ marginBottom: '20px', padding: isMobile ? '16px' : '18px 20px' }}>
+                    <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <div>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                Comparativa activa
+                            </div>
+                            <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text)', marginBottom: '6px' }}>
+                                {comparisonMeta.title}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.6 }}>
+                                {comparisonMeta.description}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <span className="topbar-chip">{comparisonMeta.currentLabel}</span>
+                            <span className="topbar-chip subtle">vs</span>
+                            <span className="topbar-chip">{comparisonMeta.previousLabel}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="stats-grid">
                 <div className="stat-card card accent">
@@ -353,9 +405,9 @@ export default function Dashboard() {
                                 <div key={item.label} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
                                     <div className="mobile-card-title">{item.label}</div>
                                     <div className="mobile-card-body" style={{ marginTop: '8px' }}>
-                                        <div className="mobile-card-row"><span className="mobile-card-label">Actual</span><span className="mobile-card-value">{item.current}</span></div>
-                                        <div className="mobile-card-row"><span className="mobile-card-label">Período anterior</span><span className="mobile-card-value">{item.previous}</span></div>
-                                        <div className="mobile-card-row"><span className="mobile-card-label">Variación</span><span className="mobile-card-value">{item.delta > 0 ? '+' : ''}{item.delta}%</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">{comparisonMeta?.currentLabel || 'Actual'}</span><span className="mobile-card-value">{item.current}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">{comparisonMeta?.previousLabel || 'Anterior'}</span><span className="mobile-card-value">{item.previous}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Variación</span><span className="mobile-card-value" style={{ color: item.delta > 0 ? 'var(--success)' : item.delta < 0 ? 'var(--danger)' : 'var(--text)' }}>{item.delta > 0 ? '+' : ''}{item.delta}%</span></div>
                                     </div>
                                 </div>
                             ))}
