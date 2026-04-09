@@ -17,6 +17,7 @@ export default function MapSection() {
     const isMobile = useIsMobile();
     const [view, setView] = useState('flex'); // 'flex' (AMBA) or 'colecta' (Argentina)
     const [shipments, setShipments] = useState([]);
+    const [displayShipments, setDisplayShipments] = useState([]);
     const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [geocodeLoading, setGeocodeLoading] = useState(false);
@@ -97,6 +98,11 @@ export default function MapSection() {
     const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null && isWithinArgentina(s.lat, s.lng));
     const missingShipments = invalidShipments.length;
 
+    useEffect(() => {
+        if (loading && displayShipments.length > 0) return;
+        setDisplayShipments(validShipments);
+    }, [displayShipments.length, loading, validShipments]);
+
     return (
         <div className="section active">
             <div className="section-header flex-between mb-0">
@@ -141,10 +147,17 @@ export default function MapSection() {
             </div>
 
             <div style={{ height: isMobile ? "400px" : "600px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)" }}>
-                {loading ? (
+                {loading && displayShipments.length === 0 ? (
                     <div className="spinner" style={{ margin: "20% auto" }}></div>
                 ) : (
-                    <MapWithNoSSR view={view} shipments={validShipments} carriers={carriers} />
+                    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+                        <MapWithNoSSR view={view} shipments={displayShipments} carriers={carriers} />
+                        {loading ? (
+                            <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(9, 14, 26, 0.82)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', backdropFilter: 'blur(4px)' }}>
+                                Actualizando mapa...
+                            </div>
+                        ) : null}
+                    </div>
                 )}
             </div>
         </div>
