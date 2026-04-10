@@ -27,11 +27,13 @@ export default function MapSection() {
   const isMobile = useIsMobile();
   const [view, setView] = useState("flex");
   const [shipments, setShipments] = useState([]);
+  const [displayedShipments, setDisplayedShipments] = useState([]);
   const [carriers, setCarriers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
   const [unmappedCount, setUnmappedCount] = useState(0);
   const autoGeocodeKeyRef = useRef("");
+  const lastDisplayedKeyRef = useRef("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -64,9 +66,27 @@ export default function MapSection() {
     [shipments],
   );
 
+  const mappedShipmentsKey = useMemo(
+    () => mappedShipments.map((shipment) => `${shipment.id}:${shipment.lat}:${shipment.lng}`).join("|"),
+    [mappedShipments],
+  );
+
   useEffect(() => {
     setUnmappedCount(geocodableShipments.length);
   }, [geocodableShipments.length]);
+
+  useEffect(() => {
+    if (mappedShipments.length === 0 && (loading || geocodeLoading) && displayedShipments.length > 0) {
+      return;
+    }
+
+    if (lastDisplayedKeyRef.current === mappedShipmentsKey) {
+      return;
+    }
+
+    lastDisplayedKeyRef.current = mappedShipmentsKey;
+    setDisplayedShipments(mappedShipments);
+  }, [displayedShipments.length, geocodeLoading, loading, mappedShipments, mappedShipmentsKey]);
 
   const geocodeMissing = useCallback(async () => {
     if (geocodeLoading || geocodableShipments.length === 0) return;
@@ -152,10 +172,17 @@ export default function MapSection() {
       </div>
 
       <div style={{ height: isMobile ? "420px" : "640px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-        {loading ? (
+        {loading && displayedShipments.length === 0 ? (
           <div className="spinner" style={{ margin: "20% auto" }}></div>
         ) : (
-          <MapWithNoSSR view={view} shipments={mappedShipments} carriers={carriers} />
+          <div style={{ position: "relative", height: "100%", width: "100%" }}>
+            <MapWithNoSSR view={view} shipments={displayedShipments} carriers={carriers} />
+            {(loading || geocodeLoading) ? (
+              <div style={{ position: "absolute", top: "12px", right: "12px", background: "rgba(9, 14, 26, 0.82)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "999px", padding: "6px 10px", fontSize: "12px", backdropFilter: "blur(4px)" }}>
+                {geocodeLoading ? "Localizando direcciones..." : "Actualizando mapa..."}
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
     </div>
