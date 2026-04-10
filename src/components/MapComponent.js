@@ -55,6 +55,30 @@ function buildMarkerIcon(color) {
   };
 }
 
+function getShipmentBadge(shipment, carrier) {
+  if (shipment.shipping_method === 'colecta') {
+    return {
+      label: 'Colecta',
+      background: 'rgba(96, 165, 250, 0.18)',
+      color: '#60a5fa',
+    };
+  }
+
+  if (carrier?.display_name || shipment.assigned_carrier) {
+    return {
+      label: carrier?.display_name || shipment.assigned_carrier,
+      background: carrier?.color ? `${carrier.color}22` : '#fecaca',
+      color: carrier?.color || '#b91c1c',
+    };
+  }
+
+  return {
+    label: 'No asignado',
+    background: '#fecaca',
+    color: '#b91c1c',
+  };
+}
+
 export default function MapComponent({ view, shipments, carriers }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const mapElementRef = useRef(null);
@@ -138,6 +162,7 @@ export default function MapComponent({ view, shipments, carriers }) {
 
     shipments.forEach((shipment) => {
       const carrier = carrierMap.get(shipment.assigned_carrier);
+      const badge = getShipmentBadge(shipment, carrier);
       const marker = new window.google.maps.Marker({
         map: mapRef.current,
         position: { lat: Number(shipment.lat), lng: Number(shipment.lng) },
@@ -150,8 +175,8 @@ export default function MapComponent({ view, shipments, carriers }) {
           <div style="padding:4px 2px;min-width:220px;">
             <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:4px;">${escapeHtml(shipment.product_name || 'Envio')}</div>
             <div style="font-size:12px;color:#475569;margin-bottom:8px;">${escapeHtml([shipment.address, shipment.city || shipment.partido, shipment.province].filter(Boolean).join(', '))}</div>
-            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${carrier?.color ? `${carrier.color}22` : '#fecaca'};color:${carrier?.color || '#b91c1c'};">
-              ${escapeHtml(carrier?.display_name || shipment.assigned_carrier || 'No asignado')}
+            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${badge.background};color:${badge.color};">
+              ${escapeHtml(badge.label)}
             </div>
           </div>
         `);
