@@ -1,165 +1,163 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import dynamic from "next/dynamic";
 
-// Next.js dynamic import for Leaflet because it relies on `window`
 const MapWithNoSSR = dynamic(() => import("./MapComponent"), {
-    ssr: false,
-    loading: () => <div className="spinner"></div>
+  ssr: false,
+  loading: () => <div className="spinner"></div>,
 });
 
+function isWithinArgentina(lat, lng) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  return Number.isFinite(latitude)
+    && Number.isFinite(longitude)
+    && latitude >= -55.2
+    && latitude <= -21.5
+    && longitude >= -73.7
+    && longitude <= -53.5;
+}
+
 export default function MapSection() {
-    const { getTodayQueryString } = useBatch();
-    const isMobile = useIsMobile();
-    const [view, setView] = useState('flex'); // 'flex' (AMBA) or 'colecta' (Argentina)
-    const [shipments, setShipments] = useState([]);
-    const [displayShipments, setDisplayShipments] = useState([]);
-    const [carriers, setCarriers] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [geocodeLoading, setGeocodeLoading] = useState(false);
-    const [unmappedConfig, setUnmappedConfig] = useState({ total: 0, current: 0 });
-    const autoGeocodeKeyRef = useRef("");
+  const { getTodayQueryString } = useBatch();
+  const isMobile = useIsMobile();
+  const [view, setView] = useState("flex");
+  const [shipments, setShipments] = useState([]);
+  const [carriers, setCarriers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [geocodeLoading, setGeocodeLoading] = useState(false);
+  const [unmappedCount, setUnmappedCount] = useState(0);
+  const autoGeocodeKeyRef = useRef("");
 
-    const isWithinArgentina = (lat, lng) => {
-        const latitude = Number(lat);
-        const longitude = Number(lng);
-        return Number.isFinite(latitude)
-            && Number.isFinite(longitude)
-            && latitude >= -55.2
-            && latitude <= -21.5
-            && longitude >= -73.7
-            && longitude <= -53.5;
-    };
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const qs = getTodayQueryString(view === "flex" ? "shipping_method=flex" : "shipping_method=colecta");
+      const [shipmentsData, carriersData] = await Promise.all([
+        api(`/shipments?${qs}`),
+        api("/carriers"),
+      ]);
+      setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
+      setCarriers(Array.isArray(carriersData) ? carriersData : []);
+    } catch (error) {
+      toast("Error cargando envios en el mapa", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [getTodayQueryString, view]);
 
-    const loadData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const qs = getTodayQueryString(view === 'flex' ? 'shipping_method=flex' : 'shipping_method=colecta');
-            const [shipmentsData, carriersData] = await Promise.all([
-                api(`/shipments?${qs}`),
-                api('/carriers')
-            ]);
-            setShipments(shipmentsData);
-            setCarriers(carriersData);
-        } catch (err) {
-            toast('Error cargando envíos en el mapa', 'error');
-        } finally {
-            setLoading(false);
-        }
-    }, [getTodayQueryString, view]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-    useEffect(() => {
-        loadData();
-    }, [loadData]);
+  const geocodableShipments = useMemo(
+    () => shipments.filter((shipment) => shipment.lat === null || shipment.lng === null || !isWithinArgentina(shipment.lat, shipment.lng)),
+    [shipments],
+  );
 
-    const geocodeMissing = useCallback(async () => {
-        if (geocodeLoading) return;
+  const mappedShipments = useMemo(
+    () => shipments.filter((shipment) => shipment.lat !== null && shipment.lng !== null && isWithinArgentina(shipment.lat, shipment.lng)),
+    [shipments],
+  );
 
-        const missing = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
-        if (missing.length === 0) return;
+  useEffect(() => {
+    setUnmappedCount(geocodableShipments.length);
+  }, [geocodableShipments.length]);
 
-        setGeocodeLoading(true);
-        try {
-            setUnmappedConfig({ total: missing.length, current: missing.length });
+  const geocodeMissing = useCallback(async () => {
+    if (geocodeLoading || geocodableShipments.length === 0) return;
 
-            const result = await api('/geocode', {
-                method: 'POST',
-                body: JSON.stringify({ shipments: missing }),
-            });
+    setGeocodeLoading(true);
+    try {
+      const result = await api("/geocode", {
+        method: "POST",
+        body: JSON.stringify({ shipments: geocodableShipments }),
+      });
+      toast(`Geocodificacion finalizada: ${result.geocoded}/${result.processed}`, "success");
+      await loadData();
+    } catch (error) {
+      toast("Error durante la geocodificacion", "error");
+    } finally {
+      setGeocodeLoading(false);
+    }
+  }, [geocodableShipments, geocodeLoading, loadData]);
 
-            toast(`¡Geocodificación finalizada! ${result.geocoded}/${result.processed} direcciones ubicadas`, "success");
-            loadData(); // refresh map targets
-        } catch (err) {
-            toast('Error durante la geocodificación', 'error');
-        } finally {
-            setGeocodeLoading(false);
-            setUnmappedConfig({ total: 0, current: 0 });
-        }
-    }, [geocodeLoading, loadData, shipments]);
+  useEffect(() => {
+    if (loading || geocodeLoading || geocodableShipments.length === 0) return;
 
-    const invalidShipments = shipments.filter(s => s.lat === null || s.lng === null || !isWithinArgentina(s.lat, s.lng));
-    const invalidShipmentsKey = invalidShipments.map((shipment) => shipment.id).join(',');
+    const key = `${view}:${geocodableShipments.map((shipment) => shipment.id).join(",")}`;
+    if (autoGeocodeKeyRef.current === key) return;
 
-    useEffect(() => {
-        if (loading || geocodeLoading || invalidShipments.length === 0) return;
+    autoGeocodeKeyRef.current = key;
+    geocodeMissing();
+  }, [geocodableShipments, geocodeLoading, geocodeMissing, loading, view]);
 
-        const key = `${view}:${invalidShipmentsKey}`;
-        if (autoGeocodeKeyRef.current === key) return;
-
-        autoGeocodeKeyRef.current = key;
-        geocodeMissing();
-    }, [geocodeLoading, geocodeMissing, invalidShipments.length, invalidShipmentsKey, loading, view]);
-
-
-    const validShipments = shipments.filter(s => s.lat !== null && s.lng !== null && isWithinArgentina(s.lat, s.lng));
-    const missingShipments = invalidShipments.length;
-
-    useEffect(() => {
-        if (loading && displayShipments.length > 0) return;
-        setDisplayShipments(validShipments);
-    }, [displayShipments.length, loading, validShipments]);
-
-    return (
-        <div className="section active">
-            <div className="section-header flex-between mb-0">
-                <div>
-                    <h1 className="section-title">📍 Mapa de Entregas</h1>
-                    <p className="section-subtitle">
-                        {validShipments.length} ubicados en el mapa
-                        {missingShipments > 0 && ` — Falta localizar ${missingShipments} direcciones`}
-                    </p>
-                </div>
-                {missingShipments > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                            {geocodeLoading
-                                ? `⏳ Localizando automáticamente (${unmappedConfig.current}/${unmappedConfig.total})`
-                                : `📍 ${missingShipments} direcciones pendientes de ubicación automática`}
-                        </div>
-                        {!geocodeLoading ? (
-                            <button type="button" className="btn btn-sm btn-ghost" onClick={geocodeMissing}>
-                                Localizar ahora
-                            </button>
-                        ) : null}
-                    </div>
-                )}
-            </div>
-
-            <div className="map-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                <button
-                    onClick={() => setView('flex')}
-                    className={`btn btn-sm ${view === 'flex' ? 'btn-primary' : ''}`}
-                    style={view !== 'flex' ? { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' } : {}}
-                >
-                    🚀 Mapa Flex (AMBA)
-                </button>
-                <button
-                    onClick={() => setView('colecta')}
-                    className={`btn btn-sm ${view === 'colecta' ? 'btn-primary' : ''}`}
-                    style={view !== 'colecta' ? { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' } : {}}
-                >
-                    📦 Mapa Colecta (Nacional)
-                </button>
-            </div>
-
-            <div style={{ height: isMobile ? "400px" : "600px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)" }}>
-                {loading && displayShipments.length === 0 ? (
-                    <div className="spinner" style={{ margin: "20% auto" }}></div>
-                ) : (
-                    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-                        <MapWithNoSSR view={view} shipments={displayShipments} carriers={carriers} isRefreshing={loading || geocodeLoading} />
-                        {loading ? (
-                            <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(9, 14, 26, 0.82)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', backdropFilter: 'blur(4px)' }}>
-                                Actualizando mapa...
-                            </div>
-                        ) : null}
-                    </div>
-                )}
-            </div>
+  return (
+    <div className="section active">
+      <div className="section-header flex-between mb-0" style={{ gap: "16px", flexWrap: "wrap" }}>
+        <div>
+          <h1 className="section-title">📍 Mapa de Entregas</h1>
+          <p className="section-subtitle">
+            {view === "flex" ? "Flex para AMBA" : "Colecta para toda Argentina"}
+            {mappedShipments.length > 0 ? ` · ${mappedShipments.length} envios ubicados` : " · Sin envios ubicados"}
+          </p>
         </div>
-    );
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          {unmappedCount > 0 ? (
+            <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+              {geocodeLoading ? `Localizando ${unmappedCount} direcciones...` : `${unmappedCount} direcciones pendientes de ubicar`}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={loadData}
+            disabled={loading || geocodeLoading}
+          >
+            Actualizar
+          </button>
+          {unmappedCount > 0 ? (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={geocodeMissing}
+              disabled={geocodeLoading}
+            >
+              {geocodeLoading ? "Localizando..." : "Localizar ahora"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="map-tabs" style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+        <button
+          type="button"
+          onClick={() => setView("flex")}
+          className={`btn btn-sm ${view === "flex" ? "btn-primary" : "btn-ghost"}`}
+        >
+          🚀 Flex AMBA
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("colecta")}
+          className={`btn btn-sm ${view === "colecta" ? "btn-primary" : "btn-ghost"}`}
+        >
+          📦 Colecta Argentina
+        </button>
+      </div>
+
+      <div style={{ height: isMobile ? "420px" : "640px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+        {loading ? (
+          <div className="spinner" style={{ margin: "20% auto" }}></div>
+        ) : (
+          <MapWithNoSSR view={view} shipments={mappedShipments} carriers={carriers} />
+        )}
+      </div>
+    </div>
+  );
 }
