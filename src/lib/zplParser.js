@@ -451,6 +451,14 @@ function isFlexLabel(content) {
     return false;
 }
 
+function uniqueValues(values) {
+    return [...new Set(values.filter(Boolean))];
+}
+
+function joinValues(values, separator = " | ") {
+    return uniqueValues(values).join(separator) || null;
+}
+
 function extractFdTexts(segment) {
     const texts = [];
     const regex = /\^FD([\s\S]*?)\^FS/g;
@@ -700,22 +708,53 @@ function parseColectaLabel(content) {
     const qtyMatch = content.match(/\^FB160,1,0,C\^FD(\d+)\^FS/);
     if (qtyMatch) shipment.quantity = parseInt(qtyMatch[1], 10);
 
-    const prodMatch = content.match(/\^FO200,100\^A0N,27,27\^FB570,3,-1\^FH\^FD(.+?)\^FS/);
-    if (prodMatch) {
-        let name = decodeZplHex(prodMatch[1].trim());
-        name = name.replace(/\s*\|\s*\d+\s*u\.\s*$/, "");
-        shipment.product_name = name;
+    const productBlocks = [];
+    const productRegex = /\^FO200,(\d+)\^A0N,27,27\^FB570,\d+,-1\^FH\^FD(.+?)\^FS/g;
+    let productMatch;
+    while ((productMatch = productRegex.exec(content)) !== null) {
+        let name = decodeZplHex(productMatch[2].trim());
+        name = name.replace(/\s*\|\s*\d+\s*u\.\s*$/, "").trim();
+        productBlocks.push({
+            y: parseInt(productMatch[1], 10),
+            name,
+            variant: null,
+        });
     }
 
-    const varMatch = content.match(/\^FO200,181\^A0N,24,24\^FB570,3,-1\^FH\^FD(.+?)\^FS/);
-    if (varMatch) {
-        const varText = decodeZplHex(varMatch[1].trim());
-        const skuM = varText.match(/SKU:\s*(\S+)/);
-        if (skuM) shipment.sku = skuM[1];
-        const colorM = varText.match(/Color:\s*([^|]+)/);
-        if (colorM) shipment.color = colorM[1].trim();
-        const voltM = varText.match(/Voltaje:\s*([^|]+)/);
-        if (voltM) shipment.voltage = voltM[1].trim();
+    const variantRegex = /\^FO200,(\d+)\^A0N,24,24\^FB570,\d+,-1\^FH\^FD(.+?)\^FS/g;
+    let variantMatch;
+    const variantBlocks = [];
+    while ((variantMatch = variantRegex.exec(content)) !== null) {
+        variantBlocks.push({
+            y: parseInt(variantMatch[1], 10),
+            text: decodeZplHex(variantMatch[2].trim()),
+        });
+    }
+
+    for (const variant of variantBlocks) {
+        const target = [...productBlocks].reverse().find((block) => block.y < variant.y && !block.variant);
+        if (target) target.variant = variant.text;
+    }
+
+    if (productBlocks.length > 0) {
+        shipment.product_name = joinValues(productBlocks.map((block) => block.name));
+
+        const skus = [];
+        const colors = [];
+        const voltages = [];
+        for (const block of productBlocks) {
+            const variantText = String(block.variant || "");
+            const skuM = variantText.match(/SKU:\s*(\S+)/i);
+            if (skuM) skus.push(skuM[1]);
+            const colorM = variantText.match(/Color:\s*([^|]+?)(?=\s+SKU:|\s+Voltaje:|$)/i);
+            if (colorM) colors.push(colorM[1].trim());
+            const voltM = variantText.match(/Voltaje:\s*([^|]+?)(?=\s+SKU:|\s+Color:|$)/i);
+            if (voltM) voltages.push(voltM[1].trim());
+        }
+
+        shipment.sku = joinValues(skus);
+        shipment.color = joinValues(colors, ", ");
+        shipment.voltage = joinValues(voltages, ", ");
     }
 
     let remMatch = content.match(/Remitente #(\d+)/);
