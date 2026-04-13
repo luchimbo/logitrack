@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { fetchStoredZipnovaDashboardRows } from '@/lib/zipnovaStore';
 
 function getComparisonRange(period) {
     const now = new Date();
@@ -59,11 +60,12 @@ function summarizeShipments(shipments, period) {
 
         if (period === 'range' && s.batch_date) {
             if (!by_day[s.batch_date]) {
-                by_day[s.batch_date] = { date: s.batch_date, total: 0, colecta: 0, flex: 0 };
+                by_day[s.batch_date] = { date: s.batch_date, total: 0, colecta: 0, flex: 0, zipnova: 0 };
             }
             by_day[s.batch_date].total += 1;
             if (method === 'colecta') by_day[s.batch_date].colecta += 1;
             if (method === 'flex') by_day[s.batch_date].flex += 1;
+            if (method === 'zipnova') by_day[s.batch_date].zipnova += 1;
         }
     }
 
@@ -84,14 +86,24 @@ function summarizeShipments(shipments, period) {
     return { total_packages, total_units, by_status, by_method, by_carrier, by_province, daily_rankings };
 }
 
-async function fetchShipmentsForRange(workspaceId, range) {
-    const result = await db.execute({
-        sql: `SELECT s.*, b.date AS batch_date FROM shipments s
-              JOIN daily_batches b ON s.batch_id = b.id
-              WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`,
-        args: [workspaceId, workspaceId, range.from, range.to],
-    });
-    return result.rows;
+async function buildSummary(workspaceId, actor, range, period, batchId = null) {
+    let sql;
+    let args;
+
+    if (batchId) {
+        sql = "SELECT *, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+        args = [workspaceId, batchId];
+    } else {
+        sql = `SELECT s.*, b.date AS batch_date FROM shipments s
+             JOIN daily_batches b ON s.batch_id = b.id
+             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
+        args = [workspaceId, workspaceId, range.from, range.to];
+    }
+
+    const result = await db.execute({ sql, args });
+    const shipments = result.rows;
+    const zipnovaShipments = !batchId && actor.isGlobalAdmin ? await fetchStoredZipnovaDashboardRows(range) : [];
+    return summarizeShipments([...shipments, ...zipnovaShipments], period);
 }
 
 export async function GET(request) {
@@ -108,31 +120,13 @@ export async function GET(request) {
         const fromDate = searchParams.get('from');
         const toDate = searchParams.get('to');
         const batch_id = searchParams.get('batch_id');
-
-        let sql, args;
-
-        if (batch_id) {
-            // Legacy: filter by specific batch
-            sql = "SELECT *, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?";
-            args = [workspaceId, batch_id];
-        } else {
-            // New: filter by period via daily_batches.date
-            const range = getDateRange(period, specificDate, fromDate, toDate);
-            sql = `SELECT s.*, b.date AS batch_date FROM shipments s
-             JOIN daily_batches b ON s.batch_id = b.id
-             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
-            args = [workspaceId, workspaceId, range.from, range.to];
-        }
-
-        const result = await db.execute({ sql, args });
-        const shipments = result.rows;
-        const summary = summarizeShipments(shipments, period);
+        const range = getDateRange(period, specificDate, fromDate, toDate);
+        const summary = await buildSummary(workspaceId, authResult.actor, range, period, batch_id);
 
         let comparison = null;
         const comparisonRange = getComparisonRange(period);
         if (!batch_id && comparisonRange) {
-            const previousShipments = await fetchShipmentsForRange(workspaceId, comparisonRange);
-            const previous = summarizeShipments(previousShipments, period);
+            const previous = await buildSummary(workspaceId, authResult.actor, comparisonRange, period);
             const pct = (current, prev) => {
                 if (!prev) return current > 0 ? 100 : 0;
                 return Number((((current - prev) / prev) * 100).toFixed(1));
@@ -145,6 +139,7 @@ export async function GET(request) {
                     total_units: pct(summary.total_units, previous.total_units),
                     flex: pct(summary.by_method.flex || 0, previous.by_method.flex || 0),
                     colecta: pct(summary.by_method.colecta || 0, previous.by_method.colecta || 0),
+                    zipnova: pct(summary.by_method.zipnova || 0, previous.by_method.zipnova || 0),
                 },
             };
         }

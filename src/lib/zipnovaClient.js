@@ -65,6 +65,11 @@ export async function getZipnovaShipment(id) {
   return zipnovaFetch(`/shipments/${id}`);
 }
 
+export async function getZipnovaShipmentDocumentation(id, { what = 'label', format = 'pdf' } = {}) {
+  const params = new URLSearchParams({ what, format });
+  return zipnovaFetch(`/shipments/${id}/documentation?${params.toString()}`);
+}
+
 function extractZipnovaProducts(shipment) {
   const packages = Array.isArray(shipment?.packages) ? shipment.packages : [];
   return packages.map((pkg, index) => ({

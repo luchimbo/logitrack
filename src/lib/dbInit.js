@@ -165,6 +165,38 @@ export async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(print_job_id) REFERENCES print_jobs(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS zipnova_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      zipnova_id TEXT NOT NULL UNIQUE,
+      external_id TEXT,
+      delivery_id TEXT,
+      created_at_external TEXT,
+      created_date TEXT,
+      status TEXT,
+      status_name TEXT,
+      logistic_type TEXT,
+      service_type TEXT,
+      tracking TEXT,
+      tracking_external TEXT,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      recipient_phone TEXT,
+      address TEXT,
+      city TEXT,
+      province TEXT,
+      postal_code TEXT,
+      total_packages INTEGER DEFAULT 0,
+      total_weight FLOAT DEFAULT 0,
+      declared_value FLOAT DEFAULT 0,
+      price FLOAT DEFAULT 0,
+      carrier_name TEXT,
+      carrier_logo TEXT,
+      products_json TEXT,
+      label_downloaded_at DATETIME,
+      label_downloaded_by TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_app_users_clerk ON app_users(clerk_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(app_user_id)`,
@@ -183,7 +215,10 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_zone_mappings_workspace_partido ON zone_mappings(workspace_id, partido)`,
     `CREATE INDEX IF NOT EXISTS idx_carriers_workspace_name ON carriers(workspace_id, name)`,
     `CREATE INDEX IF NOT EXISTS idx_print_jobs_workspace_received ON print_jobs(workspace_id, received_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_print_job_items_workspace_tracking ON print_job_items(workspace_id, tracking_number)`
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_workspace_tracking ON print_job_items(workspace_id, tracking_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_created_date ON zipnova_shipments(created_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_external_id ON zipnova_shipments(external_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`
   ];
 
   for (const stmt of statements) {

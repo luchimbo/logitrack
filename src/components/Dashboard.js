@@ -340,14 +340,14 @@ export default function Dashboard() {
                     <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📦 Por Método</h3>
                     <div className="chart-bar-container">
                         {methodEntries.map(([method, count]) => (
-                            <div key={method} className="chart-bar-row">
-                                <div className="chart-bar-label">{method}</div>
-                                <div className="chart-bar-track">
-                                    <div className={`chart-bar-fill ${method === 'flex' ? 'accent' : 'warning'}`} style={{ width: `${(count / data.total_packages * 100).toFixed(0)}%` }}>
-                                        {count}
+                                <div key={method} className="chart-bar-row">
+                                    <div className="chart-bar-label">{method}</div>
+                                    <div className="chart-bar-track">
+                                        <div className={`chart-bar-fill ${method === 'flex' ? 'accent' : method === 'zipnova' ? 'info' : 'warning'}`} style={{ width: `${(count / data.total_packages * 100).toFixed(0)}%` }}>
+                                            {count}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
                         ))}
                     </div>
                 </div>
@@ -401,6 +401,7 @@ export default function Dashboard() {
                                 { label: 'Unidades', current: data.total_units, previous: comparison.previous.total_units, delta: comparison.delta.total_units },
                                 { label: 'Flex', current: data.by_method.flex || 0, previous: comparison.previous.by_method.flex || 0, delta: comparison.delta.flex },
                                 { label: 'Colecta', current: data.by_method.colecta || 0, previous: comparison.previous.by_method.colecta || 0, delta: comparison.delta.colecta },
+                                { label: 'Zipnova', current: data.by_method.zipnova || 0, previous: comparison.previous.by_method.zipnova || 0, delta: comparison.delta.zipnova || 0 },
                             ].map((item) => (
                                 <div key={item.label} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
                                     <div className="mobile-card-title">{item.label}</div>
@@ -426,6 +427,7 @@ export default function Dashboard() {
                                         <div className="mobile-card-row"><span className="mobile-card-label">Total</span><span className="mobile-card-value">{day.total}</span></div>
                                         <div className="mobile-card-row"><span className="mobile-card-label">Colecta</span><span className="mobile-card-value">{day.colecta}</span></div>
                                         <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{day.flex}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Zipnova</span><span className="mobile-card-value">{day.zipnova || 0}</span></div>
                                     </div>
                                 </div>
                             ))}
@@ -444,6 +446,7 @@ export default function Dashboard() {
                                         <div className="mobile-card-row"><span className="mobile-card-label">Total</span><span className="mobile-card-value">{day.total}</span></div>
                                         <div className="mobile-card-row"><span className="mobile-card-label">Colecta</span><span className="mobile-card-value">{day.colecta}</span></div>
                                         <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{day.flex}</span></div>
+                                        <div className="mobile-card-row"><span className="mobile-card-label">Zipnova</span><span className="mobile-card-value">{day.zipnova || 0}</span></div>
                                     </div>
                                 </div>
                             ))}
