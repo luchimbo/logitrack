@@ -26,24 +26,30 @@ export async function POST(request) {
 
     const mergedPdf = await PDFDocument.create();
     const downloadedShipmentIds = [];
+    const skippedShipmentIds = [];
 
     for (const shipmentId of shipmentIds) {
-      const documentation = await getZipnovaShipmentDocumentation(shipmentId, { what: 'label', format: 'pdf' });
-      const rawBody = documentation?.body;
-      const format = String(documentation?.format || 'pdf').toLowerCase();
+      try {
+        const documentation = await getZipnovaShipmentDocumentation(shipmentId, { what: 'label', format: 'pdf' });
+        const rawBody = documentation?.body;
+        const format = String(documentation?.format || 'pdf').toLowerCase();
 
-      if (!rawBody || format !== 'pdf') {
-        continue;
+        if (!rawBody || format !== 'pdf') {
+          skippedShipmentIds.push(String(shipmentId));
+          continue;
+        }
+
+        const sourcePdf = await PDFDocument.load(decodeBase64ToBytes(rawBody));
+        const copiedPages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+        downloadedShipmentIds.push(String(shipmentId));
+      } catch (error) {
+        skippedShipmentIds.push(String(shipmentId));
       }
-
-      const sourcePdf = await PDFDocument.load(decodeBase64ToBytes(rawBody));
-      const copiedPages = await mergedPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
-      downloadedShipmentIds.push(String(shipmentId));
     }
 
     if (!downloadedShipmentIds.length || mergedPdf.getPageCount() === 0) {
-      return NextResponse.json({ error: 'No se encontraron etiquetas PDF válidas para los envíos seleccionados' }, { status: 400 });
+      return NextResponse.json({ error: 'Ningun envio seleccionado tiene etiqueta disponible en Zipnova todavia' }, { status: 400 });
     }
 
     const actorLabel = authResult.actor.email || authResult.actor.username;
@@ -70,6 +76,8 @@ export async function POST(request) {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${fileName}"`,
+        'X-Zipnova-Downloaded': String(downloadedShipmentIds.length),
+        'X-Zipnova-Skipped': String(skippedShipmentIds.length),
       },
     });
   } catch (error) {

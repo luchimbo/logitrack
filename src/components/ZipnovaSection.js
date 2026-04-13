@@ -26,9 +26,55 @@ function groupProducts(shipments) {
   return [...grouped.values()].sort((a, b) => b.packages - a.packages || a.name.localeCompare(b.name));
 }
 
+function isLabelLikelyAvailable(shipment) {
+  const status = String(shipment.status || '').toLowerCase();
+  return status === 'documentation_ready' || status === 'ready_to_ship';
+}
+
+function ShipmentCard({ shipment, onDownload }) {
+  const likelyAvailable = isLabelLikelyAvailable(shipment);
+  return (
+    <div key={shipment.id} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
+      <div className="mobile-card-title">Envio {shipment.external_id || shipment.id}</div>
+      <div className="mobile-card-body" style={{ marginTop: '8px' }}>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Estado Zipnova</span>
+          <span className="mobile-card-value">{shipment.status_name || shipment.status || '-'}</span>
+        </div>
+        <div className="mobile-card-row">
+          <span className="mobile-card-label">Etiqueta</span>
+          <span className="mobile-card-value" style={{ color: likelyAvailable ? 'var(--success, #16a34a)' : 'var(--warning, #c2410c)' }}>
+            {likelyAvailable ? 'Disponible' : 'No disponible todavia'}
+          </span>
+        </div>
+        <div className="mobile-card-row"><span className="mobile-card-label">Paquetes</span><span className="mobile-card-value">{shipment.total_packages || 0}</span></div>
+        <div className="mobile-card-row"><span className="mobile-card-label">Productos</span><span className="mobile-card-value">{shipment.products?.map((product) => product.name).filter(Boolean).join(', ') || '-'}</span></div>
+        {shipment.downloaded_at ? (
+          <div className="mobile-card-row"><span className="mobile-card-label">Marcado listo</span><span className="mobile-card-value">{new Date(shipment.downloaded_at).toLocaleString('es-AR')}</span></div>
+        ) : null}
+        {shipment.downloaded_by ? (
+          <div className="mobile-card-row"><span className="mobile-card-label">Por</span><span className="mobile-card-value">{shipment.downloaded_by}</span></div>
+        ) : null}
+        <div className="mobile-card-row" style={{ marginTop: '8px' }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => onDownload(shipment)}
+            disabled={!likelyAvailable}
+            title={likelyAvailable ? 'Descargar etiqueta de este envio' : 'Etiqueta no disponible todavia'}
+          >
+            Descargar etiqueta
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
   const groupedProducts = useMemo(() => groupProducts(shipments), [shipments]);
   const totalPackages = shipments.reduce((sum, shipment) => sum + (Number(shipment.total_packages || 0) || 1), 0);
+  const availableCount = shipments.filter(isLabelLikelyAvailable).length;
 
   return (
     <div className="card">
@@ -53,6 +99,12 @@ function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
         <div className="stat-card card success"><div className="stat-value">{groupedProducts.length}</div><div className="stat-label">Productos</div></div>
       </div>
 
+      {shipments.length > 0 && (
+        <div style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+          {availableCount} de {shipments.length} envíos con etiqueta disponible en Zipnova
+        </div>
+      )}
+
       <div style={{ display: 'grid', gap: '10px' }}>
         {groupedProducts.map((product) => (
           <div key={product.key} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -70,20 +122,7 @@ function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
       {shipments.length > 0 && (
         <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
           {shipments.map((shipment) => (
-            <div key={shipment.id} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
-              <div className="mobile-card-title">Envio {shipment.external_id || shipment.id}</div>
-              <div className="mobile-card-body" style={{ marginTop: '8px' }}>
-                <div className="mobile-card-row"><span className="mobile-card-label">Estado Zipnova</span><span className="mobile-card-value">{shipment.status_name || shipment.status || '-'}</span></div>
-                <div className="mobile-card-row"><span className="mobile-card-label">Paquetes</span><span className="mobile-card-value">{shipment.total_packages || 0}</span></div>
-                <div className="mobile-card-row"><span className="mobile-card-label">Productos</span><span className="mobile-card-value">{shipment.products?.map((product) => product.name).filter(Boolean).join(', ') || '-'}</span></div>
-                {shipment.downloaded_at ? (
-                  <div className="mobile-card-row"><span className="mobile-card-label">Marcado listo</span><span className="mobile-card-value">{new Date(shipment.downloaded_at).toLocaleString('es-AR')}</span></div>
-                ) : null}
-                {shipment.downloaded_by ? (
-                  <div className="mobile-card-row"><span className="mobile-card-label">Por</span><span className="mobile-card-value">{shipment.downloaded_by}</span></div>
-                ) : null}
-              </div>
-            </div>
+            <ShipmentCard key={shipment.id} shipment={shipment} onDownload={(s) => downloadLabel(s)} />
           ))}
         </div>
       )}
@@ -135,7 +174,12 @@ export default function ZipnovaSection() {
     load();
   }, [load]);
 
-  const downloadLabels = async (group, shipments) => {
+  const downloadLabels = async (groupOrShipment, shipmentsOrSingle) => {
+    // Handle both: downloadLabels('groupName', shipmentsArray) and downloadLabels(singleShipmentObject)
+    const isSingleShipment = !shipmentsOrSingle && typeof groupOrShipment === 'object';
+    const group = isSingleShipment ? `envio-${groupOrShipment.external_id || groupOrShipment.id}` : groupOrShipment;
+    const shipments = isSingleShipment ? [groupOrShipment] : shipmentsOrSingle;
+    
     setDownloadingGroup(group);
     setError('');
     try {
@@ -152,6 +196,8 @@ export default function ZipnovaSection() {
       }
 
       const blob = await res.blob();
+      const downloadedCount = Number(res.headers.get('X-Zipnova-Downloaded') || '0');
+      const skippedCount = Number(res.headers.get('X-Zipnova-Skipped') || '0');
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -160,6 +206,9 @@ export default function ZipnovaSection() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+      if (skippedCount > 0) {
+        setWarning(`Se descargaron ${downloadedCount} etiquetas y ${skippedCount} envios siguen sin etiqueta disponible en Zipnova.`);
+      }
       await load({ sync: false });
     } catch (err) {
       setError(err.message || 'Error inesperado');
