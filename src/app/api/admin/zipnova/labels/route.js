@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { PDFDocument } from 'pdf-lib';
 import { requireGlobalAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { markZipnovaShipmentsDownloaded } from '@/lib/zipnovaStore';
@@ -24,6 +23,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No hay envíos para descargar etiquetas' }, { status: 400 });
     }
 
+    const { PDFDocument } = await import('pdf-lib');
     const mergedPdf = await PDFDocument.create();
     const downloadedShipmentIds = [];
     const skippedShipmentIds = [];
