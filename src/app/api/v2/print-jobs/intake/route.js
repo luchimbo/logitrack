@@ -33,14 +33,36 @@ function uniqueNonEmpty(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-async function getExistingValues(table, column, values) {
+async function resolveWorkspaceIdByKey(workspaceKey) {
+  const cleanKey = stringOrNull(workspaceKey, 200);
+  if (cleanKey) {
+    const printer = await db.execute({
+      sql: "SELECT workspace_id FROM workspace_printers WHERE workspace_key = ? LIMIT 1",
+      args: [cleanKey],
+    });
+    if (printer.rows.length) {
+      return Number(printer.rows[0].workspace_id);
+    }
+    throw new Error("workspace_key inválido");
+  }
+
+  const legacy = await db.execute({
+    sql: "SELECT id FROM workspaces WHERE slug = ? LIMIT 1",
+    args: ["legacy"],
+  });
+  return legacy.rows.length ? Number(legacy.rows[0].id) : null;
+}
+
+async function getExistingValues(table, column, values, workspaceId = null) {
   const set = new Set();
   const list = uniqueNonEmpty(values);
   for (let i = 0; i < list.length; i += CHUNK_SIZE) {
     const chunk = list.slice(i, i + CHUNK_SIZE);
     const placeholders = chunk.map(() => "?").join(", ");
-    const sql = `SELECT ${column} AS value FROM ${table} WHERE ${column} IN (${placeholders})`;
-    const result = await db.execute({ sql, args: chunk });
+    const sql = workspaceId
+      ? `SELECT ${column} AS value FROM ${table} WHERE workspace_id = ? AND ${column} IN (${placeholders})`
+      : `SELECT ${column} AS value FROM ${table} WHERE ${column} IN (${placeholders})`;
+    const result = await db.execute({ sql, args: workspaceId ? [workspaceId, ...chunk] : chunk });
     for (const row of result.rows) {
       if (row.value !== null && row.value !== undefined) {
         set.add(String(row.value));
@@ -83,13 +105,13 @@ function extractDateOnly(value) {
   return null;
 }
 
-async function getOrCreateBatch(sourceFiles, batchDate = null) {
+async function getOrCreateBatch(workspaceId, sourceFiles, batchDate = null) {
   const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
   const dateValue = extractDateOnly(batchDate) || new Date().toISOString().slice(0, 10);
 
   const todayResult = await db.execute({
-    sql: "SELECT id, filenames FROM daily_batches WHERE date = ?",
-    args: [asDbValue(dateValue)],
+    sql: "SELECT id, filenames FROM daily_batches WHERE workspace_id = ? AND date = ?",
+    args: [asDbValue(workspaceId), asDbValue(dateValue)],
   });
   if (todayResult.rows.length > 0) {
     const batchId = Number(todayResult.rows[0].id);
@@ -107,8 +129,8 @@ async function getOrCreateBatch(sourceFiles, batchDate = null) {
   }
 
   const result = await db.execute({
-    sql: "INSERT INTO daily_batches (date, filenames) VALUES (?, ?)",
-    args: [asDbValue(dateValue), asDbValue(filenames.join(", "))],
+    sql: "INSERT INTO daily_batches (workspace_id, date, filenames) VALUES (?, ?, ?)",
+    args: [asDbValue(workspaceId), asDbValue(dateValue), asDbValue(filenames.join(", "))],
   });
 
   return Number(result.lastInsertRowid);
@@ -259,9 +281,9 @@ function validateIntakeContract(payload, rawLabels) {
   };
 }
 
-async function insertLegacyShipments(batchId, normalizedLabels) {
+async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
   const trackings = uniqueNonEmpty(normalizedLabels.map((x) => x.tracking_number));
-  const existing = await getExistingValues("shipments", "tracking_number", trackings);
+  const existing = await getExistingValues("shipments", "tracking_number", trackings, workspaceId);
 
   let inserted = 0;
   let skipped = 0;
@@ -322,7 +344,7 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
 
     if ((shipment.shipping_method || "").toLowerCase() === "flex" && shipment.partido && !shipment.assigned_carrier) {
       try {
-        shipment.assigned_carrier = await assignCarrier(shipment.partido);
+        shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
       } catch {
         shipment.assigned_carrier = null;
       }
@@ -330,14 +352,14 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
 
     await db.execute({
       sql: `INSERT INTO shipments (
-        batch_id, sale_type, sale_id, tracking_number, remitente_id,
+        batch_id, workspace_id, sale_type, sale_id, tracking_number, remitente_id,
         product_name, sku, color, voltage, quantity,
         recipient_name, recipient_user, address, postal_code,
         city, partido, province, reference, shipping_method,
         carrier_code, carrier_name, assigned_carrier,
         dispatch_date, delivery_date, status
       ) VALUES (
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
@@ -346,6 +368,7 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
       )`,
       args: [
         asDbValue(batchId),
+        asDbValue(workspaceId),
         asDbValue(shipment.sale_type),
         asDbValue(shipment.sale_id),
         asDbValue(shipment.tracking_number),
@@ -379,8 +402,8 @@ async function insertLegacyShipments(batchId, normalizedLabels) {
   }
 
   await db.execute({
-    sql: "UPDATE daily_batches SET total_packages = (SELECT COUNT(*) FROM shipments WHERE batch_id = ?) WHERE id = ?",
-    args: [asDbValue(batchId), asDbValue(batchId)],
+    sql: "UPDATE daily_batches SET total_packages = (SELECT COUNT(*) FROM shipments WHERE workspace_id = ? AND batch_id = ?) WHERE id = ? AND workspace_id = ?",
+    args: [asDbValue(workspaceId), asDbValue(batchId), asDbValue(batchId), asDbValue(workspaceId)],
   });
 
   return { inserted, skipped, recovered_from_reprint: recoveredFromReprint };
@@ -396,7 +419,7 @@ function parseJsonOrFallback(value, fallback) {
 
 async function backfillExistingJobToLegacy(jobId) {
   const headerResult = await db.execute({
-    sql: `SELECT id, created_at_client, source_files_json
+    sql: `SELECT id, created_at_client, source_files_json, workspace_id
           FROM print_jobs
           WHERE job_id = ?
           LIMIT 1`,
@@ -410,7 +433,8 @@ async function backfillExistingJobToLegacy(jobId) {
   const header = headerResult.rows[0];
   const sourceFiles = parseJsonOrFallback(header.source_files_json, []);
   const batchDate = extractDateOnly(header.created_at_client);
-  const batchId = await getOrCreateBatch(sourceFiles, batchDate);
+  const workspaceId = Number(header.workspace_id);
+  const batchId = await getOrCreateBatch(workspaceId, sourceFiles, batchDate);
 
   const itemsResult = await db.execute({
     sql: `SELECT
@@ -442,7 +466,7 @@ async function backfillExistingJobToLegacy(jobId) {
     is_reprint: Number(row.is_reprint) === 1 ? 1 : 0,
   }));
 
-  const legacyResult = await insertLegacyShipments(batchId, items);
+  const legacyResult = await insertLegacyShipments(workspaceId, batchId, items);
   return {
     found: true,
     batchId,
@@ -489,14 +513,25 @@ export async function POST(request) {
       return NextResponse.json({ error: `Too many labels (max ${MAX_LABELS})` }, { status: 400 });
     }
 
+    let workspaceId;
+    try {
+      workspaceId = await resolveWorkspaceIdByKey(payload?.workspace_key);
+    } catch (error) {
+      return NextResponse.json({ error: error.message || "workspace_key inválido" }, { status: 400 });
+    }
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: "No se pudo resolver workspace para el print job" }, { status: 400 });
+    }
+
     const contractValidation = validateIntakeContract(payload, rawLabels);
     if (!contractValidation.ok) {
       return NextResponse.json({ error: contractValidation.error }, { status: contractValidation.status });
     }
 
     const existingJob = await db.execute({
-      sql: "SELECT id FROM print_jobs WHERE job_id = ?",
-      args: [jobId],
+      sql: "SELECT id FROM print_jobs WHERE workspace_id = ? AND job_id = ?",
+      args: [workspaceId, jobId],
     });
     if (existingJob.rows.length > 0) {
       const backfill = await backfillExistingJobToLegacy(jobId);
@@ -545,9 +580,9 @@ export async function POST(request) {
     const trackingNumbers = labels.map((x) => x.tracking_number);
     const fingerprints = labels.map((x) => x.label_fingerprint);
 
-    const existingShipmentTrackings = await getExistingValues("shipments", "tracking_number", trackingNumbers);
-    const existingPrintedTrackings = await getExistingValues("print_job_items", "tracking_number", trackingNumbers);
-    const existingFingerprints = await getExistingValues("print_job_items", "label_fingerprint", fingerprints);
+    const existingShipmentTrackings = await getExistingValues("shipments", "tracking_number", trackingNumbers, workspaceId);
+    const existingPrintedTrackings = await getExistingValues("print_job_items", "tracking_number", trackingNumbers, workspaceId);
+    const existingFingerprints = await getExistingValues("print_job_items", "label_fingerprint", fingerprints, workspaceId);
 
     const knownTrackings = new Set([...existingShipmentTrackings, ...existingPrintedTrackings]);
     const seenTrackingsInJob = new Set();
@@ -586,17 +621,18 @@ export async function POST(request) {
     const skuOrder = sanitizeSkuOrder(payload?.sku_order, normalizedLabels);
 
     const batchDate = extractDateOnly(payload?.created_at);
-    const batchId = await getOrCreateBatch(sourceFiles, batchDate);
-    const legacyResult = await insertLegacyShipments(batchId, normalizedLabels);
+    const batchId = await getOrCreateBatch(workspaceId, sourceFiles, batchDate);
+    const legacyResult = await insertLegacyShipments(workspaceId, batchId, normalizedLabels);
 
     let insertResult;
     try {
       insertResult = await db.execute({
         sql: `INSERT INTO print_jobs (
-          job_id, created_at_client, source_files_json, sku_order_json,
+          workspace_id, job_id, created_at_client, source_files_json, sku_order_json,
           printer_path, print_file_path, labels_total, skus_total, reprints_total
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
+          asDbValue(workspaceId),
           asDbValue(jobId),
           asDbValue(stringOrNull(payload?.created_at, 60)),
           asDbValue(JSON.stringify(sourceFiles)),
@@ -612,8 +648,8 @@ export async function POST(request) {
       const msg = String(error?.message || "");
       if (msg.includes("UNIQUE") && msg.includes("print_jobs.job_id")) {
         const dup = await db.execute({
-          sql: "SELECT id FROM print_jobs WHERE job_id = ?",
-          args: [jobId],
+          sql: "SELECT id FROM print_jobs WHERE workspace_id = ? AND job_id = ?",
+          args: [workspaceId, jobId],
         });
         return NextResponse.json({
           ok: true,
@@ -641,10 +677,11 @@ export async function POST(request) {
     for (const item of normalizedLabels) {
       await db.execute({
         sql: `INSERT INTO print_job_items (
-          print_job_id, item_order, sku, tracking_number, label_fingerprint,
+          workspace_id, print_job_id, item_order, sku, tracking_number, label_fingerprint,
           sale_id, product_name, shipping_method, raw_block, is_reprint
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
+          asDbValue(workspaceId),
           asDbValue(printJobId),
           asDbValue(item.item_order),
           asDbValue(item.sku),

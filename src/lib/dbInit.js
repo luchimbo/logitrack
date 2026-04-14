@@ -436,19 +436,4 @@ export async function initDb() {
     console.error("Zone seed error:", e.message || e);
   }
 
-  // Seed default admin user and fix hash if needed
-  try {
-    const adminHash = '$2b$10$36jNNjQ/Ve39sS9a.yJ7MMmYKusO2maa7HKWAo39Ry'; // 123456
-    const usersCount = await exec("SELECT COUNT(*) as cnt FROM users WHERE username = 'admin'");
-    if (usersCount.rows[0].cnt === 0) {
-      await exec("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", ['admin', adminHash, 'admin']);
-      console.log("DB Init: Created default 'admin' user with password '123456'");
-    } else {
-      // Force update of password hash to correct one just in case it was deployed with the broken hash
-      const brokenHash = '$2a$10$wE9KpxBvM6f69p6M.Q8Y6OYZ8T5X5Bq2f2T0P3aF9f/wM/8Fh1eP.';
-      await exec("UPDATE users SET password_hash = ? WHERE username = 'admin' AND password_hash = ?", [adminHash, brokenHash]);
-    }
-  } catch (e) {
-    console.error("User seed error:", e.message || e);
-  }
 }

@@ -42,3 +42,14 @@ next-env.d.ts
 
 # v2 local print artifacts
 ultimo_ordenado_v2.txt
+
+# local databases and backups
+*.db
+_backup/
+_legacy_backup/
+
+# nested dependencies
+**/node_modules/
+
+# local agent config
+PAQUETE-IMPRESION-V2/print-agent/config.json

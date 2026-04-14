@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bootstrap:legacy-admin": "node scripts/bootstrap-legacy-admin.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.8",
@@ -17,6 +18,7 @@
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0"

@@ -11,6 +11,17 @@ Este agente local mantiene drag-and-drop sobre `imprimir-v2.bat` y agrega:
 1. Copiar `config.example.json` a `config.json` (opcional para sync)
 2. Arrastrar uno o mas `.txt/.zpl` sobre `imprimir-v2.bat`
 
+## Configuracion inicial por workspace
+
+Antes de usar impresion V2 en un workspace nuevo hay que completar:
+
+- `printerPath`
+- `syncUrl`
+- `syncToken`
+- `workspaceKey`
+
+El `workspaceKey` se obtiene desde la app en Setup Impresion. Sin ese valor, los jobs nuevos no quedan aislados por workspace.
+
 Si necesitas reingestar a la app sin volver a imprimir:
 
 - usar `reingestar-sin-imprimir-v2.bat` (ejecuta `--sync-only`)
@@ -35,6 +46,7 @@ Para solo reintentar sincronizacion pendiente (sin imprimir):
 - `PRINT_V2_PRINTER_PATH`
 - `PRINT_V2_SYNC_URL`
 - `PRINT_V2_SYNC_TOKEN`
+- `PRINT_V2_WORKSPACE_KEY`
 - `PRINT_V2_DRY_RUN=1`
 
 Estas variables pisan lo configurado en `config.json`.

@@ -94,6 +94,7 @@ function loadConfig() {
       ),
     syncUrl: process.env.PRINT_V2_SYNC_URL || fromFile.syncUrl || DEFAULT_SYNC_URL,
     syncToken: process.env.PRINT_V2_SYNC_TOKEN || fromFile.syncToken || "",
+    workspaceKey: process.env.PRINT_V2_WORKSPACE_KEY || fromFile.workspaceKey || "",
     retryBeforePrint: fromFile.retryBeforePrint !== false,
     dryRun: process.env.PRINT_V2_DRY_RUN === "1" || fromFile.dryRun === true,
   };
@@ -423,6 +424,7 @@ function buildJobPayload({
   return {
     v: 1,
     job_id: jobId,
+    workspace_key: config.workspaceKey || null,
     agent_version: AGENT_VERSION,
     is_dry_run: Boolean(isDryRun),
     is_sync_only: Boolean(isSyncOnly),

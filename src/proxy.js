@@ -2,7 +2,11 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { jwtVerify } from "jose";
 import { NextResponse } from "next/server";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "logitrack-super-secret-key-2026-local");
+function getJwtSecret() {
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  if (!secret) return null;
+  return new TextEncoder().encode(secret);
+}
 
 const isPublicRoute = createRouteMatcher([
   "/login(.*)",
@@ -18,8 +22,10 @@ const isPublicRoute = createRouteMatcher([
 async function hasLegacyAdminToken(req) {
   const token = req.cookies.get("auth_token")?.value;
   if (!token) return false;
+  const jwtSecret = getJwtSecret();
+  if (!jwtSecret) return false;
   try {
-    await jwtVerify(token, JWT_SECRET);
+    await jwtVerify(token, jwtSecret);
     return true;
   } catch {
     return false;

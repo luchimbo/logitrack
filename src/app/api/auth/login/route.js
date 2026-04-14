@@ -5,11 +5,20 @@ import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
 import { logAudit } from '@/lib/audit';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'logitrack-super-secret-key-2026-local');
+function getJwtSecret() {
+    const secret = String(process.env.JWT_SECRET || '').trim();
+    if (!secret) return null;
+    return new TextEncoder().encode(secret);
+}
 
 export async function POST(request) {
     try {
         await ensureDb();
+        const jwtSecret = getJwtSecret();
+        if (!jwtSecret) {
+            return NextResponse.json({ error: "JWT_SECRET no configurado" }, { status: 500 });
+        }
+
         const { username, password } = await request.json();
 
         if (!username || !password) {
@@ -37,7 +46,7 @@ export async function POST(request) {
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
             .setExpirationTime('30d') // Expira en 30 días
-            .sign(JWT_SECRET);
+            .sign(jwtSecret);
 
         const response = NextResponse.json({ success: true, user: { username: user.username } });
 

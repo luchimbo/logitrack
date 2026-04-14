@@ -18,6 +18,7 @@ Configuracion:
 2) Verificar:
    - printerPath
    - syncUrl (ya viene con https://logitrack-tan.vercel.app/api/v2/print-jobs/intake)
+   - workspaceKey (sale de Setup Impresion en la app)
    - dryRun=false
 
 Uso:
@@ -39,6 +40,11 @@ Reintento manual de pendientes:
 
 Diagnostico de impresora:
 - ejecutar diagnostico-impresora-v2.bat
+
+Importante para espacios nuevos:
+- antes de imprimir por primera vez, completar la configuracion inicial del workspace en la app
+- copiar el `workspaceKey` al `config.json` del agente
+- sin ese paso, la impresion V2 no queda aislada por workspace
 
 Archivos de diagnostico:
 - print-agent\data\last_run.log

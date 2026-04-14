@@ -4,7 +4,11 @@ import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { logAudit } from "@/lib/audit";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "logitrack-super-secret-key-2026-local");
+function getJwtSecret() {
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  if (!secret) return null;
+  return new TextEncoder().encode(secret);
+}
 
 function slugify(value) {
   return String(value || "")
@@ -168,8 +172,14 @@ async function getLegacyAdminFromRequest(request) {
   const token = request.cookies.get("auth_token")?.value;
   if (!token) return null;
 
+  const jwtSecret = getJwtSecret();
+  if (!jwtSecret) {
+    console.error("Legacy auth disabled: JWT_SECRET is not configured");
+    return null;
+  }
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, jwtSecret);
     const workspaceId = await getLegacyWorkspaceId();
     return {
       authType: "legacy-admin",
