@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
-import { getZipnovaShipment, isZipnovaToday, listZipnovaShipmentsByStatuses, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { getDefaultZipnovaClient, isZipnovaToday, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
 
 export const ZIPNOVA_VISIBLE_STATUSES = ['new', 'documentation_ready', 'ready_to_ship'];
 
@@ -17,11 +17,12 @@ function getArgentinaDateOnly(value) {
   }).format(date);
 }
 
-async function enrichShipments(shipments) {
+async function enrichShipments(shipments, client = null) {
+  const zipnovaClient = client || getDefaultZipnovaClient();
   return Promise.all(
     shipments.map(async (shipment) => {
       try {
-        const detailed = await getZipnovaShipment(shipment.id);
+        const detailed = await zipnovaClient.getShipment(shipment.id);
         return normalizeZipnovaShipment(detailed);
       } catch {
         return normalizeZipnovaShipment(shipment);
@@ -153,12 +154,13 @@ async function upsertZipnovaShipment(shipment) {
   });
 }
 
-export async function syncZipnovaVisibleShipments({ externalId = '' } = {}) {
+export async function syncZipnovaVisibleShipments({ externalId = '', client = null } = {}) {
   await ensureDb();
 
-  const results = await listZipnovaShipmentsByStatuses(ZIPNOVA_VISIBLE_STATUSES, { page: 1, externalId });
+  const zipnovaClient = client || getDefaultZipnovaClient();
+  const results = await zipnovaClient.listShipmentsByStatuses(ZIPNOVA_VISIBLE_STATUSES, { page: 1, externalId });
   const shipmentsBase = results.flatMap((entry) => entry.response?.data || []);
-  const shipments = filterVisibleShipments(await enrichShipments(shipmentsBase), externalId);
+  const shipments = filterVisibleShipments(await enrichShipments(shipmentsBase, zipnovaClient), externalId);
 
   await Promise.all(shipments.map((shipment) => upsertZipnovaShipment(shipment)));
   return shipments.length;

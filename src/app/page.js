@@ -124,7 +124,7 @@ export default function Home() {
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
-      case "zipnova": return currentUser?.isGlobalAdmin ? <ZipnovaSection /> : <div>No autorizado</div>;
+      case "zipnova": return canManageWorkspace ? <ZipnovaSection /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -155,7 +155,6 @@ export default function Home() {
     const adminItems = [];
     if (currentUser?.isGlobalAdmin) {
       adminItems.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
-      adminItems.push({ id: "zipnova", icon: "📮", label: "Zipnova" });
     }
     if (canManageUsers) {
       adminItems.push({ id: "userManagement", icon: "👤", label: "Usuarios" });

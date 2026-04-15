@@ -2,72 +2,108 @@ const ZIPNOVA_BASE_URL = process.env.ZIPNOVA_BASE_URL || 'https://api.zipnova.co
 const ZIPNOVA_API_TOKEN = process.env.ZIPNOVA_API_TOKEN || process.env.ZIPNOVA_KEY || '';
 const ZIPNOVA_API_SECRET = process.env.ZIPNOVA_API_SECRET || process.env.ZIPNOVA_SECRET || '';
 
-function getAuthHeader() {
-  if (!ZIPNOVA_API_TOKEN || !ZIPNOVA_API_SECRET) {
+function getAuthHeader(token, secret) {
+  if (!token || !secret) {
     throw new Error('ZIPNOVA_API_TOKEN o ZIPNOVA_API_SECRET no configurados');
   }
-  const raw = `${ZIPNOVA_API_TOKEN}:${ZIPNOVA_API_SECRET}`;
+  const raw = `${token}:${secret}`;
   return `Basic ${Buffer.from(raw).toString('base64')}`;
 }
 
-async function zipnovaFetch(path, options = {}) {
-  const url = `${ZIPNOVA_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: getAuthHeader(),
-      ...(options.headers || {}),
-    },
-    cache: 'no-store',
-  });
+export function createZipnovaClient({ token, secret, baseUrl = ZIPNOVA_BASE_URL } = {}) {
+  const resolvedToken = token;
+  const resolvedSecret = secret;
+  const resolvedBaseUrl = baseUrl || ZIPNOVA_BASE_URL;
 
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
+  async function zipnovaFetch(path, options = {}) {
+    const url = `${resolvedBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: getAuthHeader(resolvedToken, resolvedSecret),
+        ...(options.headers || {}),
+      },
+      cache: 'no-store',
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.error || data?.message || `Zipnova error ${res.status}`);
+    }
+
+    return data;
   }
 
-  if (!res.ok) {
-    throw new Error(data?.error || data?.message || `Zipnova error ${res.status}`);
+  async function listShipments({ page = 1, status = '', serviceType = '', orderId = '', externalId = '' } = {}) {
+    const params = new URLSearchParams();
+    params.set('page', String(page || 1));
+    if (status) params.set('status', status);
+    if (serviceType) params.set('service_type', serviceType);
+    if (orderId) params.set('order_id', orderId);
+    if (externalId) params.set('external_id', externalId);
+
+    return zipnovaFetch(`/shipments?${params.toString()}`);
   }
 
-  return data;
+  async function listShipmentsByStatuses(statuses, options = {}) {
+    const normalized = [...new Set((statuses || []).filter(Boolean))];
+    const results = [];
+
+    for (const status of normalized) {
+      const response = await listShipments({ ...options, status });
+      results.push({ status, response });
+    }
+
+    return results;
+  }
+
+  async function getShipment(id) {
+    return zipnovaFetch(`/shipments/${id}`);
+  }
+
+  async function getShipmentDocumentation(id, { what = 'label', format = 'pdf' } = {}) {
+    const params = new URLSearchParams({ what, format });
+    return zipnovaFetch(`/shipments/${id}/documentation?${params.toString()}`);
+  }
+
+  return {
+    listShipments,
+    listShipmentsByStatuses,
+    getShipment,
+    getShipmentDocumentation,
+  };
 }
 
-export async function listZipnovaShipments({ page = 1, status = '', serviceType = '', orderId = '', externalId = '' } = {}) {
-  const params = new URLSearchParams();
-  params.set('page', String(page || 1));
-  if (status) params.set('status', status);
-  if (serviceType) params.set('service_type', serviceType);
-  if (orderId) params.set('order_id', orderId);
-  if (externalId) params.set('external_id', externalId);
-
-  return zipnovaFetch(`/shipments?${params.toString()}`);
+export function getDefaultZipnovaClient() {
+  return createZipnovaClient({ token: ZIPNOVA_API_TOKEN, secret: ZIPNOVA_API_SECRET });
 }
 
-export async function listZipnovaShipmentsByStatuses(statuses, options = {}) {
-  const normalized = [...new Set((statuses || []).filter(Boolean))];
-  const results = [];
+// Legacy exports for backward compatibility (uses default client)
+const defaultClient = getDefaultZipnovaClient();
 
-  for (const status of normalized) {
-    const response = await listZipnovaShipments({ ...options, status });
-    results.push({ status, response });
-  }
+export async function listZipnovaShipments(options) {
+  return defaultClient.listShipments(options);
+}
 
-  return results;
+export async function listZipnovaShipmentsByStatuses(statuses, options) {
+  return defaultClient.listShipmentsByStatuses(statuses, options);
 }
 
 export async function getZipnovaShipment(id) {
-  return zipnovaFetch(`/shipments/${id}`);
+  return defaultClient.getShipment(id);
 }
 
-export async function getZipnovaShipmentDocumentation(id, { what = 'label', format = 'pdf' } = {}) {
-  const params = new URLSearchParams({ what, format });
-  return zipnovaFetch(`/shipments/${id}/documentation?${params.toString()}`);
+export async function getZipnovaShipmentDocumentation(id, options) {
+  return defaultClient.getShipmentDocumentation(id, options);
 }
 
 function extractZipnovaProducts(shipment) {

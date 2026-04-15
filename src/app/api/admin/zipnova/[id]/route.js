@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
-import { requireGlobalAdmin } from '@/lib/auth';
-import { getZipnovaShipment, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { requireWorkspaceAdmin } from '@/lib/auth';
+import { normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
 
 export async function GET(request, { params }) {
   try {
-    const authResult = await requireGlobalAdmin(request);
+    const authResult = await requireWorkspaceAdmin(request);
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
 
     const { id } = await params;
-    const shipment = await getZipnovaShipment(id);
+    const client = await resolveZipnovaClient(authResult.actor.workspaceId);
+    const shipment = await client.getShipment(id);
 
     return NextResponse.json({
       shipment: normalizeZipnovaShipment(shipment),

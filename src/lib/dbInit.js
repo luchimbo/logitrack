@@ -218,7 +218,20 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_print_job_items_workspace_tracking ON print_job_items(workspace_id, tracking_number)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_created_date ON zipnova_shipments(created_date)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_external_id ON zipnova_shipments(external_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`,
+    `CREATE TABLE IF NOT EXISTS workspace_integrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      connected_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id)`
   ];
 
   for (const stmt of statements) {

@@ -142,6 +142,25 @@ export default function ZipnovaSection() {
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
 
+  const [connected, setConnected] = useState(false);
+  const [connectedAt, setConnectedAt] = useState('');
+  const [token, setToken] = useState('');
+  const [secret, setSecret] = useState('');
+  const [connecting, setConnecting] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/zipnova/status');
+      const data = await res.json();
+      if (res.ok) {
+        setConnected(Boolean(data.connected));
+        setConnectedAt(data.connectedAt || '');
+      }
+    } catch (err) {
+      console.error('Zipnova status error', err);
+    }
+  }, []);
+
   const load = useCallback(async ({ sync = true } = {}) => {
     if (sync) {
       setSyncing(true);
@@ -171,15 +190,58 @@ export default function ZipnovaSection() {
   }, [search]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadStatus();
+  }, [loadStatus]);
+
+  useEffect(() => {
+    if (connected) {
+      load();
+    }
+  }, [connected, load]);
+
+  const handleConnect = async (e) => {
+    e.preventDefault();
+    setConnecting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/zipnova/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, secret }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo conectar');
+      setToken('');
+      setSecret('');
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'Error inesperado');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('¿Seguro que quieres desconectar la integración con Zipnova?')) return;
+    setConnecting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/zipnova/connect', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo desconectar');
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'Error inesperado');
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   const downloadLabels = async (groupOrShipment, shipmentsOrSingle) => {
-    // Handle both: downloadLabels('groupName', shipmentsArray) and downloadLabels(singleShipmentObject)
     const isSingleShipment = !shipmentsOrSingle && typeof groupOrShipment === 'object';
     const group = isSingleShipment ? `envio-${groupOrShipment.external_id || groupOrShipment.id}` : groupOrShipment;
     const shipments = isSingleShipment ? [groupOrShipment] : shipmentsOrSingle;
-    
+
     setDownloadingGroup(group);
     setError('');
     try {
@@ -227,54 +289,102 @@ export default function ZipnovaSection() {
       {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: '12px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>{warning}</div> : null}
 
-      <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
-        Ultima sincronizacion: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString('es-AR') : 'sin datos todavia'}
-      </div>
-
-      <div className="stats-grid" style={{ marginBottom: '18px' }}>
-        <div className="stat-card card accent"><div className="stat-value">{totalShipments}</div><div className="stat-label">Zipnova hoy</div></div>
-        <div className="stat-card card info"><div className="stat-value">{pendingShipments.length}</div><div className="stat-label">Pendientes</div></div>
-        <div className="stat-card card success"><div className="stat-value">{readyShipments.length}</div><div className="stat-label">Listos</div></div>
-      </div>
-
-      <div className="card" style={{ marginBottom: '18px' }}>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Buscar por External ID</label>
-            <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar envío Zipnova de hoy" />
-          </div>
-          <div className="form-group" style={{ maxWidth: '180px' }}>
-            <button type="button" className="btn btn-primary" onClick={load} disabled={loading}>
-              {loading && !syncing ? 'Cargando...' : 'Buscar'}
+      {!connected ? (
+        <div className="card" style={{ maxWidth: '520px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Zipnova</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+            Ingresá las credenciales de API de Zipnova para sincronizar envíos y descargar etiquetas.
+          </p>
+          <form onSubmit={handleConnect}>
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <label className="form-label">API Token</label>
+              <input
+                className="form-input"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Token de Zipnova"
+                required
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label">API Secret</label>
+              <input
+                className="form-input"
+                type="password"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                placeholder="Secret de Zipnova"
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={connecting || !token || !secret}>
+              {connecting ? 'Conectando...' : 'Conectar y guardar'}
             </button>
-          </div>
-          <div className="form-group" style={{ maxWidth: '220px' }}>
-            <button type="button" className="btn btn-ghost" onClick={() => load({ sync: true })} disabled={syncing}>
-              {syncing ? 'Sincronizando...' : 'Sincronizar ahora'}
-            </button>
-          </div>
+          </form>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="card" style={{ marginBottom: '12px' }}>
+            <div className="flex-between" style={{ flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                Integración activa {connectedAt ? `· Conectado el ${new Date(connectedAt).toLocaleString('es-AR')}` : ''}
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={connecting}>
+                {connecting ? 'Procesando...' : 'Desconectar / Cambiar credenciales'}
+              </button>
+            </div>
+          </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-        <SummaryBlock
-          title="Pendientes"
-          shipments={pendingShipments}
-          emptyLabel="No hay envíos nuevos pendientes."
-          downloadLabel={() => downloadLabels('pendientes', pendingShipments)}
-        />
-        <SummaryBlock
-          title="Listos para despachar"
-          shipments={readyShipments}
-          emptyLabel="No hay envíos listos para despacho."
-          downloadLabel={() => downloadLabels('listos-para-despachar', readyShipments)}
-        />
-      </div>
+          <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+            Ultima sincronizacion: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString('es-AR') : 'sin datos todavia'}
+          </div>
 
-      {downloadingGroup && (
-        <div className="card" style={{ marginTop: '18px' }}>
-          Descargando etiquetas del grupo: <strong>{downloadingGroup}</strong>
-        </div>
+          <div className="stats-grid" style={{ marginBottom: '18px' }}>
+            <div className="stat-card card accent"><div className="stat-value">{totalShipments}</div><div className="stat-label">Zipnova hoy</div></div>
+            <div className="stat-card card info"><div className="stat-value">{pendingShipments.length}</div><div className="stat-label">Pendientes</div></div>
+            <div className="stat-card card success"><div className="stat-value">{readyShipments.length}</div><div className="stat-label">Listos</div></div>
+          </div>
+
+          <div className="card" style={{ marginBottom: '18px' }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Buscar por External ID</label>
+                <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar envío Zipnova de hoy" />
+              </div>
+              <div className="form-group" style={{ maxWidth: '180px' }}>
+                <button type="button" className="btn btn-primary" onClick={load} disabled={loading}>
+                  {loading && !syncing ? 'Cargando...' : 'Buscar'}
+                </button>
+              </div>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <button type="button" className="btn btn-ghost" onClick={() => load({ sync: true })} disabled={syncing}>
+                  {syncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            <SummaryBlock
+              title="Pendientes"
+              shipments={pendingShipments}
+              emptyLabel="No hay envíos nuevos pendientes."
+              downloadLabel={() => downloadLabels('pendientes', pendingShipments)}
+            />
+            <SummaryBlock
+              title="Listos para despachar"
+              shipments={readyShipments}
+              emptyLabel="No hay envíos listos para despacho."
+              downloadLabel={() => downloadLabels('listos-para-despachar', readyShipments)}
+            />
+          </div>
+
+          {downloadingGroup && (
+            <div className="card" style={{ marginTop: '18px' }}>
+              Descargando etiquetas del grupo: <strong>{downloadingGroup}</strong>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

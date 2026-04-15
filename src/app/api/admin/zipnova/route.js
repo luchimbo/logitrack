@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { requireGlobalAdmin } from '@/lib/auth';
+import { requireWorkspaceAdmin } from '@/lib/auth';
 import { listStoredZipnovaToday, syncZipnovaVisibleShipments } from '@/lib/zipnovaStore';
+import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
 
 export async function GET(request) {
   try {
-    const authResult = await requireGlobalAdmin(request);
+    const authResult = await requireWorkspaceAdmin(request);
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
@@ -14,9 +15,11 @@ export async function GET(request) {
     const shouldSync = searchParams.get('sync') !== '0';
     let warning = '';
 
+    const client = await resolveZipnovaClient(authResult.actor.workspaceId);
+
     if (shouldSync) {
       try {
-        await syncZipnovaVisibleShipments({ externalId });
+        await syncZipnovaVisibleShipments({ externalId, client });
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Zipnova en vivo';
       }

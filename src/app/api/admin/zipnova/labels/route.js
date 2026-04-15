@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireGlobalAdmin } from '@/lib/auth';
+import { requireWorkspaceAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { markZipnovaShipmentsDownloaded } from '@/lib/zipnovaStore';
-import { getZipnovaShipmentDocumentation } from '@/lib/zipnovaClient';
+import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
 
 function decodeBase64ToBytes(base64) {
   return Uint8Array.from(Buffer.from(base64, 'base64'));
@@ -10,7 +10,7 @@ function decodeBase64ToBytes(base64) {
 
 export async function POST(request) {
   try {
-    const authResult = await requireGlobalAdmin(request);
+    const authResult = await requireWorkspaceAdmin(request);
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
@@ -23,6 +23,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No hay envíos para descargar etiquetas' }, { status: 400 });
     }
 
+    const client = await resolveZipnovaClient(authResult.actor.workspaceId);
+
     const { PDFDocument } = await import('pdf-lib');
     const mergedPdf = await PDFDocument.create();
     const downloadedShipmentIds = [];
@@ -30,7 +32,7 @@ export async function POST(request) {
 
     for (const shipmentId of shipmentIds) {
       try {
-        const documentation = await getZipnovaShipmentDocumentation(shipmentId, { what: 'label', format: 'pdf' });
+        const documentation = await client.getShipmentDocumentation(shipmentId, { what: 'label', format: 'pdf' });
         const rawBody = documentation?.body;
         const format = String(documentation?.format || 'pdf').toLowerCase();
 
