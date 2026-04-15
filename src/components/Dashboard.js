@@ -10,6 +10,7 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [shipments, setShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
+    const [shipmentFilter, setShipmentFilter] = useState('all');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [draftSpecificDate, setDraftSpecificDate] = useState(specificDate);
@@ -460,46 +461,64 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {shipments.length > 0 && (
-                    <div className="card" style={{ marginTop: '20px' }}>
-                        <button
-                            onClick={() => setShowShipments(v => !v)}
-                            style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                background: 'transparent',
-                                border: 'none',
-                                padding: '0',
-                                cursor: 'pointer',
-                                fontSize: '15px',
-                                fontWeight: 700,
-                                color: 'var(--text)'
-                            }}
-                        >
-                            <span>📦 Envíos del período ({shipments.length})</span>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                                {showShipments ? '▲ Ocultar' : '▼ Ver'}
-                            </span>
-                        </button>
+            </div>
 
-                        {showShipments && (
-                            <>
-                                {/* Desktop Table */}
-                                <div className="table-container" style={{ marginTop: '16px' }}>
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>Producto</th>
-                                                <th>Destinatario</th>
-                                                <th>Destino</th>
-                                                <th>Método</th>
-                                                <th>Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {shipments.map(s => (
+            {shipments.length > 0 && (
+                <div className="card" style={{ marginTop: '20px' }}>
+                    <button
+                        onClick={() => setShowShipments(v => !v)}
+                        style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '0',
+                            cursor: 'pointer',
+                            fontSize: '15px',
+                            fontWeight: 700,
+                            color: 'var(--text)'
+                        }}
+                    >
+                        <span>📦 Envíos del período ({shipments.length})</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {showShipments ? '▲ Ocultar' : '▼ Ver'}
+                        </span>
+                    </button>
+
+                    {showShipments && (
+                        <>
+                            <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Filtrar por:</label>
+                                <select
+                                    className="form-select"
+                                    value={shipmentFilter}
+                                    onChange={(e) => setShipmentFilter(e.target.value)}
+                                    style={{ minWidth: '140px', fontSize: '13px' }}
+                                >
+                                    <option value="all">Todos</option>
+                                    <option value="flex">Flex</option>
+                                    <option value="colecta">Colecta</option>
+                                </select>
+                            </div>
+
+                            {/* Desktop Table */}
+                            <div className="table-container" style={{ marginTop: '16px' }}>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Producto</th>
+                                            <th>Destinatario</th>
+                                            <th>Destino</th>
+                                            <th>Método</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {shipments
+                                            .filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter)
+                                            .map(s => (
                                                 <tr key={s.id}>
                                                     <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                                     <td>{s.recipient_name || 'N/A'}</td>
@@ -515,13 +534,15 @@ export default function Dashboard() {
                                                     <td>{s.status || '—'}</td>
                                                 </tr>
                                             ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                    </tbody>
+                                </table>
+                            </div>
 
-                                {/* Mobile Cards */}
-                                <div className="mobile-cards-container" style={{ marginTop: '16px' }}>
-                                    {shipments.map(s => (
+                            {/* Mobile Cards */}
+                            <div className="mobile-cards-container" style={{ marginTop: '16px' }}>
+                                {shipments
+                                    .filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter)
+                                    .map(s => (
                                         <div key={s.id} className="mobile-card">
                                             <div className="mobile-card-header">
                                                 <div className="mobile-card-title">{s.product_name}</div>
@@ -553,12 +574,11 @@ export default function Dashboard() {
                                             </div>
                                         </div>
                                     ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
