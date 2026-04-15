@@ -10,10 +10,18 @@ function getAuthHeader(token, secret) {
   return `Basic ${Buffer.from(raw).toString('base64')}`;
 }
 
-export function createZipnovaClient({ token, secret, baseUrl = ZIPNOVA_BASE_URL } = {}) {
+export function createZipnovaClient({ token, secret, accessToken, baseUrl = ZIPNOVA_BASE_URL } = {}) {
   const resolvedToken = token;
   const resolvedSecret = secret;
+  const resolvedAccessToken = accessToken;
   const resolvedBaseUrl = baseUrl || ZIPNOVA_BASE_URL;
+
+  function getAuthorizationHeader() {
+    if (resolvedAccessToken) {
+      return `Bearer ${resolvedAccessToken}`;
+    }
+    return getAuthHeader(resolvedToken, resolvedSecret);
+  }
 
   async function zipnovaFetch(path, options = {}) {
     const url = `${resolvedBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
@@ -22,7 +30,7 @@ export function createZipnovaClient({ token, secret, baseUrl = ZIPNOVA_BASE_URL 
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: getAuthHeader(resolvedToken, resolvedSecret),
+        Authorization: getAuthorizationHeader(),
         ...(options.headers || {}),
       },
       cache: 'no-store',

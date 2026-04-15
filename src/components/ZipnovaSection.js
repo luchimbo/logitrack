@@ -145,8 +145,6 @@ export default function ZipnovaSection({ currentUser }) {
 
   const [connected, setConnected] = useState(false);
   const [connectedAt, setConnectedAt] = useState('');
-  const [token, setToken] = useState('');
-  const [secret, setSecret] = useState('');
   const [connecting, setConnecting] = useState(false);
 
   const loadStatus = useCallback(async () => {
@@ -191,6 +189,21 @@ export default function ZipnovaSection({ currentUser }) {
   }, [search]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('zipnova_connected') === '1') {
+      setError('');
+      setWarning('Integración con Zipnova conectada correctamente.');
+      window.history.replaceState({}, '', window.location.pathname + '?tab=zipnova');
+      loadStatus();
+    }
+    const zipnovaError = params.get('zipnova_error');
+    if (zipnovaError) {
+      setError(decodeURIComponent(zipnovaError));
+      window.history.replaceState({}, '', window.location.pathname + '?tab=zipnova');
+    }
+  }, [loadStatus]);
+
+  useEffect(() => {
     loadStatus();
   }, [loadStatus]);
 
@@ -200,24 +213,20 @@ export default function ZipnovaSection({ currentUser }) {
     }
   }, [connected, load]);
 
-  const handleConnect = async (e) => {
-    e.preventDefault();
+  const handleConnect = async () => {
     setConnecting(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/zipnova/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, secret }),
-      });
+      const res = await fetch('/api/admin/zipnova/connect', { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo conectar');
-      setToken('');
-      setSecret('');
-      await loadStatus();
+      if (!res.ok) throw new Error(data.error || 'No se pudo iniciar la conexión');
+      if (data.authorizeUrl) {
+        window.location.href = data.authorizeUrl;
+      } else {
+        throw new Error('No se recibió la URL de autorización');
+      }
     } catch (err) {
       setError(err.message || 'Error inesperado');
-    } finally {
       setConnecting(false);
     }
   };
@@ -296,34 +305,11 @@ export default function ZipnovaSection({ currentUser }) {
           {canManageIntegration ? (
             <>
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-                Ingresá las credenciales de API de Zipnova para sincronizar envíos y descargar etiquetas.
+                Iniciá sesión con tu cuenta de Zipnova para autorizar a GeoModi a acceder a tus envíos.
               </p>
-              <form onSubmit={handleConnect}>
-                <div className="form-group" style={{ marginBottom: '12px' }}>
-                  <label className="form-label">API Token</label>
-                  <input
-                    className="form-input"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="Token de Zipnova"
-                    required
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">API Secret</label>
-                  <input
-                    className="form-input"
-                    type="password"
-                    value={secret}
-                    onChange={(e) => setSecret(e.target.value)}
-                    placeholder="Secret de Zipnova"
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary" disabled={connecting || !token || !secret}>
-                  {connecting ? 'Conectando...' : 'Conectar y guardar'}
-                </button>
-              </form>
+              <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
+                {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Zipnova'}
+              </button>
             </>
           ) : (
             <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>

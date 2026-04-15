@@ -7,6 +7,12 @@ export async function resolveZipnovaClient(workspaceId) {
   }
   try {
     const integration = await getIntegration({ workspaceId, provider: 'zipnova' });
+    if (integration?.config?.accessToken) {
+      return createZipnovaClient({
+        accessToken: integration.config.accessToken,
+        baseUrl: integration.config.baseUrl,
+      });
+    }
     if (integration?.config?.token && integration?.config?.secret) {
       return createZipnovaClient({
         token: integration.config.token,
