@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { requireWorkspaceAdmin } from '@/lib/auth';
+import { requireWorkspaceActor } from '@/lib/auth';
 import { normalizeZipnovaShipment } from '@/lib/zipnovaClient';
 import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
 
 export async function GET(request, { params }) {
   try {
-    const authResult = await requireWorkspaceAdmin(request);
+    const authResult = await requireWorkspaceActor(request);
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }

@@ -130,7 +130,8 @@ function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
   );
 }
 
-export default function ZipnovaSection() {
+export default function ZipnovaSection({ currentUser }) {
+  const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
   const [pendingShipments, setPendingShipments] = useState([]);
   const [readyShipments, setReadyShipments] = useState([]);
   const [totalShipments, setTotalShipments] = useState(0);
@@ -283,7 +284,7 @@ export default function ZipnovaSection() {
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">Zipnova</h2>
-        <p className="section-subtitle">Vista de super admin para Zipnova. Los grupos dependen de si la etiqueta fue descargada desde GeoModi, no del estado informado por Zipnova.</p>
+        <p className="section-subtitle">Integración con Zipnova. Los grupos dependen de si la etiqueta fue descargada desde GeoModi, no del estado informado por Zipnova.</p>
       </div>
 
       {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
@@ -292,35 +293,43 @@ export default function ZipnovaSection() {
       {!connected ? (
         <div className="card" style={{ maxWidth: '520px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Zipnova</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-            Ingresá las credenciales de API de Zipnova para sincronizar envíos y descargar etiquetas.
-          </p>
-          <form onSubmit={handleConnect}>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <label className="form-label">API Token</label>
-              <input
-                className="form-input"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Token de Zipnova"
-                required
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label">API Secret</label>
-              <input
-                className="form-input"
-                type="password"
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-                placeholder="Secret de Zipnova"
-                required
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={connecting || !token || !secret}>
-              {connecting ? 'Conectando...' : 'Conectar y guardar'}
-            </button>
-          </form>
+          {canManageIntegration ? (
+            <>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+                Ingresá las credenciales de API de Zipnova para sincronizar envíos y descargar etiquetas.
+              </p>
+              <form onSubmit={handleConnect}>
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label className="form-label">API Token</label>
+                  <input
+                    className="form-input"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="Token de Zipnova"
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">API Secret</label>
+                  <input
+                    className="form-input"
+                    type="password"
+                    value={secret}
+                    onChange={(e) => setSecret(e.target.value)}
+                    placeholder="Secret de Zipnova"
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={connecting || !token || !secret}>
+                  {connecting ? 'Conectando...' : 'Conectar y guardar'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+              Zipnova no está configurado para este workspace. Contactá a un administrador para conectar la integración.
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -329,9 +338,11 @@ export default function ZipnovaSection() {
               <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                 Integración activa {connectedAt ? `· Conectado el ${new Date(connectedAt).toLocaleString('es-AR')}` : ''}
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={connecting}>
-                {connecting ? 'Procesando...' : 'Desconectar / Cambiar credenciales'}
-              </button>
+              {canManageIntegration ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={connecting}>
+                  {connecting ? 'Procesando...' : 'Desconectar / Cambiar credenciales'}
+                </button>
+              ) : null}
             </div>
           </div>
 

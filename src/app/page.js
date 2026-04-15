@@ -124,7 +124,7 @@ export default function Home() {
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
-      case "zipnova": return canManageWorkspace ? <ZipnovaSection /> : <div>No autorizado</div>;
+      case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -147,6 +147,12 @@ export default function Home() {
       items: [
         { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
         { id: "carrierView", icon: "🚛", label: "Transportistas" },
+      ],
+    },
+    {
+      title: "Integraciones",
+      items: [
+        { id: "zipnova", icon: "📮", label: "Zipnova" },
       ],
     },
   ];

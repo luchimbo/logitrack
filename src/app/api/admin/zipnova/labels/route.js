@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireWorkspaceAdmin } from '@/lib/auth';
+import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { markZipnovaShipmentsDownloaded } from '@/lib/zipnovaStore';
 import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
@@ -10,7 +10,7 @@ function decodeBase64ToBytes(base64) {
 
 export async function POST(request) {
   try {
-    const authResult = await requireWorkspaceAdmin(request);
+    const authResult = await requireWorkspaceActor(request);
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
