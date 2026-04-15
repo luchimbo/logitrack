@@ -140,18 +140,38 @@ export default function TiendanubeSection({ currentUser }) {
   const [connected, setConnected] = useState(false);
   const [connectedAt, setConnectedAt] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [verifyAfterOauth, setVerifyAfterOauth] = useState(false);
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (retries = 5) => {
     try {
       const res = await fetch('/api/admin/tiendanube/status');
       const data = await res.json();
       if (res.ok) {
         setConnected(Boolean(data.connected));
         setConnectedAt(data.connectedAt || '');
+        if (!data.connected && retries > 0) {
+          setWarning('Verificando conexión con Tiendanube...');
+          setTimeout(() => loadStatus(retries - 1), 2500);
+          return;
+        }
+      } else {
+        if (retries > 0) {
+          setWarning('Verificando conexión con Tiendanube...');
+          setTimeout(() => loadStatus(retries - 1), 2500);
+          return;
+        }
+        setError(data.error || 'Error consultando estado de Tiendanube');
       }
     } catch (err) {
       console.error('Tiendanube status error', err);
+      if (retries > 0) {
+        setWarning('Verificando conexión con Tiendanube...');
+        setTimeout(() => loadStatus(retries - 1), 2500);
+        return;
+      }
+      setError('No se pudo verificar el estado de la conexión con Tiendanube');
     }
+    setVerifyAfterOauth(false);
   }, []);
 
   const load = useCallback(async ({ sync = true } = {}) => {
@@ -185,7 +205,8 @@ export default function TiendanubeSection({ currentUser }) {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tiendanube_connected') === '1') {
       setError('');
-      setWarning('Integración con Tiendanube conectada correctamente.');
+      setWarning('Integración con Tiendanube conectada. Verificando...');
+      setVerifyAfterOauth(true);
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
       loadStatus();
     }
@@ -255,23 +276,35 @@ export default function TiendanubeSection({ currentUser }) {
       {warning ? <div className="card" style={{ marginBottom: '12px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>{warning}</div> : null}
 
       {!connected ? (
-        <div className="card" style={{ maxWidth: '520px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Tiendanube</h3>
-          {canManageIntegration ? (
-            <>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-                Iniciá sesión con tu cuenta de Tiendanube para sincronizar pedidos.
-              </p>
-              <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
-                {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Tiendanube'}
-              </button>
-            </>
-          ) : (
-            <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-              Tiendanube no está configurado para este workspace. Contactá a un administrador para conectar la integración.
+        verifyAfterOauth ? (
+          <div className="card" style={{ maxWidth: '520px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Verificando conexión</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+              La autorización con Tiendanube se completó, pero estamos esperando confirmarla en GeoModi. Si esto persiste, probá recargar la página.
             </p>
-          )}
-        </div>
+            <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+              Recargar página
+            </button>
+          </div>
+        ) : (
+          <div className="card" style={{ maxWidth: '520px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Tiendanube</h3>
+            {canManageIntegration ? (
+              <>
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+                  Iniciá sesión con tu cuenta de Tiendanube para sincronizar pedidos.
+                </p>
+                <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
+                  {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Tiendanube'}
+                </button>
+              </>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                Tiendanube no está configurado para este workspace. Contactá a un administrador para conectar la integración.
+              </p>
+            )}
+          </div>
+        )
       ) : (
         <>
           <div className="card" style={{ marginBottom: '12px' }}>
