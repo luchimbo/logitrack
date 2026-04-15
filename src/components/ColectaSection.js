@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import LabelViewer from "./LabelViewer";
 
 export default function ColectaSection() {
     const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -108,13 +110,22 @@ export default function ColectaSection() {
                                     <td>{s.recipient_name || 'N/A'}</td>
                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                     <td>
-                                        <button
-                                            className="btn btn-sm"
-                                            style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
-                                            onClick={() => handleDeleteShipment(s.id)}
-                                        >
-                                            🗑️ Eliminar
-                                        </button>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setViewingLabelId(s.id)}
+                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                            >
+                                                Ver etiqueta
+                                            </button>
+                                            <button
+                                                className="btn btn-sm"
+                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                onClick={() => handleDeleteShipment(s.id)}
+                                            >
+                                                🗑️ Eliminar
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -142,6 +153,13 @@ export default function ColectaSection() {
                             <div className="mobile-card-actions">
                                 <button
                                     className="btn btn-sm"
+                                    onClick={() => setViewingLabelId(s.id)}
+                                    style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                >
+                                    Ver etiqueta
+                                </button>
+                                <button
+                                    className="btn btn-sm"
                                     style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                     onClick={() => handleDeleteShipment(s.id)}
                                 >
@@ -152,6 +170,8 @@ export default function ColectaSection() {
                     ))}
                 </div>
             </div>
+
+            <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>
     );
 }

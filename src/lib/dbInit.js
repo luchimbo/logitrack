@@ -310,6 +310,7 @@ export async function initDb() {
   };
 
   await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
+  await addColumnIfMissing("shipments", "raw_zpl", "TEXT");
   await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
   await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");

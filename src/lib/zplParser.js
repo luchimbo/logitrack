@@ -797,6 +797,7 @@ export function parseZplFile(content) {
     let match;
 
     while ((match = regex.exec(content)) !== null) {
+        const rawZpl = match[0];
         const labelContent = match[1];
         if (labelContent.trim().length < 50) continue;
 
@@ -811,6 +812,7 @@ export function parseZplFile(content) {
 
         const hasIdentity = shipment && (shipment.product_name || shipment.tracking_number || shipment.sku);
         if (hasIdentity) {
+            shipment.raw_zpl = rawZpl;
             labels.push(shipment);
         }
     }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import LabelViewer from "./LabelViewer";
 
 // Reverse lookup: partido_id -> zone group name
 const PARTIDO_ZONES = {
@@ -44,6 +45,7 @@ export default function FlexSection() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedZone, setSelectedZone] = useState(null);
+    const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
     const loadData = useCallback(async (opts = {}) => {
@@ -284,6 +286,7 @@ export default function FlexSection() {
                                         <th>Destino</th>
                                         <th>Partido Detectado</th>
                                         <th>Transportista</th>
+                                        <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -311,6 +314,15 @@ export default function FlexSection() {
                                                         ))}
                                                     </select>
                                                 </td>
+                                                <td>
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        onClick={() => setViewingLabelId(s.id)}
+                                                        style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                    >
+                                                        Ver etiqueta
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))
                                     )}
@@ -324,7 +336,7 @@ export default function FlexSection() {
                                 <p style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>No hay envíos en esta zona</p>
                             ) : (
                                 shipmentsByZone[selectedZone]?.map(s => (
-                                    <div key={s.id} className="mobile-card">
+                                            <div key={s.id} className="mobile-card">
                                         <div className="mobile-card-header">
                                             <div className="mobile-card-title">{s.product_name}</div>
                                         </div>
@@ -352,6 +364,15 @@ export default function FlexSection() {
                                                     ))}
                                                 </select>
                                             </div>
+                                        </div>
+                                        <div className="mobile-card-actions">
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setViewingLabelId(s.id)}
+                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                            >
+                                                Ver etiqueta
+                                            </button>
                                         </div>
                                     </div>
                                 ))
@@ -400,6 +421,13 @@ export default function FlexSection() {
                                             <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                             <td>{s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</td>
                                             <td style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={() => setViewingLabelId(s.id)}
+                                                    style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                >
+                                                    Ver etiqueta
+                                                </button>
                                                 <select
                                                     style={getCarrierSelectStyle(s.assigned_carrier)}
                                                     value={s.assigned_carrier || ''}
@@ -442,6 +470,13 @@ export default function FlexSection() {
                                         </div>
                                     </div>
                                     <div className="mobile-card-actions">
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => setViewingLabelId(s.id)}
+                                            style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                        >
+                                            Ver etiqueta
+                                        </button>
                                         <select
                                             style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
                                             value={s.assigned_carrier || ''}
@@ -483,6 +518,13 @@ export default function FlexSection() {
                                         <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                         <td>{s.partido || '—'}</td>
                                         <td style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setViewingLabelId(s.id)}
+                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                            >
+                                                Ver etiqueta
+                                            </button>
                                             <select
                                                 style={getCarrierSelectStyle(s.assigned_carrier)}
                                                 value={s.assigned_carrier || ''}
@@ -525,6 +567,13 @@ export default function FlexSection() {
                                     </div>
                                 </div>
                                 <div className="mobile-card-actions">
+                                    <button
+                                        className="btn btn-sm"
+                                        onClick={() => setViewingLabelId(s.id)}
+                                        style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                    >
+                                        Ver etiqueta
+                                    </button>
                                     <select
                                         style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
                                         value={s.assigned_carrier || ''}
@@ -548,6 +597,8 @@ export default function FlexSection() {
                     </div>
                 </div>
             )}
+
+            <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>
     );
 }

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import LabelViewer from "./LabelViewer";
 
 export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
@@ -12,6 +13,7 @@ export default function UploadSection() {
     const [todayShipments, setTodayShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
     const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
+    const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
     const fileInputRef = useRef(null);
@@ -323,10 +325,19 @@ export default function UploadSection() {
                                                         {s.shipping_method || 'colecta'}
                                                     </span>
                                                 </td>
-                                                <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
-                                                <td>
+                                            <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        onClick={() => setViewingLabelId(s.id)}
+                                                        style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                    >
+                                                        Ver etiqueta
+                                                    </button>
                                                     <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
-                                                </td>
+                                                </div>
+                                            </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -358,6 +369,13 @@ export default function UploadSection() {
                                             </div>
                                         </div>
                                         <div className="mobile-card-actions">
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setViewingLabelId(s.id)}
+                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                            >
+                                                Ver etiqueta
+                                            </button>
                                             <button 
                                                 className="btn btn-sm" 
                                                 onClick={() => handleDeleteShipment(s.id)}
@@ -377,6 +395,8 @@ export default function UploadSection() {
                     )}
                 </div>
             </div>
+
+            <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>
     );
 }

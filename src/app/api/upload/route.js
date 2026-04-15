@@ -116,6 +116,7 @@ export async function POST(request) {
                 toDbValue(s.assigned_carrier),
                 toDbValue(s.dispatch_date),
                 toDbValue(s.delivery_date),
+                toDbValue(s.raw_zpl),
             ];
 
             await db.execute({
@@ -125,14 +126,14 @@ export async function POST(request) {
           recipient_name, recipient_user, address, postal_code, 
           city, partido, province, reference, shipping_method, 
           carrier_code, carrier_name, assigned_carrier, 
-          dispatch_date, delivery_date, status
+          dispatch_date, delivery_date, status, raw_zpl
         ) VALUES (
           ?, ?, ?, ?, ?, ?, 
           ?, ?, ?, ?, ?, 
           ?, ?, ?, ?, 
           ?, ?, ?, ?, ?, 
           ?, ?, ?, 
-          ?, ?, 'pendiente'
+          ?, ?, 'pendiente', ?
         )`,
                 args
             });

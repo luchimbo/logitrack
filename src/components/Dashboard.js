@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import LabelViewer from "./LabelViewer";
 
 export default function Dashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
@@ -19,6 +20,7 @@ export default function Dashboard() {
     const [draftRangeTo, setDraftRangeTo] = useState(rangeTo);
     const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
     const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
+    const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
     const PERIODS = [
@@ -513,6 +515,7 @@ export default function Dashboard() {
                                             <th>Destino</th>
                                             <th>Método</th>
                                             <th>Estado</th>
+                                            <th>Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -532,6 +535,15 @@ export default function Dashboard() {
                                                         </span>
                                                     </td>
                                                     <td>{s.status || '—'}</td>
+                                                    <td>
+                                                        <button
+                                                            className="btn btn-sm"
+                                                            onClick={() => setViewingLabelId(s.id)}
+                                                            style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                        >
+                                                            Ver etiqueta
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                     </tbody>
@@ -572,6 +584,15 @@ export default function Dashboard() {
                                                     <span className="mobile-card-value">{s.status || '—'}</span>
                                                 </div>
                                             </div>
+                                            <div className="mobile-card-actions">
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={() => setViewingLabelId(s.id)}
+                                                    style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                >
+                                                    Ver etiqueta
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                             </div>
@@ -579,6 +600,8 @@ export default function Dashboard() {
                     )}
                 </div>
             )}
+
+            <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>
     );
 }

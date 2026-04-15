@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import LabelViewer from "./LabelViewer";
 
 export default function CarrierView() {
     const { getTodayQueryString } = useBatch();
@@ -11,6 +12,7 @@ export default function CarrierView() {
     const [carriers, setCarriers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -148,6 +150,13 @@ export default function CarrierView() {
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
                                         <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => setViewingLabelId(s.id)}
+                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                            >
+                                                Ver etiqueta
+                                            </button>
                                             <select
                                                 style={getCarrierSelectStyle(s.assigned_carrier)}
                                                 value={s.assigned_carrier || ''}
@@ -173,6 +182,8 @@ export default function CarrierView() {
                     </div>
                 ))}
             </div>
+
+            <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>
     );
 }
