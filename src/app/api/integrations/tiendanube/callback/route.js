@@ -8,14 +8,14 @@ const BASE_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geomodi.ai';
 async function saveOauthSession({ storeId, accessToken, scope }) {
   await ensureDb();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutos
+  // SQLite en Turso no soporta ON CONFLICT sin UNIQUE constraint explícito
+  await db.execute({
+    sql: `DELETE FROM tiendanube_oauth_sessions WHERE store_id = ?`,
+    args: [storeId],
+  });
   await db.execute({
     sql: `INSERT INTO tiendanube_oauth_sessions (store_id, access_token, scope, expires_at)
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT(store_id) DO UPDATE SET
-            access_token = excluded.access_token,
-            scope = excluded.scope,
-            expires_at = excluded.expires_at,
-            created_at = CURRENT_TIMESTAMP`,
+          VALUES (?, ?, ?, ?)`,
     args: [storeId, accessToken, scope || '', expiresAt],
   });
 }

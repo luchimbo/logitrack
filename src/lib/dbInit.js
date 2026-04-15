@@ -258,13 +258,12 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_created ON tiendanube_orders(created_at_external)`,
     `CREATE TABLE IF NOT EXISTS tiendanube_oauth_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      store_id TEXT NOT NULL,
+      store_id TEXT NOT NULL UNIQUE,
       access_token TEXT NOT NULL,
       scope TEXT,
       expires_at DATETIME NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_tiendanube_oauth_sessions_store ON tiendanube_oauth_sessions(store_id)`
+    )`
   ];
 
   for (const stmt of statements) {
