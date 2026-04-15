@@ -4,25 +4,32 @@ import { saveIntegration } from '@/lib/integrationService';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 
-async function popOauthSession(storeId) {
+async function popOauthSession(storeId, retries = 5) {
   await ensureDb();
-  const result = await db.execute({
-    sql: `SELECT access_token, scope, expires_at
-          FROM tiendanube_oauth_sessions
-          WHERE store_id = ? AND expires_at > datetime('now')
-          LIMIT 1`,
-    args: [storeId],
-  });
-  if (!result.rows.length) return null;
-  const row = result.rows[0];
-  await db.execute({
-    sql: `DELETE FROM tiendanube_oauth_sessions WHERE store_id = ?`,
-    args: [storeId],
-  });
-  return {
-    accessToken: row.access_token,
-    scope: row.scope,
-  };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const result = await db.execute({
+      sql: `SELECT access_token, scope, expires_at
+            FROM tiendanube_oauth_sessions
+            WHERE store_id = ? AND expires_at > datetime('now')
+            LIMIT 1`,
+      args: [storeId],
+    });
+    if (result.rows.length) {
+      const row = result.rows[0];
+      await db.execute({
+        sql: `DELETE FROM tiendanube_oauth_sessions WHERE store_id = ?`,
+        args: [storeId],
+      });
+      return {
+        accessToken: row.access_token,
+        scope: row.scope,
+      };
+    }
+    if (attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+  return null;
 }
 
 export async function POST(request) {

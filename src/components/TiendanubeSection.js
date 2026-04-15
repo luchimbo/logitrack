@@ -141,6 +141,7 @@ export default function TiendanubeSection({ currentUser }) {
   const [connectedAt, setConnectedAt] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [verifyAfterOauth, setVerifyAfterOauth] = useState(false);
+  const [pendingStoreId, setPendingStoreId] = useState('');
 
   const loadStatus = useCallback(async (retries = 5) => {
     try {
@@ -201,6 +202,25 @@ export default function TiendanubeSection({ currentUser }) {
     }
   }, [search, statusFilter, paymentFilter]);
 
+  const finishConnection = async (storeId) => {
+    try {
+      const res = await fetch('/api/admin/tiendanube/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo finalizar la conexión');
+      setWarning('Integración con Tiendanube conectada correctamente.');
+      setPendingStoreId('');
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'Error inesperado');
+      setWarning('');
+      setVerifyAfterOauth(false);
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const storeId = params.get('tiendanube_store_id');
@@ -210,31 +230,16 @@ export default function TiendanubeSection({ currentUser }) {
       setError('');
       setWarning('Finalizando conexión con Tiendanube...');
       setVerifyAfterOauth(true);
+      setPendingStoreId(storeId);
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
-
-      (async () => {
-        try {
-          const res = await fetch('/api/admin/tiendanube/finish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storeId }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'No se pudo finalizar la conexión');
-          setWarning('Integración con Tiendanube conectada correctamente.');
-          await loadStatus();
-        } catch (err) {
-          setError(err.message || 'Error inesperado');
-          setWarning('');
-          setVerifyAfterOauth(false);
-        }
-      })();
+      finishConnection(storeId);
     }
 
     if (tiendanubeError) {
       setError(decodeURIComponent(tiendanubeError));
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
       setVerifyAfterOauth(false);
+      setPendingStoreId('');
     }
   }, [loadStatus]);
 
@@ -307,6 +312,21 @@ export default function TiendanubeSection({ currentUser }) {
               Recargar página
             </button>
           </div>
+        ) : pendingStoreId ? (
+          <div className="card" style={{ maxWidth: '520px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>No se pudo completar la conexión</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+              Hubo un problema al vincular la autorización de Tiendanube con GeoModi. Probá de nuevo en unos segundos.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="btn btn-primary" onClick={() => finishConnection(pendingStoreId)} disabled={connecting}>
+                {connecting ? 'Reintentando...' : 'Reintentar'}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingStoreId('')}>
+                Cancelar
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="card" style={{ maxWidth: '520px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Tiendanube</h3>
@@ -318,6 +338,9 @@ export default function TiendanubeSection({ currentUser }) {
                 <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
                   {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Tiendanube'}
                 </button>
+                <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '12px' }}>
+                  <strong>Nota:</strong> si ya conectaste otra tienda y querés cambiar a tu tienda real, primero desconectá la actual.
+                </p>
               </>
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
@@ -334,12 +357,17 @@ export default function TiendanubeSection({ currentUser }) {
                 Integración activa {connectedAt ? `· Conectado el ${new Date(connectedAt).toLocaleString('es-AR')}` : ''}
               </div>
               {canManageIntegration ? (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={connecting}>
+                <button type="button" className="btn btn-ghost" onClick={handleDisconnect} disabled={connecting}>
                   {connecting ? 'Procesando...' : 'Desconectar / Cambiar credenciales'}
                 </button>
               ) : null}
             </div>
           </div>
+          {canManageIntegration ? (
+            <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+              Si querés cambiar a otra tienda Tiendanube, desconectá esta integración y volvé a conectar con la cuenta de la tienda deseada.
+            </div>
+          ) : null}
 
           <div className="stats-grid" style={{ marginBottom: '18px' }}>
             <div className="stat-card card accent"><div className="stat-value">{orders.length}</div><div className="stat-label">Total pedidos</div></div>
