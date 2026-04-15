@@ -19,13 +19,13 @@ export async function GET(request, { params }) {
         });
 
         if (result.rows.length === 0) {
-            return NextResponse.json({ error: "Shipment not found" }, { status: 404 });
+            return NextResponse.json({ error: "Envío no encontrado" }, { status: 404 });
         }
 
         const rawZpl = result.rows[0].raw_zpl;
 
         if (!rawZpl) {
-            return NextResponse.json({ error: "Label not available for this shipment" }, { status: 404 });
+            return NextResponse.json({ error: "Etiqueta no disponible. Este envío fue cargado antes de activar la vista previa." }, { status: 404 });
         }
 
         return new NextResponse(rawZpl, {

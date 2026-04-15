@@ -30,7 +30,7 @@ export async function GET(request) {
         const rawZpl = result.rows[0].raw_zpl;
 
         if (!rawZpl) {
-            return NextResponse.json({ error: "Label not available for this shipment" }, { status: 404 });
+            return NextResponse.json({ error: "Etiqueta no disponible. Este envío fue cargado antes de activar la vista previa." }, { status: 404 });
         }
 
         const labelaryUrl = 'http://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/';

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
+import { api, toast, downloadLabelZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
@@ -295,6 +295,15 @@ export default function Dashboard() {
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
 
+    const handleDownloadLabel = async (id) => {
+        try {
+            await downloadLabelZpl(id);
+            toast('Etiqueta descargada', 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiqueta', 'error');
+        }
+    };
+
     return (
         <div className="section active">
             <div className="section-header">
@@ -536,13 +545,22 @@ export default function Dashboard() {
                                                     </td>
                                                     <td>{s.status || '—'}</td>
                                                     <td>
-                                                        <button
-                                                            className="btn btn-sm"
-                                                            onClick={() => setViewingLabelId(s.id)}
-                                                            style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
-                                                        >
-                                                            Ver etiqueta
-                                                        </button>
+                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                            <button
+                                                                className="btn btn-sm"
+                                                                onClick={() => setViewingLabelId(s.id)}
+                                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                            >
+                                                                Ver
+                                                            </button>
+                                                            <button
+                                                                className="btn btn-sm"
+                                                                onClick={() => handleDownloadLabel(s.id)}
+                                                                style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                                            >
+                                                                Descargar
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -590,7 +608,14 @@ export default function Dashboard() {
                                                     onClick={() => setViewingLabelId(s.id)}
                                                     style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
                                                 >
-                                                    Ver etiqueta
+                                                    Ver
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={() => handleDownloadLabel(s.id)}
+                                                    style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                                >
+                                                    Descargar
                                                 </button>
                                             </div>
                                         </div>

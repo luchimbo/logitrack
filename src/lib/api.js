@@ -18,6 +18,24 @@ export async function api(path, options = {}) {
     return res.json();
 }
 
+export async function downloadLabelZpl(shipmentId) {
+    const response = await fetch(`/api/shipments/${shipmentId}/label`);
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Error al descargar");
+    }
+    const zpl = await response.text();
+    const blob = new Blob([zpl], { type: "application/x-www-form-urlencoded" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `etiqueta-${shipmentId}.zpl`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 export function toast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return; // Fallback if container not rendered yet

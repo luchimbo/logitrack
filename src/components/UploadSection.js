@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { api, toast } from "@/lib/api";
+import { api, toast, downloadLabelZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
@@ -155,6 +155,15 @@ export default function UploadSection() {
             toast('Lote eliminado', 'success');
         } catch (err) {
             toast('Error al eliminar lote', 'error');
+        }
+    };
+
+    const handleDownloadLabel = async (id) => {
+        try {
+            await downloadLabelZpl(id);
+            toast('Etiqueta descargada', 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiqueta', 'error');
         }
     };
 
@@ -327,13 +336,20 @@ export default function UploadSection() {
                                                 </td>
                                             <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{s.status}</td>
                                             <td>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                     <button
                                                         className="btn btn-sm"
                                                         onClick={() => setViewingLabelId(s.id)}
                                                         style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
                                                     >
                                                         Ver etiqueta
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        onClick={() => handleDownloadLabel(s.id)}
+                                                        style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                                    >
+                                                        Descargar
                                                     </button>
                                                     <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
                                                 </div>
@@ -374,14 +390,21 @@ export default function UploadSection() {
                                                 onClick={() => setViewingLabelId(s.id)}
                                                 style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
                                             >
-                                                Ver etiqueta
+                                                Ver
+                                            </button>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => handleDownloadLabel(s.id)}
+                                                style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                            >
+                                                Descargar
                                             </button>
                                             <button 
                                                 className="btn btn-sm" 
                                                 onClick={() => handleDeleteShipment(s.id)}
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                             >
-                                                🗑️ Eliminar
+                                                🗑️
                                             </button>
                                         </div>
                                     </div>

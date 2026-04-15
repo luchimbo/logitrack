@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { api, toast } from "@/lib/api";
 
 export default function LabelViewer({ shipmentId, onClose }) {
@@ -38,6 +39,15 @@ export default function LabelViewer({ shipmentId, onClose }) {
             }
         };
     }, [loadLabel]);
+
+    useEffect(() => {
+        if (!shipmentId) return;
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = originalOverflow;
+        };
+    }, [shipmentId]);
 
     const handleDownload = async () => {
         if (!shipmentId) return;
@@ -83,7 +93,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
 
     if (!shipmentId) return null;
 
-    return (
+    return createPortal(
         <div className="label-modal-overlay" onClick={onClose}>
             <div className="label-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="label-modal-header">
@@ -119,6 +129,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

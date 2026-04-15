@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast } from "@/lib/api";
+import { api, toast, downloadLabelZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
@@ -68,6 +68,15 @@ export default function CarrierView() {
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
+        }
+    };
+
+    const handleDownloadLabel = async (id) => {
+        try {
+            await downloadLabelZpl(id);
+            toast('Etiqueta descargada', 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiqueta', 'error');
         }
     };
 
@@ -149,13 +158,20 @@ export default function CarrierView() {
                                     <div className="destination">📍 {s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</div>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                                         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
-                                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                                             <button
                                                 className="btn btn-sm"
                                                 onClick={() => setViewingLabelId(s.id)}
                                                 style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
                                             >
-                                                Ver etiqueta
+                                                Ver
+                                            </button>
+                                            <button
+                                                className="btn btn-sm"
+                                                onClick={() => handleDownloadLabel(s.id)}
+                                                style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                            >
+                                                Descargar
                                             </button>
                                             <select
                                                 style={getCarrierSelectStyle(s.assigned_carrier)}
