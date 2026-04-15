@@ -146,6 +146,9 @@ export default function ZipnovaSection({ currentUser }) {
   const [connected, setConnected] = useState(false);
   const [connectedAt, setConnectedAt] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [token, setToken] = useState('');
+  const [secret, setSecret] = useState('');
 
   const loadStatus = useCallback(async () => {
     try {
@@ -219,7 +222,14 @@ export default function ZipnovaSection({ currentUser }) {
     try {
       const res = await fetch('/api/admin/zipnova/connect', { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo iniciar la conexión');
+      if (!res.ok) {
+        if (data.oauthConfigured === false) {
+          setShowManualForm(true);
+          setConnecting(false);
+          return;
+        }
+        throw new Error(data.error || 'No se pudo iniciar la conexión');
+      }
       if (data.authorizeUrl) {
         window.location.href = data.authorizeUrl;
       } else {
@@ -227,6 +237,29 @@ export default function ZipnovaSection({ currentUser }) {
       }
     } catch (err) {
       setError(err.message || 'Error inesperado');
+      setConnecting(false);
+    }
+  };
+
+  const handleManualConnect = async (e) => {
+    e.preventDefault();
+    setConnecting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/zipnova/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, secret }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo conectar');
+      setToken('');
+      setSecret('');
+      setShowManualForm(false);
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'Error inesperado');
+    } finally {
       setConnecting(false);
     }
   };
@@ -304,12 +337,63 @@ export default function ZipnovaSection({ currentUser }) {
           <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Conectar con Zipnova</h3>
           {canManageIntegration ? (
             <>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-                Iniciá sesión con tu cuenta de Zipnova para autorizar a GeoModi a acceder a tus envíos.
-              </p>
-              <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
-                {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Zipnova'}
-              </button>
+              {!showManualForm ? (
+                <>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+                    Iniciá sesión con tu cuenta de Zipnova para autorizar a GeoModi a acceder a tus envíos.
+                  </p>
+                  <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
+                    {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Zipnova'}
+                  </button>
+                  <div style={{ marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setShowManualForm(true)}
+                      disabled={connecting}
+                    >
+                      O conectar manualmente con Token y Secret
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+                    Ingresá las credenciales de API de Zipnova para sincronizar envíos y descargar etiquetas.
+                  </p>
+                  <form onSubmit={handleManualConnect}>
+                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                      <label className="form-label">API Token</label>
+                      <input
+                        className="form-input"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        placeholder="Token de Zipnova"
+                        required
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                      <label className="form-label">API Secret</label>
+                      <input
+                        className="form-input"
+                        type="password"
+                        value={secret}
+                        onChange={(e) => setSecret(e.target.value)}
+                        placeholder="Secret de Zipnova"
+                        required
+                      />
+                    </div>
+                    <div className="flex-between" style={{ gap: '8px' }}>
+                      <button type="submit" className="btn btn-primary" disabled={connecting || !token || !secret}>
+                        {connecting ? 'Conectando...' : 'Conectar y guardar'}
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowManualForm(false)}>
+                        Volver
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </>
           ) : (
             <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
