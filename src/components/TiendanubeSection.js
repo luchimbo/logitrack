@@ -203,17 +203,38 @@ export default function TiendanubeSection({ currentUser }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('tiendanube_connected') === '1') {
+    const storeId = params.get('tiendanube_store_id');
+    const tiendanubeError = params.get('tiendanube_error');
+
+    if (storeId) {
       setError('');
-      setWarning('Integración con Tiendanube conectada. Verificando...');
+      setWarning('Finalizando conexión con Tiendanube...');
       setVerifyAfterOauth(true);
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
-      loadStatus();
+
+      (async () => {
+        try {
+          const res = await fetch('/api/admin/tiendanube/finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storeId }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'No se pudo finalizar la conexión');
+          setWarning('Integración con Tiendanube conectada correctamente.');
+          await loadStatus();
+        } catch (err) {
+          setError(err.message || 'Error inesperado');
+          setWarning('');
+          setVerifyAfterOauth(false);
+        }
+      })();
     }
-    const tiendanubeError = params.get('tiendanube_error');
+
     if (tiendanubeError) {
       setError(decodeURIComponent(tiendanubeError));
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
+      setVerifyAfterOauth(false);
     }
   }, [loadStatus]);
 
@@ -278,9 +299,9 @@ export default function TiendanubeSection({ currentUser }) {
       {!connected ? (
         verifyAfterOauth ? (
           <div className="card" style={{ maxWidth: '520px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Verificando conexión</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Finalizando conexión</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-              La autorización con Tiendanube se completó, pero estamos esperando confirmarla en GeoModi. Si esto persiste, probá recargar la página.
+              Estamos vinculando tu tienda Tiendanube con este workspace. Esperá un momento...
             </p>
             <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
               Recargar página

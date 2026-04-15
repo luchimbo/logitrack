@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceAdmin } from '@/lib/auth';
 import { deleteIntegration } from '@/lib/integrationService';
-import { buildTiendanubeAuthorizeUrl, encodeTiendanubeState, isTiendanubeOAuthConfigured } from '@/lib/tiendanubeOAuth';
+import { buildTiendanubeAuthorizeUrl, isTiendanubeOAuthConfigured } from '@/lib/tiendanubeOAuth';
 
 export async function POST(request) {
   try {
@@ -23,19 +23,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No se pudo determinar el workspace' }, { status: 400 });
     }
 
-    const state = encodeTiendanubeState({ workspaceId, appUserId });
-    const authorizeUrl = buildTiendanubeAuthorizeUrl({ state });
+    const authorizeUrl = buildTiendanubeAuthorizeUrl({});
 
-    const response = NextResponse.json({ authorizeUrl });
-    response.cookies.set('tiendanube_oauth_state', state, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      maxAge: 60 * 10,
-      path: '/',
-    });
-
-    return response;
+    return NextResponse.json({ authorizeUrl });
   } catch (error) {
     console.error('Tiendanube connect error:', error);
     return NextResponse.json({ error: error.message || 'Error al iniciar conexion con Tiendanube' }, { status: 500 });
