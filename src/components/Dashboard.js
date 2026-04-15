@@ -8,6 +8,8 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 export default function Dashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
     const [data, setData] = useState(null);
+    const [shipments, setShipments] = useState([]);
+    const [showShipments, setShowShipments] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [draftSpecificDate, setDraftSpecificDate] = useState(specificDate);
@@ -187,8 +189,12 @@ export default function Dashboard() {
             setError(null);
             try {
                 const qs = getQueryString();
-                const result = await api(`/dashboard?${qs}`);
+                const [result, shipmentsData] = await Promise.all([
+                    api(`/dashboard?${qs}`),
+                    api(`/shipments?${qs}`)
+                ]);
                 setData(result);
+                setShipments(shipmentsData);
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -451,6 +457,105 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {shipments.length > 0 && (
+                    <div className="card" style={{ marginTop: '20px' }}>
+                        <button
+                            onClick={() => setShowShipments(v => !v)}
+                            style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: 'transparent',
+                                border: 'none',
+                                padding: '0',
+                                cursor: 'pointer',
+                                fontSize: '15px',
+                                fontWeight: 700,
+                                color: 'var(--text)'
+                            }}
+                        >
+                            <span>📦 Envíos del período ({shipments.length})</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                {showShipments ? '▲ Ocultar' : '▼ Ver'}
+                            </span>
+                        </button>
+
+                        {showShipments && (
+                            <>
+                                {/* Desktop Table */}
+                                <div className="table-container" style={{ marginTop: '16px' }}>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Producto</th>
+                                                <th>Destinatario</th>
+                                                <th>Destino</th>
+                                                <th>Método</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {shipments.map(s => (
+                                                <tr key={s.id}>
+                                                    <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                                    <td>{s.recipient_name || 'N/A'}</td>
+                                                    <td>{s.city || 'N/A'}, {s.province || ''}</td>
+                                                    <td>
+                                                        <span className="badge" style={{
+                                                            background: s.shipping_method === 'flex' ? 'var(--accent-light)' : s.shipping_method === 'colecta' ? 'var(--warning-bg)' : 'var(--info-bg)',
+                                                            color: s.shipping_method === 'flex' ? 'var(--accent)' : s.shipping_method === 'colecta' ? 'var(--warning)' : 'var(--info)'
+                                                        }}>
+                                                            {s.shipping_method || '—'}
+                                                        </span>
+                                                    </td>
+                                                    <td>{s.status || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Mobile Cards */}
+                                <div className="mobile-cards-container" style={{ marginTop: '16px' }}>
+                                    {shipments.map(s => (
+                                        <div key={s.id} className="mobile-card">
+                                            <div className="mobile-card-header">
+                                                <div className="mobile-card-title">{s.product_name}</div>
+                                            </div>
+                                            <div className="mobile-card-body">
+                                                <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">Destinatario</span>
+                                                    <span className="mobile-card-value">{s.recipient_name || 'N/A'}</span>
+                                                </div>
+                                                <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">Destino</span>
+                                                    <span className="mobile-card-value">{s.city || 'N/A'}, {s.province || ''}</span>
+                                                </div>
+                                                <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">Método</span>
+                                                    <span className="mobile-card-value">
+                                                        <span className="badge" style={{
+                                                            background: s.shipping_method === 'flex' ? 'var(--accent-light)' : s.shipping_method === 'colecta' ? 'var(--warning-bg)' : 'var(--info-bg)',
+                                                            color: s.shipping_method === 'flex' ? 'var(--accent)' : s.shipping_method === 'colecta' ? 'var(--warning)' : 'var(--info)'
+                                                        }}>
+                                                            {s.shipping_method || '—'}
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                                <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">Estado</span>
+                                                    <span className="mobile-card-value">{s.status || '—'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
