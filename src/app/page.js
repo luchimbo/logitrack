@@ -51,6 +51,15 @@ export default function Home() {
     loadUser();
   }, [router]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const tabFromUrl = new URLSearchParams(window.location.search).get("tab");
+      if (tabFromUrl) {
+        setActiveTab(tabFromUrl);
+      }
+    }
+  }, []);
+
   // Close sidebar when clicking outside or pressing escape
   useEffect(() => {
     const handleEscape = (e) => {
