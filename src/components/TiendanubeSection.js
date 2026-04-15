@@ -261,7 +261,18 @@ export default function TiendanubeSection({ currentUser }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo iniciar la conexión');
       if (data.authorizeUrl) {
-        window.location.href = data.authorizeUrl;
+        const popup = window.open(data.authorizeUrl, 'tiendanube_oauth', 'width=800,height=600');
+        if (!popup) {
+          window.location.href = data.authorizeUrl;
+          return;
+        }
+        const timer = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(timer);
+            setConnecting(false);
+            loadStatus();
+          }
+        }, 500);
       } else {
         throw new Error('No se recibió la URL de autorización');
       }
@@ -336,11 +347,18 @@ export default function TiendanubeSection({ currentUser }) {
                   Iniciá sesión con tu cuenta de Tiendanube para sincronizar pedidos.
                 </p>
                 <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
-                  {connecting ? 'Redirigiendo...' : 'Iniciar sesión con Tiendanube'}
+                  {connecting ? 'Abriendo Tiendanube...' : 'Iniciar sesión con Tiendanube'}
                 </button>
-                <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '12px' }}>
-                  <strong>Nota:</strong> si ya conectaste otra tienda y querés cambiar a tu tienda real, primero desconectá la actual.
-                </p>
+                <div style={{ marginTop: '14px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  <p style={{ margin: '0 0 6px 0' }}>
+                    <strong>Nota:</strong> si ya conectaste una tienda de prueba y querés usar tu tienda real:
+                  </p>
+                  <ol style={{ margin: 0, paddingLeft: '16px' }}>
+                    <li style={{ marginBottom: '4px' }}>Desconectá la integración actual en GeoModi.</li>
+                    <li style={{ marginBottom: '4px' }}><a href="https://www.tiendanube.com/login" target="_blank" rel="noreferrer">Cerrá sesión en Tiendanube</a> (o usá una ventana de incógnito).</li>
+                    <li>Volvé a hacer clic en “Iniciar sesión con Tiendanube”.</li>
+                  </ol>
+                </div>
               </>
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
