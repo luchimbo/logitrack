@@ -26,7 +26,16 @@ export async function POST(request) {
     const state = encodeTiendanubeState({ workspaceId, appUserId });
     const authorizeUrl = buildTiendanubeAuthorizeUrl({ state });
 
-    return NextResponse.json({ authorizeUrl });
+    const response = NextResponse.json({ authorizeUrl });
+    response.cookies.set('tiendanube_oauth_state', state, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 10,
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Tiendanube connect error:', error);
     return NextResponse.json({ error: error.message || 'Error al iniciar conexion con Tiendanube' }, { status: 500 });

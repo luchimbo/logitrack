@@ -20,7 +20,7 @@ export function buildTiendanubeAuthorizeUrl({ state }) {
   if (!isTiendanubeOAuthConfigured()) {
     throw new Error('Configuración OAuth de Tiendanube incompleta');
   }
-  return `https://www.tiendanube.com/apps/${TIENDANUBE_APP_ID}/authorize`;
+  return `https://www.tiendanube.com/apps/${TIENDANUBE_APP_ID}/authorize?state=${encodeURIComponent(state)}`;
 }
 
 export function encodeTiendanubeState({ workspaceId, appUserId }) {
