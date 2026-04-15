@@ -14,6 +14,7 @@ import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
 import AdminOverviewSection from "@/components/AdminOverviewSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
+import TiendanubeSection from "@/components/TiendanubeSection";
 import GeoModiLogo from "@/components/GeoModiLogo";
 import OnboardingTour from "@/components/OnboardingTour";
 
@@ -125,6 +126,7 @@ export default function Home() {
       case "map": return <MapSection />;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
       case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
+      case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -153,6 +155,7 @@ export default function Home() {
       title: "Integraciones",
       items: [
         { id: "zipnova", icon: "📮", label: "Zipnova" },
+        { id: "tiendanube", icon: "🛒", label: "Tiendanube" },
       ],
     },
   ];

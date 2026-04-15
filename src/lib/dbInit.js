@@ -231,7 +231,31 @@ export async function initDb() {
       UNIQUE(workspace_id, provider),
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id)`
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id)`,
+    `CREATE TABLE IF NOT EXISTS tiendanube_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      tiendanube_id BIGINT NOT NULL,
+      number TEXT,
+      status TEXT,
+      payment_status TEXT,
+      shipping_status TEXT,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      shipping_address_json TEXT,
+      products_json TEXT,
+      subtotal TEXT,
+      total TEXT,
+      currency TEXT,
+      created_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, tiendanube_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace ON tiendanube_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_status ON tiendanube_orders(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_created ON tiendanube_orders(created_at_external)`
   ];
 
   for (const stmt of statements) {
