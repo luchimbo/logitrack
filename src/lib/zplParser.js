@@ -793,10 +793,12 @@ function parseColectaLabel(content) {
 
 export function parseZplFile(content) {
     const labels = [];
-    const regex = /\^XA([\s\S]*?)\^XZ/g;
+    // Remove BOM if present and normalize line endings
+    const cleanContent = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const regex = /\^XA([\s\S]*?)\^XZ/gi;
     let match;
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = regex.exec(cleanContent)) !== null) {
         const rawZpl = match[0];
         const labelContent = match[1];
         if (labelContent.trim().length < 50) continue;

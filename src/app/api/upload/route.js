@@ -45,6 +45,7 @@ export async function POST(request) {
             filenames.push(file.name);
 
             const parsed = parseZplFile(text);
+            console.log(`[UPLOAD] File: ${file.name}, parsed: ${parsed.length}, first has raw_zpl: ${!!parsed[0]?.raw_zpl}, raw_zpl length: ${parsed[0]?.raw_zpl?.length || 0}`);
             for (const shipment of parsed) {
                 if (shipment.shipping_method === 'flex' && shipment.partido) {
                     shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
