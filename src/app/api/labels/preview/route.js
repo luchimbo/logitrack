@@ -3,6 +3,30 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function extractLabelDimensionsInches(rawZpl) {
+    const defaultDims = { width: 4, height: 6 };
+    if (!rawZpl) return defaultDims;
+
+    const pwMatch = String(rawZpl).match(/\^PW(\d{2,5})/i);
+    const llMatch = String(rawZpl).match(/\^LL(\d{2,5})/i);
+
+    const dotsPerInch = 203.2; // 8 dpmm
+    const widthFromPw = pwMatch ? Number(pwMatch[1]) / dotsPerInch : null;
+    const heightFromLl = llMatch ? Number(llMatch[1]) / dotsPerInch : null;
+
+    const width = clamp(Number.isFinite(widthFromPw) ? widthFromPw : defaultDims.width, 2, 8);
+    const height = clamp(Number.isFinite(heightFromLl) ? heightFromLl : defaultDims.height, 2, 24);
+
+    return {
+        width: Number(width.toFixed(2)),
+        height: Number(height.toFixed(2)),
+    };
+}
+
 export async function GET(request) {
     try {
         await ensureDb();
@@ -33,7 +57,8 @@ export async function GET(request) {
             return NextResponse.json({ error: "Etiqueta no disponible. Este envío fue cargado antes de activar la vista previa." }, { status: 404 });
         }
 
-        const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/';
+        const dims = extractLabelDimensionsInches(rawZpl);
+        const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/${dims.width}x${dims.height}/0/`;
         const attemptHeaders = [
             { Accept: 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' },
             { Accept: 'image/png', 'Content-Type': 'text/plain' },
