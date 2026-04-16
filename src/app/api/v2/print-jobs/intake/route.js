@@ -161,6 +161,20 @@ function parseShipmentFromRawBlock(rawBlock) {
   }
 }
 
+function rebuildRawZpl(rawBlock) {
+  const block = stringOrNull(rawBlock, 40000);
+  if (!block) return null;
+
+  const clean = block.trim();
+  const hasStart = clean.startsWith("^XA");
+  const hasEnd = clean.endsWith("^XZ");
+
+  if (hasStart && hasEnd) return clean;
+  if (hasStart) return `${clean}^XZ`;
+  if (hasEnd) return `^XA${clean}`;
+  return `^XA${clean}^XZ`;
+}
+
 function computeLabelFingerprint(rawBlock) {
   const normalized = String(rawBlock || "")
     .replace(/\s+/g, " ")
@@ -283,16 +297,45 @@ function validateIntakeContract(payload, rawLabels) {
 
 async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
   const trackings = uniqueNonEmpty(normalizedLabels.map((x) => x.tracking_number));
-  const existing = await getExistingValues("shipments", "tracking_number", trackings, workspaceId);
+  const existingByTracking = new Map();
+  if (trackings.length) {
+    for (let i = 0; i < trackings.length; i += CHUNK_SIZE) {
+      const chunk = trackings.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const result = await db.execute({
+        sql: `SELECT id, tracking_number, raw_zpl FROM shipments WHERE workspace_id = ? AND tracking_number IN (${placeholders})`,
+        args: [asDbValue(workspaceId), ...chunk],
+      });
+      for (const row of result.rows) {
+        const tracking = stringOrNull(row.tracking_number, 120);
+        if (tracking) {
+          existingByTracking.set(tracking, { id: Number(row.id), raw_zpl: stringOrNull(row.raw_zpl, 40000) });
+        }
+      }
+    }
+  }
 
   let inserted = 0;
   let skipped = 0;
   let recoveredFromReprint = 0;
+  let backfilledRawZpl = 0;
 
   for (const item of normalizedLabels) {
     const itemTracking = stringOrNull(item.tracking_number, 120);
+    const existingShipment = itemTracking ? existingByTracking.get(itemTracking) : null;
+    const parsedShipment = parseShipmentFromRawBlock(item.raw_block);
+    const rawZpl =
+      stringOrNull(parsedShipment?.raw_zpl, 40000) ||
+      rebuildRawZpl(item.raw_block);
 
-    if (itemTracking && existing.has(itemTracking)) {
+    if (existingShipment) {
+      if (!existingShipment.raw_zpl && rawZpl) {
+        await db.execute({
+          sql: "UPDATE shipments SET raw_zpl = ? WHERE id = ? AND workspace_id = ?",
+          args: [asDbValue(rawZpl), asDbValue(existingShipment.id), asDbValue(workspaceId)],
+        });
+        backfilledRawZpl += 1;
+      }
       skipped += 1;
       continue;
     }
@@ -304,11 +347,9 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
       continue;
     }
 
-    if (item.is_reprint === 1 && itemTracking && !existing.has(itemTracking)) {
+    if (item.is_reprint === 1 && itemTracking && !existingShipment) {
       recoveredFromReprint += 1;
     }
-
-    const parsedShipment = parseShipmentFromRawBlock(item.raw_block);
 
     const shipment = {
       sale_type: pickFirst(parsedShipment?.sale_type, item.sale_type),
@@ -357,14 +398,14 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
         recipient_name, recipient_user, address, postal_code,
         city, partido, province, reference, shipping_method,
         carrier_code, carrier_name, assigned_carrier,
-        dispatch_date, delivery_date, status
+        dispatch_date, delivery_date, status, raw_zpl
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
-        ?, ?, 'pendiente'
+        ?, ?, 'pendiente', ?
       )`,
       args: [
         asDbValue(batchId),
@@ -392,12 +433,13 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
         asDbValue(shipment.assigned_carrier),
         asDbValue(shipment.dispatch_date),
         asDbValue(shipment.delivery_date),
+        asDbValue(rawZpl),
       ],
     });
 
     inserted += 1;
     if (shipment.tracking_number) {
-      existing.add(shipment.tracking_number);
+      existingByTracking.set(shipment.tracking_number, { id: NaN, raw_zpl: rawZpl });
     }
   }
 
@@ -406,7 +448,12 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
     args: [asDbValue(workspaceId), asDbValue(batchId), asDbValue(batchId), asDbValue(workspaceId)],
   });
 
-  return { inserted, skipped, recovered_from_reprint: recoveredFromReprint };
+  return {
+    inserted,
+    skipped,
+    recovered_from_reprint: recoveredFromReprint,
+    raw_zpl_backfilled: backfilledRawZpl,
+  };
 }
 
 function parseJsonOrFallback(value, fallback) {
@@ -473,6 +520,7 @@ async function backfillExistingJobToLegacy(jobId) {
     inserted: legacyResult.inserted,
     skipped: legacyResult.skipped,
     recovered_from_reprint: legacyResult.recovered_from_reprint || 0,
+    raw_zpl_backfilled: legacyResult.raw_zpl_backfilled || 0,
   };
 }
 
@@ -544,6 +592,7 @@ export async function POST(request) {
         shipments_inserted: backfill.inserted,
         shipments_skipped: backfill.skipped,
         shipments_recovered_from_reprint: backfill.recovered_from_reprint || 0,
+        raw_zpl_backfilled: backfill.raw_zpl_backfilled || 0,
       });
     }
 
@@ -708,6 +757,7 @@ export async function POST(request) {
       shipments_inserted: legacyResult.inserted,
       shipments_skipped: legacyResult.skipped,
       shipments_recovered_from_reprint: legacyResult.recovered_from_reprint || 0,
+      raw_zpl_backfilled: legacyResult.raw_zpl_backfilled || 0,
       integrity_verified: true,
       parser_misses: contractValidation.integrity.parser_misses,
     });

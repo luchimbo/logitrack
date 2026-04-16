@@ -65,6 +65,20 @@ function parseShipmentFromRawBlock(rawBlock) {
   }
 }
 
+function rebuildRawZpl(rawBlock) {
+  const block = stringOrNull(rawBlock, 40000);
+  if (!block) return null;
+
+  const clean = block.trim();
+  const hasStart = clean.startsWith("^XA");
+  const hasEnd = clean.endsWith("^XZ");
+
+  if (hasStart && hasEnd) return clean;
+  if (hasStart) return `${clean}^XZ`;
+  if (hasEnd) return `^XA${clean}`;
+  return `^XA${clean}^XZ`;
+}
+
 async function getOrCreateBatch(sourceFiles, batchDate = null) {
   const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
   const dateValue = extractDateOnly(batchDate) || new Date().toISOString().slice(0, 10);
@@ -97,27 +111,28 @@ async function getOrCreateBatch(sourceFiles, batchDate = null) {
   return Number(created.lastInsertRowid);
 }
 
-async function getExistingTrackings(trackings) {
-  const set = new Set();
+async function getExistingShipments(trackings) {
+  const map = new Map();
   const list = [...new Set(trackings.filter(Boolean))];
-  if (!list.length) return set;
+  if (!list.length) return map;
 
   const CHUNK = 300;
   for (let i = 0; i < list.length; i += CHUNK) {
     const chunk = list.slice(i, i + CHUNK);
     const placeholders = chunk.map(() => "?").join(", ");
     const result = await db.execute({
-      sql: `SELECT tracking_number AS value FROM shipments WHERE tracking_number IN (${placeholders})`,
+      sql: `SELECT id, tracking_number, raw_zpl FROM shipments WHERE tracking_number IN (${placeholders})`,
       args: chunk,
     });
     for (const row of result.rows) {
-      if (row.value !== null && row.value !== undefined) {
-        set.add(String(row.value));
+      const tracking = stringOrNull(row.tracking_number, 120);
+      if (tracking) {
+        map.set(tracking, { id: Number(row.id), raw_zpl: stringOrNull(row.raw_zpl, 40000) });
       }
     }
   }
 
-  return set;
+  return map;
 }
 
 async function recoverJob(jobId) {
@@ -153,19 +168,30 @@ async function recoverJob(jobId) {
   });
 
   const items = itemsResult.rows || [];
-  const existingTrackings = await getExistingTrackings(items.map((x) => stringOrNull(x.tracking_number, 120)));
+  const existingShipments = await getExistingShipments(items.map((x) => stringOrNull(x.tracking_number, 120)));
 
   let inserted = 0;
   let skipped = 0;
+  let rawZplBackfilled = 0;
 
   for (const item of items) {
     const tracking = stringOrNull(item.tracking_number, 120);
-    if (tracking && existingTrackings.has(tracking)) {
+    const existing = tracking ? existingShipments.get(tracking) : null;
+
+    const parsed = parseShipmentFromRawBlock(item.raw_block);
+    const rawZpl = stringOrNull(parsed?.raw_zpl, 40000) || rebuildRawZpl(item.raw_block);
+
+    if (existing) {
+      if (!existing.raw_zpl && rawZpl) {
+        await db.execute({
+          sql: "UPDATE shipments SET raw_zpl = ? WHERE id = ?",
+          args: [asDbValue(rawZpl), asDbValue(existing.id)],
+        });
+        rawZplBackfilled += 1;
+      }
       skipped += 1;
       continue;
     }
-
-    const parsed = parseShipmentFromRawBlock(item.raw_block);
 
     const shipment = {
       sale_type: pickFirst(parsed?.sale_type, null),
@@ -212,14 +238,14 @@ async function recoverJob(jobId) {
         recipient_name, recipient_user, address, postal_code,
         city, partido, province, reference, shipping_method,
         carrier_code, carrier_name, assigned_carrier,
-        dispatch_date, delivery_date, status
+        dispatch_date, delivery_date, status, raw_zpl
       ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
-        ?, ?, 'pendiente'
+        ?, ?, 'pendiente', ?
       )`,
       args: [
         asDbValue(batchId),
@@ -246,12 +272,13 @@ async function recoverJob(jobId) {
         asDbValue(shipment.assigned_carrier),
         asDbValue(shipment.dispatch_date),
         asDbValue(shipment.delivery_date),
+        asDbValue(rawZpl),
       ],
     });
 
     inserted += 1;
     if (shipment.tracking_number) {
-      existingTrackings.add(shipment.tracking_number);
+      existingShipments.set(shipment.tracking_number, { id: NaN, raw_zpl: rawZpl });
     }
   }
 
@@ -267,6 +294,7 @@ async function recoverJob(jobId) {
     total_items: items.length,
     inserted,
     skipped,
+    raw_zpl_backfilled: rawZplBackfilled,
   };
 }
 
@@ -305,12 +333,14 @@ export async function POST(request) {
     const results = [];
     let insertedTotal = 0;
     let skippedTotal = 0;
+    let rawZplBackfilledTotal = 0;
 
     for (const jobId of jobIds) {
       const result = await recoverJob(jobId);
       results.push(result);
       insertedTotal += result.inserted || 0;
       skippedTotal += result.skipped || 0;
+      rawZplBackfilledTotal += result.raw_zpl_backfilled || 0;
     }
 
     return NextResponse.json({
@@ -318,6 +348,7 @@ export async function POST(request) {
       jobs_requested: jobIds.length,
       inserted_total: insertedTotal,
       skipped_total: skippedTotal,
+      raw_zpl_backfilled_total: rawZplBackfilledTotal,
       results,
     });
   } catch (error) {

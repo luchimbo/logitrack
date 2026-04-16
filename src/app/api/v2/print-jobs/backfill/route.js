@@ -35,6 +35,20 @@ function parseJsonOrFallback(value, fallback) {
   }
 }
 
+function rebuildRawZpl(rawBlock) {
+  const block = stringOrNull(rawBlock, 40000);
+  if (!block) return null;
+
+  const clean = block.trim();
+  const hasStart = clean.startsWith("^XA");
+  const hasEnd = clean.endsWith("^XZ");
+
+  if (hasStart && hasEnd) return clean;
+  if (hasStart) return `${clean}^XZ`;
+  if (hasEnd) return `^XA${clean}`;
+  return `^XA${clean}^XZ`;
+}
+
 async function getOrCreateBatch(sourceFiles, batchDate = null) {
   const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
   const dateValue = extractDateOnly(batchDate) || new Date().toISOString().slice(0, 10);
@@ -85,6 +99,7 @@ async function runBackfill(request) {
       pji.sale_id,
       pji.product_name,
       pji.shipping_method,
+      pji.raw_block,
       pji.is_reprint,
       pj.created_at_client,
       pj.source_files_json
@@ -119,6 +134,7 @@ async function runBackfill(request) {
 
       const sourceFiles = parseJsonOrFallback(row.source_files_json, []);
       const batchDate = extractDateOnly(row.created_at_client);
+      const rawZpl = rebuildRawZpl(row.raw_block);
       const batchKey = `${batchDate || ""}|${JSON.stringify(sourceFiles)}`;
 
       let batchId = batchCache.get(batchKey);
@@ -135,14 +151,14 @@ async function runBackfill(request) {
             recipient_name, recipient_user, address, postal_code,
             city, partido, province, reference, shipping_method,
             carrier_code, carrier_name, assigned_carrier,
-            dispatch_date, delivery_date, status
+            dispatch_date, delivery_date, status, raw_zpl
           ) VALUES (
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?,
-            ?, ?, 'pendiente'
+            ?, ?, 'pendiente', ?
           )`,
           args: [
             asDbValue(batchId),
@@ -169,6 +185,7 @@ async function runBackfill(request) {
             null,
             null,
             null,
+            asDbValue(rawZpl),
           ],
         });
 
