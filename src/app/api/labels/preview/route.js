@@ -33,12 +33,12 @@ export async function GET(request) {
             return NextResponse.json({ error: "Etiqueta no disponible. Este envío fue cargado antes de activar la vista previa." }, { status: 404 });
         }
 
-        const labelaryUrl = 'http://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/';
+        const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/';
         const response = await fetch(labelaryUrl, {
             method: 'POST',
             headers: {
                 'Accept': 'image/png',
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Type': 'text/plain',
             },
             body: rawZpl,
         });
@@ -46,7 +46,7 @@ export async function GET(request) {
         if (!response.ok) {
             const errorText = await response.text().catch(() => 'Unknown error');
             console.error("Labelary error:", errorText);
-            return NextResponse.json({ error: "Failed to render label" }, { status: 502 });
+            return NextResponse.json({ error: `Labelary: ${errorText}` }, { status: 502 });
         }
 
         const imageBuffer = await response.arrayBuffer();

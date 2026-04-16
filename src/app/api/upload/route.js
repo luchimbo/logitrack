@@ -37,8 +37,11 @@ export async function POST(request) {
         // Parse all files
         for (const file of files) {
             const buffer = await file.arrayBuffer();
-            // Simple decode, might need latin-1 fallback like python depending on node versions
-            const text = new TextDecoder('utf-8').decode(buffer);
+            let text = new TextDecoder('utf-8').decode(buffer);
+            // If UTF-8 decoding produced replacement chars, fall back to Latin-1 (common for ZPL files)
+            if (text.includes('\uFFFD')) {
+                text = new TextDecoder('iso-8859-1').decode(buffer);
+            }
             filenames.push(file.name);
 
             const parsed = parseZplFile(text);
