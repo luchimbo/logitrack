@@ -133,7 +133,7 @@ export async function POST(request) {
           ?, ?, ?, ?, 
           ?, ?, ?, ?, ?, 
           ?, ?, ?, 
-          ?, ?, 'pendiente', ?
+          ?, ?, ?, 'pendiente', ?
         )`,
                 args
             });
