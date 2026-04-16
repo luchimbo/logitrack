@@ -53,7 +53,7 @@ function extractLabelDimensionsInches(rawZpl) {
         2,
         24,
     );
-    const height = clamp(baseHeight * 2, 2, 24);
+    const height = clamp(baseHeight * 1.35, 2, 24);
 
     return {
         width: Number(width.toFixed(2)),
