@@ -73,20 +73,31 @@ export async function POST(request) {
             batchId = Number(result.lastInsertRowid);
         }
 
-        // Get existing tracking numbers for this batch
+        // Get existing shipments for this batch
         const existingResult = await db.execute({
-            sql: "SELECT tracking_number FROM shipments WHERE workspace_id = ? AND batch_id = ? AND tracking_number IS NOT NULL",
+            sql: "SELECT id, tracking_number, raw_zpl FROM shipments WHERE workspace_id = ? AND batch_id = ? AND tracking_number IS NOT NULL",
             args: [workspaceId, batchId]
         });
-        const existingTracks = new Set(existingResult.rows.map(r => r.tracking_number));
+        const existingByTrack = new Map(existingResult.rows.map(r => [r.tracking_number, r]));
 
-        // Insert new shipments natively
+        // Insert or backfill shipments natively
         let saved = 0;
         let skipped = 0;
+        let backfilled = 0;
 
         for (const s of allShipments) {
-            if (s.tracking_number && existingTracks.has(s.tracking_number)) {
-                skipped++;
+            const existing = s.tracking_number ? existingByTrack.get(s.tracking_number) : null;
+
+            if (existing) {
+                if (!existing.raw_zpl && s.raw_zpl) {
+                    await db.execute({
+                        sql: "UPDATE shipments SET raw_zpl = ? WHERE id = ? AND workspace_id = ?",
+                        args: [toDbValue(s.raw_zpl), existing.id, workspaceId]
+                    });
+                    backfilled++;
+                } else {
+                    skipped++;
+                }
                 continue;
             }
 
@@ -140,7 +151,7 @@ export async function POST(request) {
 
             saved++;
             if (s.tracking_number) {
-                existingTracks.add(s.tracking_number);
+                existingByTrack.set(s.tracking_number, { id: null, raw_zpl: s.raw_zpl });
             }
         }
 
@@ -167,6 +178,7 @@ export async function POST(request) {
                 files: filenames,
                 parsed: saved,
                 skipped,
+                backfilled,
                 totalInBatch: finalBatch.rows[0].total_packages,
             },
         });
