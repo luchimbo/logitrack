@@ -87,8 +87,13 @@ export async function POST(request) {
         let saved = 0;
         let skipped = 0;
         let backfilled = 0;
+        let withZpl = 0;
+        let withoutZpl = 0;
 
         for (const s of allShipments) {
+            const hasZpl = !!s.raw_zpl;
+            if (hasZpl) withZpl++; else withoutZpl++;
+
             const existing = s.tracking_number ? existingByTrack.get(s.tracking_number) : null;
 
             if (existing) {
@@ -182,6 +187,8 @@ export async function POST(request) {
                 parsed: saved,
                 skipped,
                 backfilled,
+                withZpl,
+                withoutZpl,
                 totalInBatch: finalBatch.rows[0].total_packages,
             },
         });
@@ -190,6 +197,9 @@ export async function POST(request) {
             batch_id: batchId,
             total_parsed: saved,
             total_skipped: skipped,
+            total_backfilled: backfilled,
+            total_with_zpl: withZpl,
+            total_without_zpl: withoutZpl,
             total_in_batch: finalBatch.rows[0].total_packages,
             filenames: filenames,
         });
