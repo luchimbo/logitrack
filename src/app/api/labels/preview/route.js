@@ -44,7 +44,7 @@ function extractLabelDimensionsInches(rawZpl) {
         2,
         8,
     );
-    const height = clamp(
+    const baseHeight = clamp(
         Math.max(
             defaultDims.height,
             Number.isFinite(heightFromLl) ? heightFromLl : 0,
@@ -53,6 +53,7 @@ function extractLabelDimensionsInches(rawZpl) {
         2,
         24,
     );
+    const height = clamp(baseHeight * 2, 2, 24);
 
     return {
         width: Number(width.toFixed(2)),
