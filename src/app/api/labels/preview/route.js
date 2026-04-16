@@ -34,14 +34,22 @@ export async function GET(request) {
         }
 
         const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/';
-        const response = await fetch(labelaryUrl, {
-            method: 'POST',
-            headers: {
-                'Accept': 'image/png',
-                'Content-Type': 'text/plain',
-            },
-            body: rawZpl,
-        });
+        const attemptHeaders = [
+            { Accept: 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' },
+            { Accept: 'image/png', 'Content-Type': 'text/plain' },
+        ];
+
+        let response = null;
+        for (const headers of attemptHeaders) {
+            response = await fetch(labelaryUrl, {
+                method: 'POST',
+                headers,
+                body: rawZpl,
+            });
+            if (response.ok || response.status !== 415) {
+                break;
+            }
+        }
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => 'Unknown error');
