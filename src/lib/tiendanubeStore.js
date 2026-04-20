@@ -168,15 +168,13 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
   const conditions = ['workspace_id = ?'];
   const args = [workspaceId];
 
-  // Vista operativa: solo pedidos que pasan por Zipnova/Zippin.
-  // Excluye automáticamente envíos digitales, retiro en local y otros couriers.
-  conditions.push(`(
-    COALESCE(is_zipnova, 0) = 1
-    OR LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) LIKE '%zipnova%'
-    OR LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) LIKE '%zippin%'
-  )`);
+  // Vista operativa: pedidos para envío a domicilio en cualquier courier.
+  // Excluye explícitamente retiro en local/sucursal y envíos digitales.
+  conditions.push(`COALESCE(TRIM(shipping_address_json), '') NOT IN ('', '{}', 'null')`);
 
   conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%retiro%'`);
+  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%local%'`);
+  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%sucursal%'`);
   conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%pickup%'`);
   conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%digital%'`);
 

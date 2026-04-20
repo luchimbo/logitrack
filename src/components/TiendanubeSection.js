@@ -62,6 +62,15 @@ function getStatusPriority(order) {
   return getOperationalStatus(order).key === 'to_send' ? 0 : 1;
 }
 
+function getShippingProviderLabel(order) {
+  const carrier = String(order?.shippingCarrier || '').trim();
+  const method = String(order?.shippingMethod || '').trim();
+  if (carrier && method) {
+    return carrier.toLowerCase() === method.toLowerCase() ? carrier : `${carrier} · ${method}`;
+  }
+  return carrier || method || 'Envío a domicilio';
+}
+
 function OrderCard({ order, isExpanded, onToggle }) {
   const shippingAddress = [
     order.shippingAddress?.address,
@@ -79,6 +88,7 @@ function OrderCard({ order, isExpanded, onToggle }) {
             Pedido #{order.number || order.id}
           </div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>{order.contactName || 'Sin nombre'}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{getShippingProviderLabel(order)}</div>
         </div>
 
         <button type="button" className="btn btn-ghost btn-sm" onClick={onToggle}>
@@ -330,8 +340,8 @@ export default function TiendanubeSection({ currentUser }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Dashboard de envíos Zipnova</h2>
-        <p className="section-subtitle">Pedidos de Tiendanube que necesitan atención operativa inmediata.</p>
+        <h2 className="section-title">Dashboard de envíos Tienda Nube</h2>
+        <p className="section-subtitle">Pedidos de Tienda Nube que necesitan atención operativa inmediata.</p>
       </div>
 
       {compactError ? <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{compactError}</div> : null}
@@ -410,10 +420,6 @@ export default function TiendanubeSection({ currentUser }) {
               ) : null}
             </div>
           </div>
-          <div className="card" style={{ marginBottom: '16px', padding: '12px 14px', color: 'var(--text-muted)', fontSize: '13px' }}>
-            Vista operativa: solo envíos a domicilio de <strong>Zipnova/Zippin</strong>, con estados <strong>Por enviar</strong> y <strong>Enviado</strong>.
-          </div>
-
           <div className="stats-grid" style={{ marginBottom: '16px' }}>
             <div className="stat-card card warning"><div className="stat-value">{toDispatchCount}</div><div className="stat-label">Por despachar</div></div>
             <div className="stat-card card success"><div className="stat-value">{dispatchedTodayCount}</div><div className="stat-label">Despachados hoy</div></div>
@@ -490,10 +496,10 @@ export default function TiendanubeSection({ currentUser }) {
             <div className="card">
               <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
                 {viewMode === 'to_send'
-                  ? 'No hay pedidos Zipnova por enviar en este momento.'
+                  ? 'No hay pedidos por enviar en este momento.'
                   : viewMode === 'dispatched'
-                    ? 'No hay pedidos Zipnova enviados para mostrar.'
-                    : 'No hay pedidos Zipnova pendientes o enviados para mostrar.'}
+                    ? 'No hay pedidos enviados para mostrar.'
+                    : 'No hay pedidos pendientes o enviados para mostrar.'}
               </p>
             </div>
           )}
