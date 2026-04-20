@@ -2,36 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const ORDER_STATUS_LABELS = {
-  open: 'Abierto',
-  closed: 'Cerrado',
-  cancelled: 'Cancelado',
-};
-
-const PAYMENT_STATUS_LABELS = {
-  pending: 'Pendiente',
-  paid: 'Pagado',
-  refunded: 'Reembolsado',
-  partially_refunded: 'Reembolso parcial',
-  authorized: 'Autorizado',
-  voided: 'Anulado',
-  abandoned: 'Abandonado',
-};
-
-const SHIPPING_STATUS_LABELS = {
-  unpacked: 'Por empaquetar',
-  unshipped: 'Sin despachar',
-  packed: 'Empaquetado',
-  shipped: 'Enviado',
-  ready_to_ship: 'Listo para enviar',
-  delivered: 'Entregado',
-};
-
-function labelFor(value, dictionary) {
-  if (!value) return '-';
-  return dictionary[value] || value;
-}
-
 function formatOrderTotal(total, currency) {
   const numeric = Number(total);
   if (Number.isNaN(numeric)) return total ? `${currency || ''} ${total}`.trim() : '-';
@@ -58,74 +28,57 @@ function badgeStyle(color) {
   };
 }
 
+function formatOrderDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function isSameArgentinaDay(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const target = date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  return today === target;
+}
+
 function getOperationalStatus(order) {
-  const orderStatus = String(order?.status || '').toLowerCase();
-  const paymentStatus = String(order?.paymentStatus || '').toLowerCase();
   const shippingStatus = String(order?.shippingStatus || '').toLowerCase();
 
-  const isNoSend =
-    orderStatus === 'cancelled' ||
-    paymentStatus === 'voided' ||
-    paymentStatus === 'abandoned' ||
-    shippingStatus === 'cancelled';
-
-  if (isNoSend) {
-    return { key: 'no_send', label: 'NO ENVIAR', color: '#ef4444' };
-  }
-
   if (shippingStatus === 'shipped' || shippingStatus === 'delivered') {
-    return { key: 'dispatched', label: 'DESPACHADO', color: '#10b981' };
+    return { key: 'dispatched', label: 'Enviado', color: '#22c55e' };
   }
 
-  return { key: 'to_send', label: 'ENVIAR', color: '#f59e0b' };
+  return { key: 'to_send', label: 'Por enviar', color: '#f97316' };
 }
 
 function getStatusPriority(order) {
-  const op = getOperationalStatus(order).key;
-  if (op === 'to_send') return 0;
-  if (op === 'dispatched') return 1;
-  return 2;
+  return getOperationalStatus(order).key === 'to_send' ? 0 : 1;
 }
 
 function OrderCard({ order, isExpanded, onToggle }) {
-  const statusColors = {
-    open: '#16a34a',
-    closed: '#2563eb',
-    cancelled: '#dc2626',
-  };
-  const paymentStatusColors = {
-    pending: '#c2410c',
-    paid: '#16a34a',
-    refunded: '#dc2626',
-    partially_refunded: '#d97706',
-    authorized: '#2563eb',
-    voided: '#6b7280',
-    abandoned: '#6b7280',
-  };
-
   const shippingAddress = [
     order.shippingAddress?.address,
     order.shippingAddress?.number,
     order.shippingAddress?.city,
     order.shippingAddress?.province,
   ].filter(Boolean).join(', ');
-  const shippingSignature = `${order.shippingMethod || ''} ${order.shippingCarrier || ''}`.toLowerCase();
-  const isZipnovaOrder = Boolean(order.isZipnova) || /zipnova|zippin/.test(shippingSignature);
-  const providerLabel = isZipnovaOrder
-    ? 'Zipnova'
-    : (order.shippingMethod || order.shippingCarrier ? 'Otro courier' : 'Sin courier');
   const operational = getOperationalStatus(order);
-  const isActive = String(order.status || '').toLowerCase() === 'open';
 
   return (
-    <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '12px 14px' }}>
+    <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
-          <div className="mobile-card-title" style={{ fontSize: '16px', marginBottom: '2px' }}>
+          <div className="mobile-card-title" style={{ fontSize: '20px', marginBottom: '4px' }}>
             Pedido #{order.number || order.id}
           </div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{order.contactName || 'Sin nombre'}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{order.contactEmail || '-'}</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>{order.contactName || 'Sin nombre'}</div>
         </div>
 
         <button type="button" className="btn btn-ghost btn-sm" onClick={onToggle}>
@@ -133,21 +86,16 @@ function OrderCard({ order, isExpanded, onToggle }) {
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
         <span style={badgeStyle(operational.color)}>{operational.label}</span>
-        <span style={badgeStyle(isActive ? '#22c55e' : '#94a3b8')}>{isActive ? 'ACTIVO' : 'INACTIVO'}</span>
-        <span style={badgeStyle(statusColors[order.status] || '#64748b')}>{labelFor(order.status, ORDER_STATUS_LABELS)}</span>
-        <span style={badgeStyle(paymentStatusColors[order.paymentStatus] || '#64748b')}>{labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}</span>
-        <span style={badgeStyle('#0ea5e9')}>{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
-        <span style={badgeStyle(isZipnovaOrder ? '#f59e0b' : '#64748b')}>{providerLabel}</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '6px 12px', marginTop: '10px' }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginTop: '14px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           <strong style={{ color: 'var(--text)' }}>Total:</strong> {formatOrderTotal(order.total, order.currency)}
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text)' }}>Fecha:</strong> {order.createdAt ? new Date(order.createdAt).toLocaleString('es-AR') : '-'}
+        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          <strong style={{ color: 'var(--text)' }}>Fecha:</strong> {formatOrderDate(order.createdAt)}
         </div>
       </div>
 
@@ -157,11 +105,6 @@ function OrderCard({ order, isExpanded, onToggle }) {
             <strong style={{ color: 'var(--text)' }}>Envío:</strong> {shippingAddress || 'Sin dirección'}
             {order.shippingAddress?.zipcode ? ` · CP ${order.shippingAddress.zipcode}` : ''}
           </div>
-          {(order.shippingMethod || order.shippingCarrier) ? (
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-              <strong style={{ color: 'var(--text)' }}>Courier:</strong> {[order.shippingCarrier, order.shippingMethod].filter(Boolean).join(' · ')}
-            </div>
-          ) : null}
           <div style={{ display: 'grid', gap: '6px' }}>
             {(order.products || []).slice(0, 5).map((product, idx) => (
               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px' }}>
@@ -188,8 +131,6 @@ export default function TiendanubeSection({ currentUser }) {
   const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
@@ -245,8 +186,6 @@ export default function TiendanubeSection({ currentUser }) {
     try {
       const params = new URLSearchParams();
       if (search) params.set('q', search);
-      if (statusFilter) params.set('status', statusFilter);
-      if (paymentFilter) params.set('payment_status', paymentFilter);
       if (!sync) params.set('sync', '0');
       const res = await fetch(`/api/admin/tiendanube?${params.toString()}`);
       const data = await res.json();
@@ -259,9 +198,9 @@ export default function TiendanubeSection({ currentUser }) {
       setLoading(false);
       setSyncing(false);
     }
-  }, [search, statusFilter, paymentFilter]);
+  }, [search]);
 
-  const finishConnection = async (storeId) => {
+  const finishConnection = useCallback(async (storeId) => {
     try {
       const res = await fetch('/api/admin/tiendanube/finish', {
         method: 'POST',
@@ -278,7 +217,7 @@ export default function TiendanubeSection({ currentUser }) {
       setWarning('');
       setVerifyAfterOauth(false);
     }
-  };
+  }, [loadStatus]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -300,7 +239,7 @@ export default function TiendanubeSection({ currentUser }) {
       setVerifyAfterOauth(false);
       setPendingStoreId('');
     }
-  }, [loadStatus]);
+  }, [finishConnection]);
 
   useEffect(() => {
     loadStatus();
@@ -357,30 +296,35 @@ export default function TiendanubeSection({ currentUser }) {
     }
   };
 
-  const activeCount = orders.filter((o) => o.status === 'open').length;
-  const toSendCount = orders.filter((o) => getOperationalStatus(o).key === 'to_send').length;
-  const dispatchedCount = orders.filter((o) => getOperationalStatus(o).key === 'dispatched').length;
-  const noSendCount = orders.filter((o) => getOperationalStatus(o).key === 'no_send').length;
-  const zipnovaCount = orders.filter((o) => Boolean(o.isZipnova) || /zipnova|zippin/.test(`${o.shippingMethod || ''} ${o.shippingCarrier || ''}`.toLowerCase())).length;
+  const operationalOrders = orders.filter((o) => {
+    const status = String(o.shippingStatus || '').toLowerCase();
+    return status === 'shipped' || status === 'delivered' || status === 'unshipped' || status === 'ready_to_ship' || status === 'packed' || status === '';
+  });
+  const toDispatchCount = operationalOrders.filter((o) => getOperationalStatus(o).key === 'to_send').length;
+  const dispatchedTodayCount = operationalOrders.filter((o) => {
+    if (getOperationalStatus(o).key !== 'dispatched') return false;
+    return isSameArgentinaDay(o.dispatchedAt);
+  }).length;
+  const totalActiveCount = operationalOrders.length;
   const compactWarning = /unauthorized|401|forbidden|invalid token/i.test(String(warning || ''))
     ? 'Sesión de Tiendanube vencida. Usá "Desconectar / Cambiar credenciales" para reconectar.'
     : warning;
   const compactError = /unauthorized|401|forbidden|invalid token/i.test(String(error || ''))
     ? 'Sesión de Tiendanube vencida. Reconectá la integración para continuar.'
     : error;
-  const orderedOrders = [...orders].sort((a, b) => {
+  const orderedOrders = [...operationalOrders].sort((a, b) => {
     const priorityDiff = getStatusPriority(a) - getStatusPriority(b);
     if (priorityDiff !== 0) return priorityDiff;
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
-    return dateB - dateA;
+    return dateA - dateB;
   });
 
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Tiendanube</h2>
-        <p className="section-subtitle">Integración con Tiendanube para ver pedidos y órdenes de tu tienda online.</p>
+        <h2 className="section-title">Dashboard de envíos Zipnova</h2>
+        <p className="section-subtitle">Pedidos de Tiendanube que necesitan atención operativa inmediata.</p>
       </div>
 
       {compactError ? <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{compactError}</div> : null}
@@ -459,47 +403,21 @@ export default function TiendanubeSection({ currentUser }) {
               ) : null}
             </div>
           </div>
-          <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', color: 'var(--text-muted)', fontSize: '12px' }}>
-            Mostrando solo pedidos <strong>Zipnova/Zippin</strong>. <strong>Sincronizar</strong> trae pedidos nuevos. <strong>Aplicar filtros</strong> busca en los pedidos cargados.
+          <div className="card" style={{ marginBottom: '16px', padding: '12px 14px', color: 'var(--text-muted)', fontSize: '13px' }}>
+            Vista operativa: solo envíos a domicilio de <strong>Zipnova/Zippin</strong>, con estados <strong>Por enviar</strong> y <strong>Enviado</strong>.
           </div>
 
-          <div className="stats-grid" style={{ marginBottom: '12px' }}>
-            <div className="stat-card card warning"><div className="stat-value">{toSendCount}</div><div className="stat-label">Para enviar</div></div>
-            <div className="stat-card card success"><div className="stat-value">{dispatchedCount}</div><div className="stat-label">Despachados</div></div>
-            <div className="stat-card card danger"><div className="stat-value">{noSendCount}</div><div className="stat-label">No enviar</div></div>
-            <div className="stat-card card info"><div className="stat-value">{activeCount}</div><div className="stat-label">Activos</div></div>
-            <div className="stat-card card accent"><div className="stat-value">{zipnovaCount}</div><div className="stat-label">Zipnova/Zippin</div></div>
+          <div className="stats-grid" style={{ marginBottom: '16px' }}>
+            <div className="stat-card card warning"><div className="stat-value">{toDispatchCount}</div><div className="stat-label">Por despachar</div></div>
+            <div className="stat-card card success"><div className="stat-value">{dispatchedTodayCount}</div><div className="stat-label">Despachados hoy</div></div>
+            <div className="stat-card card"><div className="stat-value" style={{ color: 'var(--text-secondary)' }}>{totalActiveCount}</div><div className="stat-label">Total activos</div></div>
           </div>
 
-          <div className="card" style={{ marginBottom: '12px', padding: '14px' }}>
+          <div className="card" style={{ marginBottom: '18px', padding: '14px' }}>
             <div className="form-row">
-              <div className="form-group">
+              <div className="form-group" style={{ minWidth: '280px' }}>
                 <label className="form-label">Buscar</label>
-                <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Número, nombre o email" />
-              </div>
-              <div className="form-group" style={{ maxWidth: '160px' }}>
-                <label className="form-label">Estado</label>
-                <select className="form-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="open">Abierto</option>
-                  <option value="closed">Cerrado</option>
-                  <option value="cancelled">Cancelado</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ maxWidth: '160px' }}>
-                <label className="form-label">Pago</label>
-                <select className="form-input" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="pending">Pendiente</option>
-                  <option value="paid">Pagado</option>
-                  <option value="refunded">Reembolsado</option>
-                  <option value="authorized">Autorizado</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ maxWidth: '140px' }}>
-                <button type="button" className="btn btn-primary" onClick={() => load({ sync: false })} disabled={loading}>
-                  {loading ? 'Cargando...' : 'Aplicar filtros'}
-                </button>
+                <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Número de pedido o cliente" />
               </div>
               <div className="form-group" style={{ maxWidth: '180px' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => load({ sync: true })} disabled={syncing}>
@@ -509,8 +427,8 @@ export default function TiendanubeSection({ currentUser }) {
             </div>
           </div>
 
-          {orders.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '10px' }}>
+          {orderedOrders.length > 0 ? (
+            <div className="zipnova-orders-grid" style={{ gap: '20px' }}>
               {orderedOrders.map((order) => (
                 <OrderCard
                   key={order.id}
@@ -522,7 +440,7 @@ export default function TiendanubeSection({ currentUser }) {
             </div>
           ) : (
             <div className="card">
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>No se encontraron pedidos operativos (Zipnova/Zippin).</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>No hay pedidos Zipnova pendientes o enviados para mostrar.</p>
             </div>
           )}
         </>

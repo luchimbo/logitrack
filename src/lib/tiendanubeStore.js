@@ -40,20 +40,57 @@ export function normalizeTiendanubeOrder(order) {
     total: String(order?.total || ''),
     currency: order?.currency || '',
     createdAtExternal: order?.created_at || '',
+    updatedAtExternal: order?.updated_at || '',
     raw: order,
   };
+}
+
+function isDispatchedShippingStatus(value) {
+  const status = String(value || '').toLowerCase();
+  return status === 'shipped' || status === 'delivered';
+}
+
+function extractExternalDispatchDate(order) {
+  const candidates = [
+    order?.shipped_at,
+    order?.dispatched_at,
+    order?.fulfillment_date,
+    order?.fulfilled_at,
+    order?.shipping?.shipped_at,
+    order?.shipping_option?.shipped_at,
+  ].filter(Boolean);
+
+  return candidates[0] || '';
 }
 
 export async function upsertTiendanubeOrder(workspaceId, order) {
   await ensureDb();
   const normalized = normalizeTiendanubeOrder(order);
+  const existing = await db.execute({
+    sql: `SELECT shipping_status, dispatched_at_external FROM tiendanube_orders WHERE workspace_id = ? AND tiendanube_id = ? LIMIT 1`,
+    args: [workspaceId, normalized.tiendanubeId],
+  });
+  const prev = existing.rows?.[0] || null;
+  const prevShippingStatus = String(prev?.shipping_status || '');
+  const prevDispatchedAt = String(prev?.dispatched_at_external || '');
+  const externalDispatchDate = extractExternalDispatchDate(order);
+
+  let dispatchedAtExternal = '';
+  if (externalDispatchDate) {
+    dispatchedAtExternal = externalDispatchDate;
+  } else if (prevDispatchedAt) {
+    dispatchedAtExternal = prevDispatchedAt;
+  } else if (isDispatchedShippingStatus(normalized.shippingStatus) && !isDispatchedShippingStatus(prevShippingStatus)) {
+    dispatchedAtExternal = new Date().toISOString();
+  }
+
   await db.execute({
     sql: `INSERT INTO tiendanube_orders (
       workspace_id, tiendanube_id, number, status, payment_status, shipping_status,
       shipping_method, shipping_carrier, is_zipnova,
       contact_name, contact_email, contact_phone, shipping_address_json, products_json,
-      subtotal, total, currency, created_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      subtotal, total, currency, created_at_external, updated_at_external, dispatched_at_external, synced_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(workspace_id, tiendanube_id) DO UPDATE SET
       number = excluded.number,
       status = excluded.status,
@@ -71,6 +108,8 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
       total = excluded.total,
       currency = excluded.currency,
       created_at_external = excluded.created_at_external,
+      updated_at_external = excluded.updated_at_external,
+      dispatched_at_external = excluded.dispatched_at_external,
       synced_at = CURRENT_TIMESTAMP`,
     args: [
       workspaceId,
@@ -91,6 +130,8 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
       normalized.total,
       normalized.currency,
       normalized.createdAtExternal,
+      normalized.updatedAtExternal,
+      dispatchedAtExternal,
     ],
   });
 }
@@ -135,6 +176,19 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
     OR LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) LIKE '%zippin%'
   )`);
 
+  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%retiro%'`);
+  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%pickup%'`);
+  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%digital%'`);
+
+  conditions.push(`LOWER(COALESCE(status, '')) != 'cancelled'`);
+  conditions.push(`LOWER(COALESCE(payment_status, '')) NOT IN ('voided', 'abandoned')`);
+
+  conditions.push(`(
+    LOWER(COALESCE(shipping_status, '')) IN ('shipped', 'delivered')
+    OR LOWER(COALESCE(shipping_status, '')) IN ('unshipped', 'ready_to_ship', 'packed')
+    OR COALESCE(shipping_status, '') = ''
+  )`);
+
   if (status) {
     conditions.push('status = ?');
     args.push(status);
@@ -172,6 +226,8 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
     total: row.total,
     currency: row.currency,
     createdAt: row.created_at_external,
+    updatedAt: row.updated_at_external,
+    dispatchedAt: row.dispatched_at_external,
     syncedAt: row.synced_at,
   }));
 }
@@ -202,6 +258,8 @@ export async function getStoredTiendanubeOrder({ workspaceId, id }) {
     total: row.total,
     currency: row.currency,
     createdAt: row.created_at_external,
+    updatedAt: row.updated_at_external,
+    dispatchedAt: row.dispatched_at_external,
     syncedAt: row.synced_at,
   };
 }

@@ -249,6 +249,8 @@ export async function initDb() {
       total TEXT,
       currency TEXT,
       created_at_external TEXT,
+      updated_at_external TEXT,
+      dispatched_at_external TEXT,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id, tiendanube_id)
@@ -322,10 +324,13 @@ export async function initDb() {
   await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
   await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
   await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("tiendanube_orders", "updated_at_external", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "dispatched_at_external", "TEXT");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
     await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
   }
