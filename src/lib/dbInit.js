@@ -319,6 +319,9 @@ export async function initDb() {
   await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
   await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
   await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");

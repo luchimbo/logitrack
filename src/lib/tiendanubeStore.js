@@ -3,12 +3,34 @@ import { ensureDb } from '@/lib/ensureDb';
 
 export function normalizeTiendanubeOrder(order) {
   const shipping = order?.shipping_address || {};
+  const shippingOption = order?.shipping_option || order?.shipping || {};
+  const shippingMethod = String(
+    shippingOption?.name ||
+    shippingOption?.option ||
+    shippingOption?.service ||
+    order?.shipping_method ||
+    order?.shipping_method_name ||
+    ''
+  );
+  const shippingCarrier = String(
+    shippingOption?.carrier ||
+    shippingOption?.carrier_name ||
+    order?.shipping_carrier ||
+    order?.shipping_carrier_name ||
+    ''
+  );
+  const shippingFingerprint = `${shippingMethod} ${shippingCarrier}`.toLowerCase();
+  const isZipnova = /zipnova|zippin/.test(shippingFingerprint) ? 1 : 0;
+
   return {
     tiendanubeId: order?.id,
     number: String(order?.number || ''),
     status: order?.status || '',
     paymentStatus: order?.payment_status || '',
     shippingStatus: order?.shipping_status || '',
+    shippingMethod,
+    shippingCarrier,
+    isZipnova,
     contactName: order?.contact_name || order?.customer?.name || '',
     contactEmail: order?.contact_email || order?.customer?.email || '',
     contactPhone: order?.contact_phone || order?.customer?.phone || '',
@@ -28,14 +50,18 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
   await db.execute({
     sql: `INSERT INTO tiendanube_orders (
       workspace_id, tiendanube_id, number, status, payment_status, shipping_status,
+      shipping_method, shipping_carrier, is_zipnova,
       contact_name, contact_email, contact_phone, shipping_address_json, products_json,
       subtotal, total, currency, created_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(workspace_id, tiendanube_id) DO UPDATE SET
       number = excluded.number,
       status = excluded.status,
       payment_status = excluded.payment_status,
       shipping_status = excluded.shipping_status,
+      shipping_method = excluded.shipping_method,
+      shipping_carrier = excluded.shipping_carrier,
+      is_zipnova = excluded.is_zipnova,
       contact_name = excluded.contact_name,
       contact_email = excluded.contact_email,
       contact_phone = excluded.contact_phone,
@@ -53,6 +79,9 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
       normalized.status,
       normalized.paymentStatus,
       normalized.shippingStatus,
+      normalized.shippingMethod,
+      normalized.shippingCarrier,
+      normalized.isZipnova,
       normalized.contactName,
       normalized.contactEmail,
       normalized.contactPhone,
@@ -123,6 +152,9 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
     status: row.status,
     paymentStatus: row.payment_status,
     shippingStatus: row.shipping_status,
+    shippingMethod: row.shipping_method || '',
+    shippingCarrier: row.shipping_carrier || '',
+    isZipnova: Boolean(row.is_zipnova),
     contactName: row.contact_name,
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone,
@@ -150,6 +182,9 @@ export async function getStoredTiendanubeOrder({ workspaceId, id }) {
     status: row.status,
     paymentStatus: row.payment_status,
     shippingStatus: row.shipping_status,
+    shippingMethod: row.shipping_method || '',
+    shippingCarrier: row.shipping_carrier || '',
+    isZipnova: Boolean(row.is_zipnova),
     contactName: row.contact_name,
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone,

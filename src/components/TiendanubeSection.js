@@ -20,6 +20,7 @@ const PAYMENT_STATUS_LABELS = {
 
 const SHIPPING_STATUS_LABELS = {
   unpacked: 'Por empaquetar',
+  unshipped: 'Sin despachar',
   packed: 'Empaquetado',
   shipped: 'Enviado',
   ready_to_ship: 'Listo para enviar',
@@ -79,6 +80,11 @@ function OrderCard({ order, isExpanded, onToggle }) {
     order.shippingAddress?.city,
     order.shippingAddress?.province,
   ].filter(Boolean).join(', ');
+  const shippingSignature = `${order.shippingMethod || ''} ${order.shippingCarrier || ''}`.toLowerCase();
+  const isZipnovaOrder = Boolean(order.isZipnova) || /zipnova|zippin/.test(shippingSignature);
+  const providerLabel = isZipnovaOrder
+    ? 'Zipnova'
+    : (order.shippingMethod || order.shippingCarrier ? 'Otro courier' : 'Sin courier');
 
   return (
     <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '12px 14px' }}>
@@ -100,6 +106,7 @@ function OrderCard({ order, isExpanded, onToggle }) {
         <span style={badgeStyle(statusColors[order.status] || '#64748b')}>{labelFor(order.status, ORDER_STATUS_LABELS)}</span>
         <span style={badgeStyle(paymentStatusColors[order.paymentStatus] || '#64748b')}>{labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}</span>
         <span style={badgeStyle('#0ea5e9')}>{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
+        <span style={badgeStyle(isZipnovaOrder ? '#f59e0b' : '#64748b')}>{providerLabel}</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '6px 12px', marginTop: '10px' }}>
@@ -117,6 +124,11 @@ function OrderCard({ order, isExpanded, onToggle }) {
             <strong style={{ color: 'var(--text)' }}>Envío:</strong> {shippingAddress || 'Sin dirección'}
             {order.shippingAddress?.zipcode ? ` · CP ${order.shippingAddress.zipcode}` : ''}
           </div>
+          {(order.shippingMethod || order.shippingCarrier) ? (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+              <strong style={{ color: 'var(--text)' }}>Courier:</strong> {[order.shippingCarrier, order.shippingMethod].filter(Boolean).join(' · ')}
+            </div>
+          ) : null}
           <div style={{ display: 'grid', gap: '6px' }}>
             {(order.products || []).slice(0, 5).map((product, idx) => (
               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px' }}>
@@ -315,6 +327,10 @@ export default function TiendanubeSection({ currentUser }) {
   const activeCount = orders.filter((o) => o.status === 'open').length;
   const closedCount = orders.filter((o) => o.status === 'closed').length;
   const cancelledCount = orders.filter((o) => o.status === 'cancelled').length;
+  const zipnovaCount = orders.filter((o) => Boolean(o.isZipnova) || /zipnova|zippin/.test(`${o.shippingMethod || ''} ${o.shippingCarrier || ''}`.toLowerCase())).length;
+  const compactWarning = /unauthorized|401|forbidden|invalid token/i.test(String(warning || ''))
+    ? 'Sesión de Tiendanube vencida. Usá "Desconectar / Cambiar credenciales" para reconectar.'
+    : warning;
 
   return (
     <section className="section">
@@ -324,7 +340,11 @@ export default function TiendanubeSection({ currentUser }) {
       </div>
 
       {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
-      {warning ? <div className="card" style={{ marginBottom: '12px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>{warning}</div> : null}
+      {compactWarning ? (
+        <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>
+          {compactWarning}
+        </div>
+      ) : null}
 
       {!connected ? (
         verifyAfterOauth ? (
@@ -395,24 +415,19 @@ export default function TiendanubeSection({ currentUser }) {
               ) : null}
             </div>
           </div>
-          {canManageIntegration ? (
-            <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
-              Esta vista solo muestra pedidos de Tiendanube. No envía ni modifica pedidos en Tiendanube.
-            </div>
-          ) : null}
-
-          <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
-            Usá <strong>Sincronizar</strong> para traer pedidos nuevos y <strong>Aplicar filtros</strong> para buscar en los pedidos ya cargados.
+          <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', color: 'var(--text-muted)', fontSize: '12px' }}>
+            <strong>Sincronizar</strong> trae pedidos nuevos. <strong>Aplicar filtros</strong> busca en los pedidos cargados.
           </div>
 
-          <div className="stats-grid" style={{ marginBottom: '18px' }}>
+          <div className="stats-grid" style={{ marginBottom: '12px' }}>
             <div className="stat-card card accent"><div className="stat-value">{orders.length}</div><div className="stat-label">Total pedidos</div></div>
             <div className="stat-card card info"><div className="stat-value">{activeCount}</div><div className="stat-label">Abiertos</div></div>
-            <div className="stat-card card success"><div className="stat-value">{closedCount}</div><div className="stat-label">Cerrados</div></div>
+            <div className="stat-card card warning"><div className="stat-value">{zipnovaCount}</div><div className="stat-label">Zipnova</div></div>
             <div className="stat-card card"><div className="stat-value">{cancelledCount}</div><div className="stat-label">Cancelados</div></div>
+            <div className="stat-card card success"><div className="stat-value">{closedCount}</div><div className="stat-label">Cerrados</div></div>
           </div>
 
-          <div className="card" style={{ marginBottom: '18px' }}>
+          <div className="card" style={{ marginBottom: '12px', padding: '14px' }}>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Buscar</label>
@@ -451,7 +466,7 @@ export default function TiendanubeSection({ currentUser }) {
           </div>
 
           {orders.length > 0 ? (
-            <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(430px, 1fr))', gap: '10px' }}>
               {orders.map((order) => (
                 <OrderCard
                   key={order.id}
