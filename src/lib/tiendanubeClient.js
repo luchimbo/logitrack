@@ -12,24 +12,36 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
   const resolvedAccessToken = accessToken;
   const resolvedStoreId = String(storeId || '');
 
-  async function tiendanubeFetch(path, options = {}) {
-    if (!resolvedAccessToken || !resolvedStoreId) {
-      throw new Error('Access token o store ID de Tiendanube no configurados');
-    }
-    const url = `${TIENDANUBE_API_BASE}/${resolvedStoreId}${path.startsWith('/') ? path : `/${path}`}`;
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        Authentication: `bearer ${resolvedAccessToken}`,
-        Authorization: `Bearer ${resolvedAccessToken}`,
-        'User-Agent': 'GeoModi (support@geomodi.ai)',
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-      },
-      cache: 'no-store',
-    });
+  function buildHeaders(mode, extraHeaders = {}) {
+    const base = {
+      'User-Agent': 'GeoModi (support@geomodi.ai)',
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    };
 
+    if (mode === 'authentication-only') {
+      return {
+        ...base,
+        Authentication: `bearer ${resolvedAccessToken}`,
+      };
+    }
+
+    if (mode === 'authorization-only') {
+      return {
+        ...base,
+        Authorization: `Bearer ${resolvedAccessToken}`,
+      };
+    }
+
+    return {
+      ...base,
+      Authentication: `bearer ${resolvedAccessToken}`,
+      Authorization: `Bearer ${resolvedAccessToken}`,
+    };
+  }
+
+  async function parseResponse(res) {
     const text = await res.text();
     let data;
     try {
@@ -37,12 +49,48 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     } catch {
       data = { raw: text };
     }
+    return data;
+  }
 
-    if (!res.ok) {
-      throw new Error(data?.error || data?.message || `Tiendanube error ${res.status}`);
+  function shouldRetryAuth(res, data) {
+    if (res.status === 401 || res.status === 403) return true;
+    const msg = String(data?.error || data?.message || '').toLowerCase();
+    return msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('token');
+  }
+
+  async function tiendanubeFetch(path, options = {}) {
+    if (!resolvedAccessToken || !resolvedStoreId) {
+      throw new Error('Access token o store ID de Tiendanube no configurados');
+    }
+    const url = `${TIENDANUBE_API_BASE}/${resolvedStoreId}${path.startsWith('/') ? path : `/${path}`}`;
+    const modes = ['authentication-only', 'authorization-only', 'both'];
+    let lastRes = null;
+    let lastData = null;
+
+    for (const mode of modes) {
+      const res = await fetch(url, {
+        ...options,
+        headers: buildHeaders(mode, options.headers || {}),
+        cache: 'no-store',
+      });
+
+      const data = await parseResponse(res);
+      if (res.ok) {
+        return data;
+      }
+
+      lastRes = res;
+      lastData = data;
+      if (!shouldRetryAuth(res, data)) {
+        break;
+      }
     }
 
-    return data;
+    if (lastRes?.status === 401 || lastRes?.status === 403) {
+      throw new Error(`Unauthorized en Tiendanube (store ${resolvedStoreId}): token inválido/vencido o permisos insuficientes (read_orders)`);
+    }
+
+    throw new Error(lastData?.error || lastData?.message || `Tiendanube error ${lastRes?.status || 'desconocido'}`);
   }
 
   async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', q = '' } = {}) {

@@ -7,6 +7,12 @@ export async function resolveTiendanubeClient(workspaceId) {
   }
   try {
     const integration = await getIntegration({ workspaceId, provider: 'tiendanube' });
+    const scope = String(integration?.config?.scope || '').toLowerCase();
+
+    if (scope && !scope.includes('read_orders')) {
+      throw new Error('La integración de Tiendanube no tiene permiso read_orders. Reautorizá la app con permisos de Orders (lectura).');
+    }
+
     if (integration?.config?.accessToken && integration?.config?.storeId) {
       return createTiendanubeClient({
         accessToken: integration.config.accessToken,
