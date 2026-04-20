@@ -58,6 +58,35 @@ function badgeStyle(color) {
   };
 }
 
+function getOperationalStatus(order) {
+  const orderStatus = String(order?.status || '').toLowerCase();
+  const paymentStatus = String(order?.paymentStatus || '').toLowerCase();
+  const shippingStatus = String(order?.shippingStatus || '').toLowerCase();
+
+  const isNoSend =
+    orderStatus === 'cancelled' ||
+    paymentStatus === 'voided' ||
+    paymentStatus === 'abandoned' ||
+    shippingStatus === 'cancelled';
+
+  if (isNoSend) {
+    return { key: 'no_send', label: 'NO ENVIAR', color: '#ef4444' };
+  }
+
+  if (shippingStatus === 'shipped' || shippingStatus === 'delivered') {
+    return { key: 'dispatched', label: 'DESPACHADO', color: '#10b981' };
+  }
+
+  return { key: 'to_send', label: 'ENVIAR', color: '#f59e0b' };
+}
+
+function getStatusPriority(order) {
+  const op = getOperationalStatus(order).key;
+  if (op === 'to_send') return 0;
+  if (op === 'dispatched') return 1;
+  return 2;
+}
+
 function OrderCard({ order, isExpanded, onToggle }) {
   const statusColors = {
     open: '#16a34a',
@@ -85,6 +114,8 @@ function OrderCard({ order, isExpanded, onToggle }) {
   const providerLabel = isZipnovaOrder
     ? 'Zipnova'
     : (order.shippingMethod || order.shippingCarrier ? 'Otro courier' : 'Sin courier');
+  const operational = getOperationalStatus(order);
+  const isActive = String(order.status || '').toLowerCase() === 'open';
 
   return (
     <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '12px 14px' }}>
@@ -103,6 +134,8 @@ function OrderCard({ order, isExpanded, onToggle }) {
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+        <span style={badgeStyle(operational.color)}>{operational.label}</span>
+        <span style={badgeStyle(isActive ? '#22c55e' : '#94a3b8')}>{isActive ? 'ACTIVO' : 'INACTIVO'}</span>
         <span style={badgeStyle(statusColors[order.status] || '#64748b')}>{labelFor(order.status, ORDER_STATUS_LABELS)}</span>
         <span style={badgeStyle(paymentStatusColors[order.paymentStatus] || '#64748b')}>{labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}</span>
         <span style={badgeStyle('#0ea5e9')}>{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
@@ -325,12 +358,23 @@ export default function TiendanubeSection({ currentUser }) {
   };
 
   const activeCount = orders.filter((o) => o.status === 'open').length;
-  const closedCount = orders.filter((o) => o.status === 'closed').length;
-  const cancelledCount = orders.filter((o) => o.status === 'cancelled').length;
+  const toSendCount = orders.filter((o) => getOperationalStatus(o).key === 'to_send').length;
+  const dispatchedCount = orders.filter((o) => getOperationalStatus(o).key === 'dispatched').length;
+  const noSendCount = orders.filter((o) => getOperationalStatus(o).key === 'no_send').length;
   const zipnovaCount = orders.filter((o) => Boolean(o.isZipnova) || /zipnova|zippin/.test(`${o.shippingMethod || ''} ${o.shippingCarrier || ''}`.toLowerCase())).length;
   const compactWarning = /unauthorized|401|forbidden|invalid token/i.test(String(warning || ''))
     ? 'Sesión de Tiendanube vencida. Usá "Desconectar / Cambiar credenciales" para reconectar.'
     : warning;
+  const compactError = /unauthorized|401|forbidden|invalid token/i.test(String(error || ''))
+    ? 'Sesión de Tiendanube vencida. Reconectá la integración para continuar.'
+    : error;
+  const orderedOrders = [...orders].sort((a, b) => {
+    const priorityDiff = getStatusPriority(a) - getStatusPriority(b);
+    if (priorityDiff !== 0) return priorityDiff;
+    const dateA = new Date(a.createdAt || 0).getTime();
+    const dateB = new Date(b.createdAt || 0).getTime();
+    return dateB - dateA;
+  });
 
   return (
     <section className="section">
@@ -339,7 +383,7 @@ export default function TiendanubeSection({ currentUser }) {
         <p className="section-subtitle">Integración con Tiendanube para ver pedidos y órdenes de tu tienda online.</p>
       </div>
 
-      {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
+      {compactError ? <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{compactError}</div> : null}
       {compactWarning ? (
         <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>
           {compactWarning}
@@ -416,15 +460,15 @@ export default function TiendanubeSection({ currentUser }) {
             </div>
           </div>
           <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', color: 'var(--text-muted)', fontSize: '12px' }}>
-            <strong>Sincronizar</strong> trae pedidos nuevos. <strong>Aplicar filtros</strong> busca en los pedidos cargados.
+            Mostrando solo pedidos <strong>Zipnova/Zippin</strong>. <strong>Sincronizar</strong> trae pedidos nuevos. <strong>Aplicar filtros</strong> busca en los pedidos cargados.
           </div>
 
           <div className="stats-grid" style={{ marginBottom: '12px' }}>
-            <div className="stat-card card accent"><div className="stat-value">{orders.length}</div><div className="stat-label">Total pedidos</div></div>
-            <div className="stat-card card info"><div className="stat-value">{activeCount}</div><div className="stat-label">Abiertos</div></div>
-            <div className="stat-card card warning"><div className="stat-value">{zipnovaCount}</div><div className="stat-label">Zipnova</div></div>
-            <div className="stat-card card"><div className="stat-value">{cancelledCount}</div><div className="stat-label">Cancelados</div></div>
-            <div className="stat-card card success"><div className="stat-value">{closedCount}</div><div className="stat-label">Cerrados</div></div>
+            <div className="stat-card card warning"><div className="stat-value">{toSendCount}</div><div className="stat-label">Para enviar</div></div>
+            <div className="stat-card card success"><div className="stat-value">{dispatchedCount}</div><div className="stat-label">Despachados</div></div>
+            <div className="stat-card card danger"><div className="stat-value">{noSendCount}</div><div className="stat-label">No enviar</div></div>
+            <div className="stat-card card info"><div className="stat-value">{activeCount}</div><div className="stat-label">Activos</div></div>
+            <div className="stat-card card accent"><div className="stat-value">{zipnovaCount}</div><div className="stat-label">Zipnova/Zippin</div></div>
           </div>
 
           <div className="card" style={{ marginBottom: '12px', padding: '14px' }}>
@@ -466,8 +510,8 @@ export default function TiendanubeSection({ currentUser }) {
           </div>
 
           {orders.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(430px, 1fr))', gap: '10px' }}>
-              {orders.map((order) => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '10px' }}>
+              {orderedOrders.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
@@ -478,7 +522,7 @@ export default function TiendanubeSection({ currentUser }) {
             </div>
           ) : (
             <div className="card">
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>No se encontraron pedidos.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>No se encontraron pedidos operativos (Zipnova/Zippin).</p>
             </div>
           )}
         </>

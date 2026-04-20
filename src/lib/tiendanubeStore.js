@@ -127,6 +127,14 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
   const conditions = ['workspace_id = ?'];
   const args = [workspaceId];
 
+  // Vista operativa: solo pedidos que pasan por Zipnova/Zippin.
+  // Excluye automáticamente envíos digitales, retiro en local y otros couriers.
+  conditions.push(`(
+    COALESCE(is_zipnova, 0) = 1
+    OR LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) LIKE '%zipnova%'
+    OR LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) LIKE '%zippin%'
+  )`);
+
   if (status) {
     conditions.push('status = ?');
     args.push(status);
