@@ -31,6 +31,32 @@ function labelFor(value, dictionary) {
   return dictionary[value] || value;
 }
 
+function formatOrderTotal(total, currency) {
+  const numeric = Number(total);
+  if (Number.isNaN(numeric)) return total ? `${currency || ''} ${total}`.trim() : '-';
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: currency || 'ARS',
+    minimumFractionDigits: 2,
+  }).format(numeric);
+}
+
+function badgeStyle(color) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 8px',
+    borderRadius: '999px',
+    fontSize: '12px',
+    fontWeight: 700,
+    border: `1px solid ${color}33`,
+    color,
+    background: `${color}12`,
+    lineHeight: 1,
+  };
+}
+
 function OrderCard({ order, isExpanded, onToggle }) {
   const statusColors = {
     open: '#16a34a',
@@ -47,109 +73,68 @@ function OrderCard({ order, isExpanded, onToggle }) {
     abandoned: '#6b7280',
   };
 
+  const shippingAddress = [
+    order.shippingAddress?.address,
+    order.shippingAddress?.number,
+    order.shippingAddress?.city,
+    order.shippingAddress?.province,
+  ].filter(Boolean).join(', ');
+
   return (
-    <div className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
-      <div className="mobile-card-title" onClick={onToggle} style={{ cursor: 'pointer' }}>
-        Pedido #{order.number}
-      </div>
-      <div className="mobile-card-body" style={{ marginTop: '8px' }}>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Cliente</span>
-          <span className="mobile-card-value">{order.contactName || '-'}</span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Email</span>
-          <span className="mobile-card-value">{order.contactEmail || '-'}</span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Estado</span>
-          <span className="mobile-card-value" style={{ color: statusColors[order.status] || 'var(--text-muted)' }}>
-            {labelFor(order.status, ORDER_STATUS_LABELS)}
-          </span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Pago</span>
-          <span className="mobile-card-value" style={{ color: paymentStatusColors[order.paymentStatus] || 'var(--text-muted)' }}>
-            {labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}
-          </span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Envío</span>
-          <span className="mobile-card-value">{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Total</span>
-          <span className="mobile-card-value">{order.total ? `${order.currency || ''} ${order.total}` : '-'}</span>
-        </div>
-        <div className="mobile-card-row">
-          <span className="mobile-card-label">Fecha</span>
-          <span className="mobile-card-value">{order.createdAt ? new Date(order.createdAt).toLocaleString('es-AR') : '-'}</span>
-        </div>
-
-        {isExpanded && (
-          <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Dirección de envío</h4>
-            <div className="mobile-card-row">
-              <span className="mobile-card-label">Calle</span>
-              <span className="mobile-card-value">{[order.shippingAddress?.address, order.shippingAddress?.number].filter(Boolean).join(' ') || '-'}</span>
-            </div>
-            {order.shippingAddress?.floor ? (
-              <div className="mobile-card-row">
-                <span className="mobile-card-label">Piso/Depto</span>
-                <span className="mobile-card-value">{order.shippingAddress.floor}</span>
-              </div>
-            ) : null}
-            <div className="mobile-card-row">
-              <span className="mobile-card-label">Ciudad</span>
-              <span className="mobile-card-value">{order.shippingAddress?.city || '-'}</span>
-            </div>
-            <div className="mobile-card-row">
-              <span className="mobile-card-label">Provincia</span>
-              <span className="mobile-card-value">{order.shippingAddress?.province || '-'}</span>
-            </div>
-            <div className="mobile-card-row">
-              <span className="mobile-card-label">CP</span>
-              <span className="mobile-card-value">{order.shippingAddress?.zipcode || '-'}</span>
-            </div>
-            <div className="mobile-card-row">
-              <span className="mobile-card-label">País</span>
-              <span className="mobile-card-value">{order.shippingAddress?.country || '-'}</span>
-            </div>
-            {order.shippingAddress?.phone ? (
-              <div className="mobile-card-row">
-                <span className="mobile-card-label">Teléfono</span>
-                <span className="mobile-card-value">{order.shippingAddress.phone}</span>
-              </div>
-            ) : null}
-
-            <h4 style={{ fontSize: '14px', fontWeight: 600, marginTop: '16px', marginBottom: '8px' }}>Productos</h4>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              {(order.products || []).map((product, idx) => (
-                <div key={idx} className="mobile-card" style={{ display: 'block', marginBottom: 0, background: 'var(--bg-secondary, #f8fafc)' }}>
-                  <div className="mobile-card-title" style={{ fontSize: '13px' }}>{product.name}</div>
-                  <div className="mobile-card-body" style={{ marginTop: '4px' }}>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Cantidad</span>
-                      <span className="mobile-card-value">{product.quantity}</span>
-                    </div>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Precio</span>
-                      <span className="mobile-card-value">{product.price ? `${order.currency || ''} ${product.price}` : '-'}</span>
-                    </div>
-                    {product.sku ? (
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">SKU</span>
-                        <span className="mobile-card-value">{product.sku}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {(order.products || []).length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Sin productos</p>}
-            </div>
+    <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="mobile-card-title" style={{ fontSize: '16px', marginBottom: '2px' }}>
+            Pedido #{order.number || order.id}
           </div>
-        )}
+          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{order.contactName || 'Sin nombre'}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{order.contactEmail || '-'}</div>
+        </div>
+
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onToggle}>
+          {isExpanded ? 'Ocultar' : 'Ver detalle'}
+        </button>
       </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+        <span style={badgeStyle(statusColors[order.status] || '#64748b')}>{labelFor(order.status, ORDER_STATUS_LABELS)}</span>
+        <span style={badgeStyle(paymentStatusColors[order.paymentStatus] || '#64748b')}>{labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}</span>
+        <span style={badgeStyle('#0ea5e9')}>{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '6px 12px', marginTop: '10px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          <strong style={{ color: 'var(--text)' }}>Total:</strong> {formatOrderTotal(order.total, order.currency)}
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          <strong style={{ color: 'var(--text)' }}>Fecha:</strong> {order.createdAt ? new Date(order.createdAt).toLocaleString('es-AR') : '-'}
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            <strong style={{ color: 'var(--text)' }}>Envío:</strong> {shippingAddress || 'Sin dirección'}
+            {order.shippingAddress?.zipcode ? ` · CP ${order.shippingAddress.zipcode}` : ''}
+          </div>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {(order.products || []).slice(0, 5).map((product, idx) => (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text)' }}>{product.name || 'Producto'}</span>
+                <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>x{product.quantity || 1}</span>
+              </div>
+            ))}
+            {(order.products || []).length > 5 ? (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                +{(order.products || []).length - 5} productos más
+              </div>
+            ) : null}
+            {(order.products || []).length === 0 ? (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin productos</div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
