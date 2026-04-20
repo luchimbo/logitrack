@@ -1,5 +1,13 @@
 const TIENDANUBE_API_BASE = 'https://api.tiendanube.com/v1';
 
+function normalizeOrdersResponse(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.orders)) return payload.orders;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.results)) return payload.results;
+  return [];
+}
+
 export function createTiendanubeClient({ accessToken, storeId } = {}) {
   const resolvedAccessToken = accessToken;
   const resolvedStoreId = String(storeId || '');
@@ -13,6 +21,7 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
       ...options,
       headers: {
         Authentication: `bearer ${resolvedAccessToken}`,
+        Authorization: `Bearer ${resolvedAccessToken}`,
         'User-Agent': 'GeoModi (support@geomodi.ai)',
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -47,7 +56,8 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     if (createdAtMax) params.set('created_at_max', createdAtMax);
     if (q) params.set('q', q);
 
-    return tiendanubeFetch(`/orders?${params.toString()}`);
+    const payload = await tiendanubeFetch(`/orders?${params.toString()}`);
+    return normalizeOrdersResponse(payload);
   }
 
   async function getOrder(id) {

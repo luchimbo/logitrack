@@ -2,6 +2,35 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+const ORDER_STATUS_LABELS = {
+  open: 'Abierto',
+  closed: 'Cerrado',
+  cancelled: 'Cancelado',
+};
+
+const PAYMENT_STATUS_LABELS = {
+  pending: 'Pendiente',
+  paid: 'Pagado',
+  refunded: 'Reembolsado',
+  partially_refunded: 'Reembolso parcial',
+  authorized: 'Autorizado',
+  voided: 'Anulado',
+  abandoned: 'Abandonado',
+};
+
+const SHIPPING_STATUS_LABELS = {
+  unpacked: 'Por empaquetar',
+  packed: 'Empaquetado',
+  shipped: 'Enviado',
+  ready_to_ship: 'Listo para enviar',
+  delivered: 'Entregado',
+};
+
+function labelFor(value, dictionary) {
+  if (!value) return '-';
+  return dictionary[value] || value;
+}
+
 function OrderCard({ order, isExpanded, onToggle }) {
   const statusColors = {
     open: '#16a34a',
@@ -35,18 +64,18 @@ function OrderCard({ order, isExpanded, onToggle }) {
         <div className="mobile-card-row">
           <span className="mobile-card-label">Estado</span>
           <span className="mobile-card-value" style={{ color: statusColors[order.status] || 'var(--text-muted)' }}>
-            {order.status || '-'}
+            {labelFor(order.status, ORDER_STATUS_LABELS)}
           </span>
         </div>
         <div className="mobile-card-row">
           <span className="mobile-card-label">Pago</span>
           <span className="mobile-card-value" style={{ color: paymentStatusColors[order.paymentStatus] || 'var(--text-muted)' }}>
-            {order.paymentStatus || '-'}
+            {labelFor(order.paymentStatus, PAYMENT_STATUS_LABELS)}
           </span>
         </div>
         <div className="mobile-card-row">
           <span className="mobile-card-label">Envío</span>
-          <span className="mobile-card-value">{order.shippingStatus || '-'}</span>
+          <span className="mobile-card-value">{labelFor(order.shippingStatus, SHIPPING_STATUS_LABELS)}</span>
         </div>
         <div className="mobile-card-row">
           <span className="mobile-card-label">Total</span>
@@ -383,9 +412,13 @@ export default function TiendanubeSection({ currentUser }) {
           </div>
           {canManageIntegration ? (
             <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
-              Si querés cambiar a otra tienda Tiendanube, desconectá esta integración y volvé a conectar con la cuenta de la tienda deseada.
+              Esta vista solo muestra pedidos de Tiendanube. No envía ni modifica pedidos en Tiendanube.
             </div>
           ) : null}
+
+          <div className="card" style={{ marginBottom: '12px', color: 'var(--text-muted)', fontSize: '13px' }}>
+            Usá <strong>Sincronizar</strong> para traer pedidos nuevos y <strong>Aplicar filtros</strong> para buscar en los pedidos ya cargados.
+          </div>
 
           <div className="stats-grid" style={{ marginBottom: '18px' }}>
             <div className="stat-card card accent"><div className="stat-value">{orders.length}</div><div className="stat-label">Total pedidos</div></div>
@@ -421,12 +454,12 @@ export default function TiendanubeSection({ currentUser }) {
               </div>
               <div className="form-group" style={{ maxWidth: '140px' }}>
                 <button type="button" className="btn btn-primary" onClick={() => load({ sync: false })} disabled={loading}>
-                  {loading ? 'Cargando...' : 'Buscar'}
+                  {loading ? 'Cargando...' : 'Aplicar filtros'}
                 </button>
               </div>
               <div className="form-group" style={{ maxWidth: '180px' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => load({ sync: true })} disabled={syncing}>
-                  {syncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+                  {syncing ? 'Sincronizando...' : 'Sincronizar'}
                 </button>
               </div>
             </div>
