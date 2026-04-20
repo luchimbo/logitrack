@@ -131,6 +131,7 @@ export default function TiendanubeSection({ currentUser }) {
   const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('all');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
@@ -306,13 +307,19 @@ export default function TiendanubeSection({ currentUser }) {
     return isSameArgentinaDay(o.dispatchedAt);
   }).length;
   const totalActiveCount = operationalOrders.length;
+  const visibleOrders = operationalOrders.filter((o) => {
+    const op = getOperationalStatus(o).key;
+    if (viewMode === 'to_send') return op === 'to_send';
+    if (viewMode === 'dispatched') return op === 'dispatched';
+    return true;
+  });
   const compactWarning = /unauthorized|401|forbidden|invalid token/i.test(String(warning || ''))
     ? 'Sesión de Tiendanube vencida. Usá "Desconectar / Cambiar credenciales" para reconectar.'
     : warning;
   const compactError = /unauthorized|401|forbidden|invalid token/i.test(String(error || ''))
     ? 'Sesión de Tiendanube vencida. Reconectá la integración para continuar.'
     : error;
-  const orderedOrders = [...operationalOrders].sort((a, b) => {
+  const orderedOrders = [...visibleOrders].sort((a, b) => {
     const priorityDiff = getStatusPriority(a) - getStatusPriority(b);
     if (priorityDiff !== 0) return priorityDiff;
     const dateA = new Date(a.createdAt || 0).getTime();
@@ -419,6 +426,47 @@ export default function TiendanubeSection({ currentUser }) {
                 <label className="form-label">Buscar</label>
                 <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Número de pedido o cliente" />
               </div>
+              <div className="form-group" style={{ minWidth: '320px' }}>
+                <label className="form-label">Vista</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setViewMode('all')}
+                    style={{
+                      background: viewMode === 'all' ? 'var(--surface-hover)' : 'transparent',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Todo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setViewMode('to_send')}
+                    style={{
+                      background: viewMode === 'to_send' ? 'rgba(249,115,22,0.12)' : 'transparent',
+                      color: viewMode === 'to_send' ? '#f97316' : 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Por enviar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setViewMode('dispatched')}
+                    style={{
+                      background: viewMode === 'dispatched' ? 'rgba(34,197,94,0.12)' : 'transparent',
+                      color: viewMode === 'dispatched' ? '#22c55e' : 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Enviados
+                  </button>
+                </div>
+              </div>
               <div className="form-group" style={{ maxWidth: '180px' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => load({ sync: true })} disabled={syncing}>
                   {syncing ? 'Sincronizando...' : 'Sincronizar'}
@@ -440,7 +488,13 @@ export default function TiendanubeSection({ currentUser }) {
             </div>
           ) : (
             <div className="card">
-              <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>No hay pedidos Zipnova pendientes o enviados para mostrar.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
+                {viewMode === 'to_send'
+                  ? 'No hay pedidos Zipnova por enviar en este momento.'
+                  : viewMode === 'dispatched'
+                    ? 'No hay pedidos Zipnova enviados para mostrar.'
+                    : 'No hay pedidos Zipnova pendientes o enviados para mostrar.'}
+              </p>
             </div>
           )}
         </>
