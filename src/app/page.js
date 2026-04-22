@@ -254,7 +254,10 @@ export default function Home() {
         onClick={() => setSidebarOpen(false)}
       />
 
-      <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <nav 
+        className={`sidebar ${sidebarOpen ? 'open' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sidebar-header">
           <GeoModiLogo size="sm" />
           <button 
@@ -291,7 +294,7 @@ export default function Home() {
         </div>
         {currentUser && (
           <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
-            <div className="user-profile" style={{ justifyContent: 'flex-start' }}>
+            <div className="user-profile" style={{ justifyContent: 'flex-start', marginBottom: '16px' }}>
               <div className="avatar">{currentUser.username?.[0]?.toUpperCase()}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.email || currentUser.username}</div>
@@ -305,7 +308,6 @@ export default function Home() {
               className="btn btn-ghost"
               style={{ 
                 width: '100%', 
-                marginTop: '12px', 
                 justifyContent: 'center',
                 padding: '12px',
                 fontSize: '13px'
