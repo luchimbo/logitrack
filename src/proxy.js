@@ -14,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   "/admin-login(.*)",
   "/dev(.*)",
   "/api/auth/login(.*)",
+  "/api/debug/auth(.*)",
   "/api/v2/print-jobs/intake(.*)",
   "/api/v2/print-jobs/backfill(.*)",
   "/api/v2/print-jobs/recover(.*)",
