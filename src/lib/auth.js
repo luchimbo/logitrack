@@ -107,12 +107,29 @@ async function bootstrapClerkUser() {
       });
     }
   } else {
-    const insertedUser = await db.execute({
-      sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-      args: [clerkAuth.userId, email],
+    // Buscar si ya existe un usuario con este email (puede tener otro clerk_user_id)
+    const existingByEmail = await db.execute({
+      sql: "SELECT id, email, last_seen_at, onboarding_completed FROM app_users WHERE email = ? LIMIT 1",
+      args: [email],
     });
-    appUserId = Number(insertedUser.lastInsertRowid);
-    lastSeenTouched = true;
+
+    if (existingByEmail.rows.length) {
+      // Actualizar el clerk_user_id del usuario existente
+      appUserId = Number(existingByEmail.rows[0].id);
+      await db.execute({
+        sql: "UPDATE app_users SET clerk_user_id = ?, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [clerkAuth.userId, appUserId],
+      });
+      lastSeenTouched = true;
+      console.log("[bootstrapClerkUser] Updated existing user with new clerk_user_id:", appUserId);
+    } else {
+      const insertedUser = await db.execute({
+        sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        args: [clerkAuth.userId, email],
+      });
+      appUserId = Number(insertedUser.lastInsertRowid);
+      lastSeenTouched = true;
+    }
   }
 
   let membershipResult = await db.execute({
