@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import UploadSection from "@/components/UploadSection";
 import ZoneConfig from "@/components/ZoneConfig";
@@ -20,12 +20,14 @@ import OnboardingTour from "@/components/OnboardingTour";
 
 export default function Home() {
   const { signOut } = useClerk();
+  const { isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("upload");
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -34,22 +36,30 @@ export default function Home() {
         if (!res.ok) {
           setCurrentUser(null);
           setAuthChecked(true);
-          router.replace("/login");
+          if (!isSignedIn) {
+            router.replace("/login");
+          }
           return;
         }
         const data = await res.json();
         setCurrentUser(data.user || null);
         setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.isGlobalAdmin && !data.user.onboardingCompleted));
         setAuthChecked(true);
-      } catch {
+        setAuthError(null);
+      } catch (err) {
         setCurrentUser(null);
         setAuthChecked(true);
-        router.replace("/login");
+        setAuthError(err.message || "Error de autenticación");
+        if (!isSignedIn) {
+          router.replace("/login");
+        }
       }
     };
 
-    loadUser();
-  }, [router]);
+    if (isLoaded) {
+      loadUser();
+    }
+  }, [router, isSignedIn, isLoaded]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -197,6 +207,24 @@ export default function Home() {
   }
 
   if (!currentUser) {
+    if (isSignedIn && authError) {
+      return (
+        <main className="main-content" style={{ marginLeft: 0 }}>
+          <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>Error de autenticación</h2>
+              <p style={{ color: 'var(--text-muted)' }}>No se pudo sincronizar tu cuenta. Intentá de nuevo.</p>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="btn btn-primary"
+            >
+              Cerrar sesión e intentar de nuevo
+            </button>
+          </div>
+        </main>
+      );
+    }
     return null;
   }
 
