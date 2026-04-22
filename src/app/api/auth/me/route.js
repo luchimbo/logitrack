@@ -28,7 +28,8 @@ export async function GET(request) {
     return NextResponse.json({ 
       error: 'Error en el servidor', 
       errorDetail: error.message || 'Unknown error',
-      errorCode: 'SERVER_ERROR'
+      errorCode: 'SERVER_ERROR',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }, { status: 500 });
   }
 }

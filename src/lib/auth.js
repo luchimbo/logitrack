@@ -65,9 +65,14 @@ async function bootstrapClerkUser() {
   await ensureDb();
 
   const clerkAuth = await auth();
-  if (!clerkAuth?.userId) return null;
+  console.log("[bootstrapClerkUser] clerkAuth:", clerkAuth);
+  if (!clerkAuth?.userId) {
+    console.log("[bootstrapClerkUser] No userId found in clerkAuth");
+    return null;
+  }
 
   const clerkUser = await currentUser();
+  console.log("[bootstrapClerkUser] clerkUser:", clerkUser ? "found" : "null", "email:", clerkUser?.primaryEmailAddress?.emailAddress);
   const email = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.[0]?.emailAddress || null;
   if (!email) {
     throw new Error("No se pudo resolver email de Clerk");
