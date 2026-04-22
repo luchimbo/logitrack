@@ -213,13 +213,18 @@ async function getLegacyAdminFromRequest(request) {
 }
 
 export async function getCurrentActor(request) {
+  console.log("[getCurrentActor] Starting...");
   const legacy = await getLegacyAdminFromRequest(request);
+  console.log("[getCurrentActor] Legacy auth:", legacy ? "found" : "not found");
   if (legacy) return legacy;
 
   try {
-    return await bootstrapClerkUser();
+    console.log("[getCurrentActor] Trying bootstrapClerkUser...");
+    const result = await bootstrapClerkUser();
+    console.log("[getCurrentActor] bootstrapClerkUser result:", result ? "success" : "null");
+    return result;
   } catch (e) {
-    console.error("Clerk auth bootstrap error:", e.message || e);
+    console.error("[getCurrentActor] Clerk auth bootstrap error:", e.message || e);
     return null;
   }
 }
