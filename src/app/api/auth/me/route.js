@@ -5,7 +5,7 @@ export async function GET(request) {
   try {
     const actor = await getCurrentActor(request);
     if (!actor) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+      return NextResponse.json({ error: 'No autorizado', errorCode: 'AUTH_FAILED' }, { status: 401 });
     }
 
     return NextResponse.json({
@@ -25,6 +25,10 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('Auth me error:', error);
-    return NextResponse.json({ error: 'Error en el servidor' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Error en el servidor', 
+      errorDetail: error.message || 'Unknown error',
+      errorCode: 'SERVER_ERROR'
+    }, { status: 500 });
   }
 }

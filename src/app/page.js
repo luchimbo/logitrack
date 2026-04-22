@@ -34,8 +34,10 @@ export default function Home() {
       try {
         const res = await fetch("/api/auth/me");
         if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
           setCurrentUser(null);
           setAuthChecked(true);
+          setAuthError(errorData.errorDetail || errorData.error || `Error ${res.status}`);
           if (!isSignedIn) {
             router.replace("/login");
           }
@@ -214,7 +216,21 @@ export default function Home() {
             <div style={{ textAlign: 'center' }}>
               <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>Error de autenticación</h2>
               <p style={{ color: 'var(--text-muted)' }}>No se pudo sincronizar tu cuenta. Intentá de nuevo.</p>
-              {authError && <p style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '8px' }}>{authError}</p>}
+              {authError && (
+                <div style={{ 
+                  color: 'var(--danger)', 
+                  fontSize: '12px', 
+                  marginTop: '8px',
+                  padding: '8px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  borderRadius: '4px',
+                  maxWidth: '400px',
+                  wordBreak: 'break-word'
+                }}>
+                  <strong>Error técnico:</strong><br/>
+                  {authError}
+                </div>
+              )}
             </div>
             <button 
               onClick={handleLogout}
