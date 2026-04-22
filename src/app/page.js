@@ -207,13 +207,14 @@ export default function Home() {
   }
 
   if (!currentUser) {
-    if (isSignedIn && authError) {
+    if (isSignedIn) {
       return (
         <main className="main-content" style={{ marginLeft: 0 }}>
           <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', flexDirection: 'column', gap: '16px' }}>
             <div style={{ textAlign: 'center' }}>
               <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>Error de autenticación</h2>
               <p style={{ color: 'var(--text-muted)' }}>No se pudo sincronizar tu cuenta. Intentá de nuevo.</p>
+              {authError && <p style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '8px' }}>{authError}</p>}
             </div>
             <button 
               onClick={handleLogout}
