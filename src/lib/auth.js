@@ -4,6 +4,12 @@ import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { logAudit } from "@/lib/audit";
 
+// Verificar configuración de Clerk
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+console.log("[Clerk Config] Publishable key exists:", !!clerkPublishableKey, "Length:", clerkPublishableKey?.length);
+console.log("[Clerk Config] Secret key exists:", !!clerkSecretKey, "Length:", clerkSecretKey?.length);
+
 function getJwtSecret() {
   const secret = String(process.env.JWT_SECRET || "").trim();
   if (!secret) return null;
