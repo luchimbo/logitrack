@@ -117,10 +117,6 @@ function getRowActionConfig(order) {
   };
 }
 
-function getStatusPriority(order) {
-  return getOperationalStatus(order).key === 'to_send' ? 0 : 1;
-}
-
 function getShippingProviderLabel(order) {
   const carrier = String(order?.shippingCarrier || '').trim();
   const method = String(order?.shippingMethod || '').trim();
@@ -133,21 +129,28 @@ function getShippingProviderLabel(order) {
 function getProductSummary(order) {
   const products = Array.isArray(order?.products) ? order.products : [];
   const totalUnits = products.reduce((sum, product) => sum + (Number(product?.quantity || 0) || 1), 0);
+  const distinctNames = [...new Set(
+    products
+      .map((product) => String(product?.name || '').trim() || 'Producto')
+      .filter(Boolean)
+  )];
 
   if (!products.length) {
     return { label: 'Sin productos', detail: '-' };
   }
 
-  if (products.length === 1) {
+  if (distinctNames.length === 1) {
     return {
       label: `${totalUnits} unid.`,
-      detail: products[0]?.name || 'Producto',
+      detail: distinctNames[0],
     };
   }
 
+  const visibleNames = distinctNames.slice(0, 2).join(' · ');
+
   return {
     label: `${totalUnits} unid.`,
-    detail: `${products.length} productos`,
+    detail: distinctNames.length > 2 ? `${visibleNames} +${distinctNames.length - 2} más` : visibleNames,
   };
 }
 
@@ -504,11 +507,9 @@ export default function TiendanubeSection({ currentUser }) {
     ? 'Sesión de Tiendanube vencida. Reconectá la integración para continuar.'
     : error;
   const orderedOrders = [...visibleOrders].sort((a, b) => {
-    const priorityDiff = getStatusPriority(a) - getStatusPriority(b);
-    if (priorityDiff !== 0) return priorityDiff;
     const dateA = new Date(a.createdAt || 0).getTime();
     const dateB = new Date(b.createdAt || 0).getTime();
-    return dateA - dateB;
+    return dateB - dateA;
   });
   const allVisibleSelected = orderedOrders.length > 0 && orderedOrders.every((order) => selectedOrderIds.includes(order.id));
   const selectedVisibleCount = orderedOrders.filter((order) => selectedOrderIds.includes(order.id)).length;
