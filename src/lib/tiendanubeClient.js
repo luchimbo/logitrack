@@ -1,4 +1,5 @@
-const TIENDANUBE_API_BASE = 'https://api.tiendanube.com/v1';
+const TIENDANUBE_API_BASE_V1 = 'https://api.tiendanube.com/v1';
+const TIENDANUBE_API_BASE_2025_03 = 'https://api.tiendanube.com/2025-03';
 
 function normalizeOrdersResponse(payload) {
   if (Array.isArray(payload)) return payload;
@@ -58,11 +59,11 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     return msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('token');
   }
 
-  async function tiendanubeFetch(path, options = {}) {
+  async function tiendanubeFetch(path, options = {}, { apiBase = TIENDANUBE_API_BASE_V1 } = {}) {
     if (!resolvedAccessToken || !resolvedStoreId) {
       throw new Error('Access token o store ID de Tiendanube no configurados');
     }
-    const url = `${TIENDANUBE_API_BASE}/${resolvedStoreId}${path.startsWith('/') ? path : `/${path}`}`;
+    const url = `${apiBase}/${resolvedStoreId}${path.startsWith('/') ? path : `/${path}`}`;
     const modes = ['authentication-only', 'authorization-only', 'both'];
     let lastRes = null;
     let lastData = null;
@@ -112,8 +113,26 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     return tiendanubeFetch(`/orders/${id}`);
   }
 
+  async function listFulfillmentOrders(orderId) {
+    const payload = await tiendanubeFetch(`/orders/${orderId}/fulfillment-orders`, {}, { apiBase: TIENDANUBE_API_BASE_2025_03 });
+    return Array.isArray(payload) ? payload : [];
+  }
+
+  async function updateFulfillmentOrderStatus(orderId, fulfillmentOrderId, status) {
+    return tiendanubeFetch(
+      `/orders/${orderId}/fulfillment-orders/${fulfillmentOrderId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      },
+      { apiBase: TIENDANUBE_API_BASE_2025_03 },
+    );
+  }
+
   return {
     listOrders,
     getOrder,
+    listFulfillmentOrders,
+    updateFulfillmentOrderStatus,
   };
 }

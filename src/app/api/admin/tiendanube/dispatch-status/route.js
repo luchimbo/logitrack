@@ -1,14 +1,42 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { updateTiendanubeDispatchStatus } from '@/lib/tiendanubeStore';
+import { resolveTiendanubeClient } from '@/lib/tiendanubeResolver';
+import { getStoredTiendanubeOrder, upsertTiendanubeOrder } from '@/lib/tiendanubeStore';
 
-function normalizeDispatchStatus(value) {
+function normalizeTargetStatus(value) {
   return String(value || '').toLowerCase() === 'dispatched' ? 'dispatched' : 'to_send';
+}
+
+function mapTargetToFulfillmentStatus(status) {
+  return status === 'dispatched' ? 'DISPATCHED' : 'UNPACKED';
 }
 
 function getActorLabel(actor) {
   return actor?.email || actor?.username || actor?.id || 'usuario';
+}
+
+async function updateOrderInTiendanube({ client, workspaceId, orderId, targetStatus }) {
+  const fulfillmentTarget = mapTargetToFulfillmentStatus(targetStatus);
+  const fulfillmentOrders = await client.listFulfillmentOrders(orderId);
+
+  if (!fulfillmentOrders.length) {
+    throw new Error(`El pedido ${orderId} no tiene fulfillment orders editables en Tiendanube`);
+  }
+
+  for (const fulfillmentOrder of fulfillmentOrders) {
+    const fulfillmentId = fulfillmentOrder?.id;
+    if (!fulfillmentId) continue;
+
+    const currentStatus = String(fulfillmentOrder?.status || '').toUpperCase();
+    if (currentStatus === fulfillmentTarget) continue;
+
+    await client.updateFulfillmentOrderStatus(orderId, fulfillmentId, fulfillmentTarget);
+  }
+
+  const refreshedOrder = await client.getOrder(orderId);
+  await upsertTiendanubeOrder(workspaceId, refreshedOrder);
+  return getStoredTiendanubeOrder({ workspaceId, id: orderId });
 }
 
 export async function POST(request) {
@@ -26,32 +54,55 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Debes seleccionar al menos un pedido' }, { status: 400 });
     }
 
-    const dispatchStatus = normalizeDispatchStatus(body?.status);
+    const targetStatus = normalizeTargetStatus(body?.status);
     const actor = authResult.actor;
-    const result = await updateTiendanubeDispatchStatus({
-      workspaceId: actor.workspaceId,
-      ids: normalizedIds,
-      dispatchStatus,
-      actorLabel: getActorLabel(actor),
+    const client = await resolveTiendanubeClient(actor.workspaceId, {
+      requiredScopes: ['read_orders', 'write_fulfillment_orders'],
     });
+
+    const updatedOrders = [];
+    const failures = [];
+
+    for (const orderId of normalizedIds) {
+      try {
+        const updatedOrder = await updateOrderInTiendanube({
+          client,
+          workspaceId: actor.workspaceId,
+          orderId,
+          targetStatus,
+        });
+        if (updatedOrder) {
+          updatedOrders.push(updatedOrder);
+        }
+      } catch (error) {
+        failures.push({
+          id: orderId,
+          error: error.message || 'No se pudo actualizar el pedido en Tiendanube',
+        });
+      }
+    }
 
     await logAudit({
       workspaceId: actor.workspaceId,
       appUserId: actor.appUserId,
       actorType: actor.authType || 'workspace-user',
       actorLabel: getActorLabel(actor),
-      action: dispatchStatus === 'dispatched' ? 'tiendanube_dispatch_marked' : 'tiendanube_dispatch_reset',
+      action: targetStatus === 'dispatched' ? 'tiendanube_shipping_marked_dispatched' : 'tiendanube_shipping_marked_to_send',
       entityType: 'tiendanube_order',
       metadata: {
         ids: normalizedIds,
-        updated: result.updated,
-        dispatchStatus,
+        updated: updatedOrders.length,
+        failed: failures.length,
+        targetStatus,
       },
     });
 
     return NextResponse.json({
-      updated: result.updated,
-      status: dispatchStatus,
+      updated: updatedOrders.length,
+      failed: failures.length,
+      status: targetStatus,
+      orders: updatedOrders,
+      failures,
     });
   } catch (error) {
     console.error('Tiendanube dispatch status error:', error);

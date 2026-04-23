@@ -110,10 +110,10 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
   let dispatchedAtExternal = '';
   if (externalDispatchDate) {
     dispatchedAtExternal = externalDispatchDate;
-  } else if (prevDispatchedAt) {
-    dispatchedAtExternal = prevDispatchedAt;
   } else if (isDispatchedShippingStatus(normalized.shippingStatus) && !isDispatchedShippingStatus(prevShippingStatus)) {
     dispatchedAtExternal = new Date().toISOString();
+  } else if (prevDispatchedAt) {
+    dispatchedAtExternal = prevDispatchedAt;
   }
 
   await db.execute({

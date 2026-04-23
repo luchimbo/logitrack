@@ -82,13 +82,39 @@ function isSameArgentinaDay(value) {
 }
 
 function getOperationalStatus(order) {
-  const dispatchStatus = String(order?.dispatchStatus || '').toLowerCase();
+  const shippingStatus = String(order?.shippingStatus || '').toLowerCase();
 
-  if (dispatchStatus === 'dispatched') {
+  if (shippingStatus === 'shipped' || shippingStatus === 'delivered') {
     return { key: 'dispatched', label: 'Despachado', color: '#22c55e' };
   }
 
   return { key: 'to_send', label: 'Por enviar', color: '#f97316' };
+}
+
+function getRowActionConfig(order) {
+  const operational = getOperationalStatus(order);
+
+  if (operational.key === 'to_send') {
+    return {
+      status: 'dispatched',
+      label: 'Despachado',
+      style: {
+        background: 'var(--success-bg, rgba(34,197,94,0.12))',
+        color: 'var(--success, #16a34a)',
+        border: '1px solid var(--success, #16a34a)',
+      },
+    };
+  }
+
+  return {
+    status: 'to_send',
+    label: 'Por enviar',
+    style: {
+      background: 'rgba(249,115,22,0.12)',
+      color: '#f97316',
+      border: '1px solid #f97316',
+    },
+  };
 }
 
 function getStatusPriority(order) {
@@ -126,6 +152,7 @@ function getProductSummary(order) {
 }
 
 function OrderDetails({ order }) {
+  const operational = getOperationalStatus(order);
   const shippingAddress = [
     order.shippingAddress?.address,
     order.shippingAddress?.number,
@@ -135,10 +162,13 @@ function OrderDetails({ order }) {
 
   return (
     <div style={{ display: 'grid', gap: '10px' }}>
-      {order.dispatchMarkedAt ? (
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+        <strong style={{ color: 'var(--text)' }}>Estado Tiendanube:</strong> {operational.label}
+        {order.shippingStatus ? ` · ${order.shippingStatus}` : ''}
+      </div>
+      {order.dispatchedAt ? (
         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text)' }}>Marcado:</strong> {new Date(order.dispatchMarkedAt).toLocaleString('es-AR')}
-          {order.dispatchMarkedBy ? ` · ${order.dispatchMarkedBy}` : ''}
+          <strong style={{ color: 'var(--text)' }}>Despachado en Tiendanube:</strong> {formatDateTime(order.dispatchedAt)}
         </div>
       ) : null}
       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -165,9 +195,10 @@ function OrderDetails({ order }) {
   );
 }
 
-function OrderCard({ order, isExpanded, onToggle, selected, onSelectionToggle }) {
+function OrderCard({ order, isExpanded, onToggle, selected, onSelectionToggle, onAction, updating }) {
   const operational = getOperationalStatus(order);
   const productSummary = getProductSummary(order);
+  const actionConfig = getRowActionConfig(order);
 
   return (
     <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '18px' }}>
@@ -197,6 +228,9 @@ function OrderCard({ order, isExpanded, onToggle, selected, onSelectionToggle })
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
         <span style={badgeStyle(operational.color)}>{operational.label}</span>
+        <button type="button" className="btn btn-sm" onClick={onAction} disabled={updating} style={actionConfig.style}>
+          {updating ? 'Guardando...' : actionConfig.label}
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginTop: '14px' }}>
@@ -226,6 +260,7 @@ export default function TiendanubeSection({ currentUser }) {
   const [search, setSearch] = useState(() => tiendanubeSectionCache.search || '');
   const [viewMode, setViewMode] = useState(() => tiendanubeSectionCache.viewMode || 'to_send');
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState([]);
   const [loading, setLoading] = useState(() => !tiendanubeSectionCache.initialized);
   const [syncing, setSyncing] = useState(false);
   const [updatingDispatchStatus, setUpdatingDispatchStatus] = useState(false);
@@ -440,12 +475,20 @@ export default function TiendanubeSection({ currentUser }) {
 
   const operationalOrders = orders.filter((o) => {
     const status = String(o.shippingStatus || '').toLowerCase();
-    return status === 'shipped' || status === 'delivered' || status === 'unshipped' || status === 'ready_to_ship' || status === 'packed' || status === '';
+    return status === 'shipped'
+      || status === 'delivered'
+      || status === 'unshipped'
+      || status === 'ready_to_ship'
+      || status === 'packed'
+      || status === 'unpacked'
+      || status === 'partially_packed'
+      || status === 'partially_fulfilled'
+      || status === '';
   });
   const toDispatchCount = operationalOrders.filter((o) => getOperationalStatus(o).key === 'to_send').length;
   const dispatchedTodayCount = operationalOrders.filter((o) => {
     if (getOperationalStatus(o).key !== 'dispatched') return false;
-    return isSameArgentinaDay(o.dispatchMarkedAt);
+    return isSameArgentinaDay(o.dispatchedAt);
   }).length;
   const totalActiveCount = operationalOrders.length;
   const visibleOrders = operationalOrders.filter((o) => {
@@ -479,38 +522,53 @@ export default function TiendanubeSection({ currentUser }) {
     setSelectedOrderIds((prev) => [...new Set([...prev, ...orderedOrders.map((order) => order.id)])]);
   };
 
-  const updateDispatchStatus = async (status) => {
-    if (!selectedOrderIds.length) return;
+  const updateDispatchStatus = async (status, ids = selectedOrderIds) => {
+    const targetIds = [...new Set((Array.isArray(ids) ? ids : []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
+    if (!targetIds.length) return;
+
     setUpdatingDispatchStatus(true);
+    setUpdatingOrderIds((prev) => [...new Set([...prev, ...targetIds])]);
     setError('');
+    setWarning('');
     try {
       const res = await fetch('/api/admin/tiendanube/dispatch-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedOrderIds, status }),
+        body: JSON.stringify({ ids: targetIds, status }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el estado de despacho');
 
-      const nextStatus = status === 'dispatched' ? 'dispatched' : 'to_send';
-      const markedAt = nextStatus === 'dispatched' ? new Date().toISOString() : '';
-      const markedBy = nextStatus === 'dispatched' ? (currentUser?.email || currentUser?.username || currentUser?.id || '') : '';
-      setOrders((prev) => prev.map((order) => (
-        selectedOrderIds.includes(order.id)
-          ? {
-            ...order,
-            dispatchStatus: nextStatus,
-            dispatchMarkedAt: markedAt,
-            dispatchMarkedBy: markedBy,
-          }
-          : order
-      )));
-      setSelectedOrderIds([]);
-      toast(nextStatus === 'dispatched' ? 'Pedidos marcados como despachados' : 'Pedidos marcados como por enviar', 'success');
+      const updatedOrders = Array.isArray(data.orders) ? data.orders.filter(Boolean) : [];
+      const updatedById = new Map(updatedOrders.map((order) => [order.id, order]));
+      if (updatedById.size) {
+        setOrders((prev) => prev.map((order) => updatedById.get(order.id) || order));
+      }
+
+      const failedIds = new Set((Array.isArray(data.failures) ? data.failures : []).map((item) => Number(item.id)).filter((id) => Number.isFinite(id)));
+      setSelectedOrderIds((prev) => prev.filter((id) => !targetIds.includes(id) || failedIds.has(id)));
+
+      if (data.failed) {
+        const firstFailure = data.failures?.[0]?.error || 'Algunos pedidos no pudieron actualizarse en Tiendanube';
+        if (data.updated) {
+          setWarning(firstFailure);
+          toast(`${data.updated} pedidos actualizados. ${data.failed} fallaron.`, 'info');
+        } else {
+          throw new Error(firstFailure);
+        }
+      } else {
+        toast(
+          status === 'dispatched'
+            ? (targetIds.length === 1 ? 'Pedido marcado como despachado' : 'Pedidos marcados como despachados')
+            : (targetIds.length === 1 ? 'Pedido marcado como por enviar' : 'Pedidos marcados como por enviar'),
+          'success',
+        );
+      }
     } catch (err) {
       setError(err.message || 'Error inesperado');
       toast(err.message || 'No se pudo actualizar el estado de despacho', 'error');
     } finally {
+      setUpdatingOrderIds((prev) => prev.filter((id) => !targetIds.includes(id)));
       setUpdatingDispatchStatus(false);
     }
   };
@@ -696,7 +754,7 @@ export default function TiendanubeSection({ currentUser }) {
                     type="button"
                     className="btn btn-sm"
                     disabled={!selectedOrderIds.length || updatingDispatchStatus}
-                    onClick={() => updateDispatchStatus('dispatched')}
+                    onClick={() => updateDispatchStatus('dispatched', selectedOrderIds)}
                     style={{ background: 'var(--success-bg, rgba(34,197,94,0.12))', color: 'var(--success, #16a34a)', border: '1px solid var(--success, #16a34a)' }}
                   >
                     {updatingDispatchStatus ? 'Actualizando...' : 'Marcar despachados'}
@@ -705,7 +763,7 @@ export default function TiendanubeSection({ currentUser }) {
                     type="button"
                     className="btn btn-sm"
                     disabled={!selectedOrderIds.length || updatingDispatchStatus}
-                    onClick={() => updateDispatchStatus('to_send')}
+                    onClick={() => updateDispatchStatus('to_send', selectedOrderIds)}
                     style={{ background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid #f97316' }}
                   >
                     Marcar por enviar
@@ -732,6 +790,7 @@ export default function TiendanubeSection({ currentUser }) {
                       <th>Envío</th>
                       <th>Estado</th>
                       <th style={{ width: '100px' }}>Detalle</th>
+                      <th style={{ width: '140px' }}>Acción</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -739,6 +798,8 @@ export default function TiendanubeSection({ currentUser }) {
                       const operational = getOperationalStatus(order);
                       const productSummary = getProductSummary(order);
                       const isExpanded = expandedId === order.id;
+                      const rowAction = getRowActionConfig(order);
+                      const isUpdatingRow = updatingOrderIds.includes(order.id);
 
                       return [
                           <tr key={order.id}>
@@ -781,10 +842,21 @@ export default function TiendanubeSection({ currentUser }) {
                                 {isExpanded ? 'Ocultar' : 'Detalle'}
                               </button>
                             </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                onClick={() => updateDispatchStatus(rowAction.status, [order.id])}
+                                disabled={isUpdatingRow || updatingDispatchStatus}
+                                style={rowAction.style}
+                              >
+                                {isUpdatingRow ? 'Guardando...' : rowAction.label}
+                              </button>
+                            </td>
                           </tr>,
                           isExpanded ? (
                             <tr key={`${order.id}-detail`}>
-                              <td colSpan={9} style={{ background: 'var(--bg-secondary)', padding: '16px 20px' }}>
+                              <td colSpan={10} style={{ background: 'var(--bg-secondary)', padding: '16px 20px' }}>
                                 <OrderDetails order={order} />
                               </td>
                             </tr>
@@ -802,6 +874,8 @@ export default function TiendanubeSection({ currentUser }) {
                     order={order}
                     isExpanded={expandedId === order.id}
                     selected={selectedOrderIds.includes(order.id)}
+                    updating={updatingOrderIds.includes(order.id) || updatingDispatchStatus}
+                    onAction={() => updateDispatchStatus(getRowActionConfig(order).status, [order.id])}
                     onSelectionToggle={() => toggleOrderSelection(order.id)}
                     onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
                   />
