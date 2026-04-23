@@ -1,6 +1,38 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 
+function normalizeDispatchStatus(value) {
+  return String(value || '').toLowerCase() === 'dispatched' ? 'dispatched' : 'to_send';
+}
+
+function mapStoredTiendanubeRow(row) {
+  return {
+    id: Number(row.tiendanube_id),
+    number: row.number,
+    status: row.status,
+    paymentStatus: row.payment_status,
+    shippingStatus: row.shipping_status,
+    dispatchStatus: normalizeDispatchStatus(row.dispatch_status),
+    dispatchMarkedAt: row.dispatch_marked_at || '',
+    dispatchMarkedBy: row.dispatch_marked_by || '',
+    shippingMethod: row.shipping_method || '',
+    shippingCarrier: row.shipping_carrier || '',
+    isZipnova: Boolean(row.is_zipnova),
+    contactName: row.contact_name,
+    contactEmail: row.contact_email,
+    contactPhone: row.contact_phone,
+    shippingAddress: JSON.parse(row.shipping_address_json || '{}'),
+    products: JSON.parse(row.products_json || '[]'),
+    subtotal: row.subtotal,
+    total: row.total,
+    currency: row.currency,
+    createdAt: row.created_at_external,
+    updatedAt: row.updated_at_external,
+    dispatchedAt: row.dispatched_at_external,
+    syncedAt: row.synced_at,
+  };
+}
+
 export function normalizeTiendanubeOrder(order) {
   const shipping = order?.shipping_address || {};
   const shippingOption = order?.shipping_option || order?.shipping || {};
@@ -206,28 +238,23 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
     args: [...args, limit],
   });
 
-  return (result.rows || []).map((row) => ({
-    id: Number(row.tiendanube_id),
-    number: row.number,
-    status: row.status,
-    paymentStatus: row.payment_status,
-    shippingStatus: row.shipping_status,
-    shippingMethod: row.shipping_method || '',
-    shippingCarrier: row.shipping_carrier || '',
-    isZipnova: Boolean(row.is_zipnova),
-    contactName: row.contact_name,
-    contactEmail: row.contact_email,
-    contactPhone: row.contact_phone,
-    shippingAddress: JSON.parse(row.shipping_address_json || '{}'),
-    products: JSON.parse(row.products_json || '[]'),
-    subtotal: row.subtotal,
-    total: row.total,
-    currency: row.currency,
-    createdAt: row.created_at_external,
-    updatedAt: row.updated_at_external,
-    dispatchedAt: row.dispatched_at_external,
-    syncedAt: row.synced_at,
-  }));
+  return (result.rows || []).map(mapStoredTiendanubeRow);
+}
+
+export async function getTiendanubeSyncMeta({ workspaceId } = {}) {
+  await ensureDb();
+  const result = await db.execute({
+    sql: `SELECT MAX(synced_at) AS last_synced_at, COUNT(*) AS total_orders
+      FROM tiendanube_orders
+      WHERE workspace_id = ?`,
+    args: [workspaceId],
+  });
+
+  const row = result.rows?.[0] || {};
+  return {
+    lastSyncedAt: row.last_synced_at || '',
+    totalOrders: Number(row.total_orders || 0),
+  };
 }
 
 export async function getStoredTiendanubeOrder({ workspaceId, id }) {
@@ -238,26 +265,34 @@ export async function getStoredTiendanubeOrder({ workspaceId, id }) {
   });
   if (!result.rows.length) return null;
   const row = result.rows[0];
-  return {
-    id: Number(row.tiendanube_id),
-    number: row.number,
-    status: row.status,
-    paymentStatus: row.payment_status,
-    shippingStatus: row.shipping_status,
-    shippingMethod: row.shipping_method || '',
-    shippingCarrier: row.shipping_carrier || '',
-    isZipnova: Boolean(row.is_zipnova),
-    contactName: row.contact_name,
-    contactEmail: row.contact_email,
-    contactPhone: row.contact_phone,
-    shippingAddress: JSON.parse(row.shipping_address_json || '{}'),
-    products: JSON.parse(row.products_json || '[]'),
-    subtotal: row.subtotal,
-    total: row.total,
-    currency: row.currency,
-    createdAt: row.created_at_external,
-    updatedAt: row.updated_at_external,
-    dispatchedAt: row.dispatched_at_external,
-    syncedAt: row.synced_at,
-  };
+  return mapStoredTiendanubeRow(row);
+}
+
+export async function updateTiendanubeDispatchStatus({ workspaceId, ids = [], dispatchStatus = 'to_send', actorLabel = '' } = {}) {
+  await ensureDb();
+
+  const normalizedIds = [...new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id)))];
+
+  if (!normalizedIds.length) {
+    return { updated: 0 };
+  }
+
+  const normalizedStatus = normalizeDispatchStatus(dispatchStatus);
+  const placeholders = normalizedIds.map(() => '?').join(', ');
+  const markedAt = normalizedStatus === 'dispatched' ? new Date().toISOString() : null;
+  const markedBy = normalizedStatus === 'dispatched' ? (actorLabel || null) : null;
+
+  const result = await db.execute({
+    sql: `UPDATE tiendanube_orders
+      SET dispatch_status = ?,
+          dispatch_marked_at = ?,
+          dispatch_marked_by = ?
+      WHERE workspace_id = ?
+        AND tiendanube_id IN (${placeholders})`,
+    args: [normalizedStatus, markedAt, markedBy, workspaceId, ...normalizedIds],
+  });
+
+  return { updated: Number(result.rowsAffected || 0) };
 }

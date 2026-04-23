@@ -240,6 +240,9 @@ export async function initDb() {
       status TEXT,
       payment_status TEXT,
       shipping_status TEXT,
+      dispatch_status TEXT DEFAULT 'to_send',
+      dispatch_marked_at DATETIME,
+      dispatch_marked_by TEXT,
       contact_name TEXT,
       contact_email TEXT,
       contact_phone TEXT,
@@ -326,13 +329,23 @@ export async function initDb() {
   await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
   await addColumnIfMissing("tiendanube_orders", "updated_at_external", "TEXT");
   await addColumnIfMissing("tiendanube_orders", "dispatched_at_external", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
     await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
+  }
+
+  try {
+    await exec("UPDATE tiendanube_orders SET dispatch_status = 'to_send' WHERE dispatch_status IS NULL OR TRIM(dispatch_status) = ''");
+  } catch (e) {
+    console.error("Dispatch status backfill error:", e.message || e);
   }
 
   let legacyWorkspaceId = null;
