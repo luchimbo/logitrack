@@ -8,7 +8,6 @@ import ZoneConfig from "@/components/ZoneConfig";
 import FlexSection from "@/components/FlexSection";
 import ColectaSection from "@/components/ColectaSection";
 import PickingList from "@/components/PickingList";
-import CarrierView from "@/components/CarrierView";
 import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
@@ -142,7 +141,6 @@ export default function Home() {
       case "flex": return <FlexSection />;
       case "colecta": return <ColectaSection />;
       case "zoneConfig": return <ZoneConfig />;
-      case "carrierView": return <CarrierView />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
@@ -169,7 +167,6 @@ export default function Home() {
       title: "Configuración",
       items: [
         { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
-        { id: "carrierView", icon: "🚛", label: "Transportistas" },
       ],
     },
     {

@@ -45,6 +45,7 @@ export default function FlexSection() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedZone, setSelectedZone] = useState(null);
+    const [activeView, setActiveView] = useState('summary');
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
 
@@ -173,6 +174,11 @@ export default function FlexSection() {
 
     const assigned = shipments.filter(s => s.assigned_carrier);
     const unassigned = shipments.filter(s => !s.assigned_carrier);
+    const flexTabs = [
+        { id: 'summary', icon: '📌', label: 'Resumen' },
+        { id: 'carriers', icon: '🚛', label: 'Transportistas' },
+        { id: 'zones', icon: '🗺️', label: 'Por zona' },
+    ];
 
     // Group by zone
     const shipmentsByZone = {
@@ -214,7 +220,21 @@ export default function FlexSection() {
                 </div>
             </div>
 
-            {health && (
+            <div className="period-picker flex-section-tabs" style={{ marginBottom: '18px' }}>
+                {flexTabs.map(tab => (
+                    <button
+                        key={tab.id}
+                        type="button"
+                        className={`period-tab ${activeView === tab.id ? 'active' : ''}`}
+                        onClick={() => setActiveView(tab.id)}
+                    >
+                        <span className="period-icon">{tab.icon}</span>
+                        <span className="period-label">{tab.label}</span>
+                    </button>
+                ))}
+            </div>
+
+            {activeView === 'summary' && health && (
                 <div className="card" style={{ marginBottom: '14px', borderLeft: `3px solid ${style.color}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <div>
@@ -252,16 +272,18 @@ export default function FlexSection() {
                 </div>
             )}
 
-            <div className="stats-grid">
-                <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total Flex</div></div>
-                <div className="stat-card card success"><div className="stat-value">{assigned.length}</div><div className="stat-label">Asignados</div></div>
-                {unassigned.length > 0 && (
-                    <div className="stat-card card danger"><div className="stat-value">{unassigned.length}</div><div className="stat-label">Sin Asignar</div></div>
-                )}
-            </div>
+            {activeView === 'summary' && (
+                <div className="stats-grid">
+                    <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total Flex</div></div>
+                    <div className="stat-card card success"><div className="stat-value">{assigned.length}</div><div className="stat-label">Asignados</div></div>
+                    {unassigned.length > 0 && (
+                        <div className="stat-card card danger"><div className="stat-value">{unassigned.length}</div><div className="stat-label">Sin Asignar</div></div>
+                    )}
+                </div>
+            )}
 
             {/* Zone Explorer UI */}
-            <div className="card mb-md">
+            {activeView === 'zones' && <div className="card mb-md">
                 <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700 }}>🗺️ Explorador de Zonas</h3>
                 <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
                     Hacé clic en una zona para ver qué envíos están asignados a ella y revisar si el partido fue detectado correctamente.
@@ -405,10 +427,10 @@ export default function FlexSection() {
                         </div>
                     </>
                 )}
-            </div>
+            </div>}
 
             {/* Per-carrier tables */}
-            {Object.entries(byCarrier).map(([carrier, items]) => {
+            {activeView === 'carriers' && Object.entries(byCarrier).map(([carrier, items]) => {
                 const carrierData = carriers.find(c => c.name === carrier);
 
                 // Zone breakdown by zone group (CABA, GBA 1, GBA 2, GBA 3)
@@ -421,11 +443,11 @@ export default function FlexSection() {
                 const zoneSorted = zoneOrder.filter(z => byZone[z]).map(z => [z, byZone[z]]);
 
                 return (
-                    <div key={carrier} className="card mb-md" style={{ borderLeft: `3px solid ${carrierData?.color || 'var(--accent)'}` }}>
-                        <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                            🚛 {carrierData?.display_name || carrier}
+                    <details key={carrier} className="card mb-md carrier-disclosure" style={{ borderLeft: `3px solid ${carrierData?.color || 'var(--accent)'}` }} open>
+                        <summary className="carrier-disclosure-summary">
+                            <span>🚛 {carrierData?.display_name || carrier}</span>
                             <span className="badge badge-flex">{items.length} envíos</span>
-                        </h3>
+                        </summary>
 
                         {/* Zone breakdown */}
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "14px", padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
@@ -537,15 +559,16 @@ export default function FlexSection() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </details>
                 );
             })}
 
-            {unassigned.length > 0 && (
-                <div className="card" style={{ borderLeft: "3px solid var(--danger)" }}>
-                    <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700, color: "var(--danger)" }}>
-                        ⚠️ Sin Asignar <span className="badge" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>{unassigned.length}</span>
-                    </h3>
+            {activeView === 'carriers' && unassigned.length > 0 && (
+                <details className="card carrier-disclosure" style={{ borderLeft: "3px solid var(--danger)" }} open>
+                    <summary className="carrier-disclosure-summary" style={{ color: "var(--danger)" }}>
+                        <span>⚠️ Sin Asignar</span>
+                        <span className="badge" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>{unassigned.length}</span>
+                    </summary>
                     {/* Desktop Table */}
                     <div className="table-container">
                         <table>
@@ -648,7 +671,7 @@ export default function FlexSection() {
                             </div>
                         ))}
                     </div>
-                </div>
+                </details>
             )}
 
             <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
