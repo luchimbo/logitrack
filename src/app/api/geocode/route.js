@@ -25,6 +25,17 @@ function normalizeText(value) {
         .trim();
 }
 
+function buildAddressKey(shipment) {
+    return [
+        shipment?.address,
+        shipment?.city,
+        shipment?.partido,
+        shipment?.province,
+        shipment?.postal_code,
+        'Argentina',
+    ].map(normalizeText).filter(Boolean).join('|');
+}
+
 function candidateParts(feature) {
     const address = feature?.address || {};
     return [
@@ -193,6 +204,13 @@ async function geocodeShipment(workspaceId, shipment) {
         return { success: false, id: shipment.id, reason: 'empty_query' };
     }
 
+    const addressKey = buildAddressKey(shipment);
+    const cached = addressKey ? await getCachedGeocode(workspaceId, addressKey) : null;
+    if (cached) {
+        await updateShipmentCoordinates(workspaceId, shipment.id, cached.lat, cached.lng);
+        return { success: true, id: shipment.id, lat: cached.lat, lng: cached.lng, cached: true };
+    }
+
     let geocoded = null;
 
     if (GOOGLE_MAPS_API_KEY) {
@@ -211,14 +229,63 @@ async function geocodeShipment(workspaceId, shipment) {
         return { success: false, id: shipment.id, reason: 'not_found' };
     }
 
-    await db.execute({
-        sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
-        args: [parseFloat(geocoded.lat), parseFloat(geocoded.lng), shipment.id, workspaceId]
-    });
+    await updateShipmentCoordinates(workspaceId, shipment.id, geocoded.lat, geocoded.lng);
+    if (addressKey) {
+        await saveCachedGeocode(workspaceId, addressKey, geocoded);
+    }
 
     await delay(GEOCODE_DELAY_MS);
 
     return { success: true, id: shipment.id, lat: geocoded.lat, lng: geocoded.lng };
+}
+
+async function updateShipmentCoordinates(workspaceId, shipmentId, lat, lng) {
+    await db.execute({
+        sql: "UPDATE shipments SET lat = ?, lng = ? WHERE id = ? AND workspace_id = ?",
+        args: [parseFloat(lat), parseFloat(lng), shipmentId, workspaceId]
+    });
+}
+
+async function getCachedGeocode(workspaceId, addressKey) {
+    const result = await db.execute({
+        sql: "SELECT lat, lng FROM geocode_cache WHERE workspace_id = ? AND address_key = ? LIMIT 1",
+        args: [workspaceId, addressKey],
+    });
+
+    const row = result.rows[0];
+    if (!row || !isWithinArgentina(row.lat, row.lng)) return null;
+
+    await db.execute({
+        sql: "UPDATE geocode_cache SET last_used_at = CURRENT_TIMESTAMP WHERE workspace_id = ? AND address_key = ?",
+        args: [workspaceId, addressKey],
+    });
+
+    return { lat: Number(row.lat), lng: Number(row.lng) };
+}
+
+async function saveCachedGeocode(workspaceId, addressKey, geocoded) {
+    await db.execute({
+        sql: `INSERT INTO geocode_cache (workspace_id, address_key, lat, lng, provider, place_id, formatted_address, score, last_used_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(workspace_id, address_key) DO UPDATE SET
+                lat = excluded.lat,
+                lng = excluded.lng,
+                provider = excluded.provider,
+                place_id = excluded.place_id,
+                formatted_address = excluded.formatted_address,
+                score = excluded.score,
+                last_used_at = CURRENT_TIMESTAMP`,
+        args: [
+            workspaceId,
+            addressKey,
+            parseFloat(geocoded.lat),
+            parseFloat(geocoded.lng),
+            geocoded.provider || null,
+            geocoded.placeId || null,
+            geocoded.formattedAddress || geocoded.raw?.display_name || null,
+            Number.isFinite(geocoded.score) ? geocoded.score : null,
+        ],
+    });
 }
 
 async function geocodeShipmentsInBatches(workspaceId, shipments) {
@@ -296,7 +363,7 @@ async function geocodeWithGoogle(shipment, query) {
         const score = scoreCandidate(normalized, shipment);
         if (score > bestScore) {
             bestScore = score;
-            best = { lat, lng, raw: normalized };
+            best = { lat, lng, raw: normalized, provider: 'google', placeId: feature?.place_id || null, formattedAddress: feature?.formatted_address || '', score };
         }
     }
 
@@ -322,7 +389,7 @@ async function geocodeWithNominatim(shipment, query) {
         const score = scoreCandidate(feature, shipment);
         if (score > bestScore) {
             bestScore = score;
-            best = { lat, lng, raw: feature };
+            best = { lat, lng, raw: feature, provider: 'nominatim', formattedAddress: feature?.display_name || '', score };
         }
     }
 

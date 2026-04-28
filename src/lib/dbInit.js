@@ -268,7 +268,22 @@ export async function initDb() {
       scope TEXT,
       expires_at DATETIME NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS geocode_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      address_key TEXT NOT NULL,
+      lat FLOAT NOT NULL,
+      lng FLOAT NOT NULL,
+      provider TEXT,
+      place_id TEXT,
+      formatted_address TEXT,
+      score INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, address_key)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_geocode_cache_workspace_key ON geocode_cache(workspace_id, address_key)`
   ];
 
   for (const stmt of statements) {

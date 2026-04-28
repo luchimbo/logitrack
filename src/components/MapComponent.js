@@ -26,7 +26,14 @@ function loadGoogleMaps(apiKey) {
 
   window.__googleMapsLoaderPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `${GOOGLE_MAPS_SRC}?key=${encodeURIComponent(apiKey)}`;
+    const params = new URLSearchParams({
+      key: apiKey,
+      loading: 'async',
+      v: 'weekly',
+      language: 'es-AR',
+      region: 'AR',
+    });
+    script.src = `${GOOGLE_MAPS_SRC}?${params.toString()}`;
     script.async = true;
     script.defer = true;
     script.onload = () => resolve(window.google.maps);
