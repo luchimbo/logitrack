@@ -4,19 +4,30 @@ const VALID_TOPICS = new Set([
   'store-redact',
   'customers-redact',
   'customers-data-request',
+  'store',
+  'customers',
 ]);
+
+function normalizePrivacyTopic(topic, body) {
+  const event = String(body?.event || '').replace('/', '-');
+  if (event === 'store-redact' || event === 'customers-redact' || event === 'customers-data_request') {
+    return event.replace('data_request', 'data-request');
+  }
+  return topic;
+}
 
 export async function POST(request, { params }) {
   try {
     const { topic } = await params;
 
-    if (!VALID_TOPICS.has(topic)) {
+    const body = await request.json().catch(() => ({}));
+    const normalizedTopic = normalizePrivacyTopic(topic, body);
+
+    if (!VALID_TOPICS.has(topic) || !VALID_TOPICS.has(normalizedTopic)) {
       return NextResponse.json({ error: 'Topic no soportado' }, { status: 404 });
     }
 
-    const body = await request.json().catch(() => ({}));
-
-    console.log(`[Tiendanube Webhook] ${topic}`, {
+    console.log(`[Tiendanube Webhook] ${normalizedTopic}`, {
       storeId: body?.store_id || body?.id,
       body,
     });

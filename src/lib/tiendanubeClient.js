@@ -113,6 +113,18 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     return tiendanubeFetch(`/orders/${id}`);
   }
 
+  async function listWebhooks() {
+    const payload = await tiendanubeFetch('/webhooks', {}, { apiBase: TIENDANUBE_API_BASE_2025_03 });
+    return Array.isArray(payload) ? payload : [];
+  }
+
+  async function createWebhook({ event, url } = {}) {
+    return tiendanubeFetch('/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({ event, url }),
+    }, { apiBase: TIENDANUBE_API_BASE_2025_03 });
+  }
+
   async function listFulfillmentOrders(orderId) {
     const payload = await tiendanubeFetch(`/orders/${orderId}/fulfillment-orders`, {}, { apiBase: TIENDANUBE_API_BASE_2025_03 });
     return Array.isArray(payload) ? payload : [];
@@ -132,6 +144,8 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
   return {
     listOrders,
     getOrder,
+    listWebhooks,
+    createWebhook,
     listFulfillmentOrders,
     updateFulfillmentOrderStatus,
   };

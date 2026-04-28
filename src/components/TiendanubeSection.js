@@ -13,8 +13,6 @@ let tiendanubeSectionCache = {
   initialized: false,
 };
 
-const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
-
 function formatOrderTotal(total, currency) {
   const numeric = Number(total);
   if (Number.isNaN(numeric)) return total ? `${currency || ''} ${total}`.trim() : '-';
@@ -63,13 +61,6 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function isSyncExpired(value) {
-  if (!value) return true;
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return true;
-  return Date.now() - timestamp >= AUTO_SYNC_INTERVAL_MS;
 }
 
 function isSameArgentinaDay(value) {
@@ -369,7 +360,7 @@ export default function TiendanubeSection({ currentUser }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo finalizar la conexión');
-      setWarning('Integración con Tiendanube conectada correctamente.');
+      setWarning(data.webhookWarning || 'Integración con Tiendanube conectada correctamente. Los cambios nuevos van a entrar por webhook.');
       setPendingStoreId('');
       await loadStatus();
     } catch (err) {
@@ -407,21 +398,11 @@ export default function TiendanubeSection({ currentUser }) {
 
   useEffect(() => {
     if (connected) {
-      if (!hasLoadedOrders || isSyncExpired(lastSyncedAt)) {
-        load({ syncMode: 'auto' });
+      if (!hasLoadedOrders) {
+        load({ syncMode: '0' });
       }
     }
-  }, [connected, hasLoadedOrders, lastSyncedAt, load]);
-
-  useEffect(() => {
-    if (!connected) return undefined;
-
-    const interval = setInterval(() => {
-      load({ syncMode: 'auto' });
-    }, AUTO_SYNC_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [connected, load]);
+  }, [connected, hasLoadedOrders, load]);
 
   useEffect(() => {
     setSelectedOrderIds((prev) => prev.filter((id) => orders.some((order) => order.id === id)));
@@ -624,7 +605,7 @@ export default function TiendanubeSection({ currentUser }) {
             {canManageIntegration ? (
               <>
                 <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
-                  Iniciá sesión con tu cuenta de Tiendanube para sincronizar pedidos.
+                  Iniciá sesión con tu cuenta de Tiendanube para recibir cambios de pedidos automáticamente.
                 </p>
                 <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
                   {connecting ? 'Abriendo Tiendanube...' : 'Iniciar sesión con Tiendanube'}
@@ -653,7 +634,7 @@ export default function TiendanubeSection({ currentUser }) {
             <div className="flex-between" style={{ flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                 Integración activa {connectedAt ? `· Conectado el ${formatDateTime(connectedAt)}` : ''}
-                {lastSyncedAt ? ` · Última sync ${formatDateTime(lastSyncedAt)}` : ' · Sin sincronización previa'}
+                {lastSyncedAt ? ` · Última actualización ${formatDateTime(lastSyncedAt)}` : ' · Sin pedidos guardados todavía'}
               </div>
               {canManageIntegration ? (
                 <button type="button" className="btn btn-ghost" onClick={handleDisconnect} disabled={connecting}>
@@ -733,7 +714,7 @@ export default function TiendanubeSection({ currentUser }) {
               </div>
               <div className="form-group" style={{ maxWidth: '180px' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => load({ syncMode: 'force' })} disabled={syncing}>
-                  {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                  {syncing ? 'Sincronizando...' : 'Sincronizar manual'}
                 </button>
               </div>
             </div>

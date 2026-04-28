@@ -39,6 +39,35 @@ export async function getIntegration({ workspaceId, provider }) {
   };
 }
 
+export async function findIntegrationByConfigValue({ provider, key, value }) {
+  await ensureDb();
+  const result = await db.execute({
+    sql: `SELECT workspace_id, config_json, connected_at, is_active
+          FROM workspace_integrations
+          WHERE provider = ? AND is_active = 1`,
+    args: [provider],
+  });
+
+  for (const row of result.rows || []) {
+    try {
+      const config = JSON.parse(decrypt(row.config_json));
+      if (String(config?.[key] || '') === String(value || '')) {
+        return {
+          workspaceId: row.workspace_id,
+          provider,
+          config,
+          connectedAt: row.connected_at,
+          isActive: Boolean(row.is_active),
+        };
+      }
+    } catch (error) {
+      console.error('Integration config decrypt error:', error.message || error);
+    }
+  }
+
+  return null;
+}
+
 export async function getIntegrationMeta({ workspaceId, provider }) {
   await ensureDb();
   const result = await db.execute({
