@@ -167,17 +167,25 @@ export async function initDb() {
     )`,
     `CREATE TABLE IF NOT EXISTS zipnova_shipments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
       zipnova_id TEXT NOT NULL UNIQUE,
+      account_id INTEGER,
       external_id TEXT,
       delivery_id TEXT,
       created_at_external TEXT,
       created_date TEXT,
+      delivery_time_json TEXT,
       status TEXT,
       status_name TEXT,
       logistic_type TEXT,
       service_type TEXT,
       tracking TEXT,
       tracking_external TEXT,
+      origin_id INTEGER,
+      origin_name TEXT,
+      origin_address TEXT,
+      origin_city TEXT,
+      origin_province TEXT,
       recipient_name TEXT,
       recipient_email TEXT,
       recipient_phone TEXT,
@@ -187,13 +195,18 @@ export async function initDb() {
       postal_code TEXT,
       total_packages INTEGER DEFAULT 0,
       total_weight FLOAT DEFAULT 0,
+      total_volume FLOAT DEFAULT 0,
       declared_value FLOAT DEFAULT 0,
       price FLOAT DEFAULT 0,
       carrier_name TEXT,
       carrier_logo TEXT,
       products_json TEXT,
+      packages_json TEXT,
+      collection_window_json TEXT,
       label_downloaded_at DATETIME,
       label_downloaded_by TEXT,
+      label_pdf_downloaded_at DATETIME,
+      label_zpl_downloaded_at DATETIME,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -347,6 +360,19 @@ export async function initDb() {
   await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
   await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
   await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "origin_name", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_address", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_city", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_province", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "total_volume", "FLOAT DEFAULT 0");
+  await addColumnIfMissing("zipnova_shipments", "packages_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "collection_window_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "label_pdf_downloaded_at", "DATETIME");
+  await addColumnIfMissing("zipnova_shipments", "label_zpl_downloaded_at", "DATETIME");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
@@ -391,6 +417,7 @@ export async function initDb() {
         "carriers",
         "print_jobs",
         "print_job_items",
+        "zipnova_shipments",
       ];
 
       for (const tableName of tablesToBackfill) {

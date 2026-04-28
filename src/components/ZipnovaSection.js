@@ -31,7 +31,23 @@ function isLabelLikelyAvailable(shipment) {
   return status === 'documentation_ready' || status === 'ready_to_ship';
 }
 
-function ShipmentCard({ shipment, onDownload }) {
+function formatCollectionWindow(windowData) {
+  if (!windowData) return 'Horario no informado por Zipnova';
+  const dateLabel = windowData.date ? new Date(`${windowData.date}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'numeric' }) : 'Fecha no informada';
+  const open = windowData.open || '--';
+  const close = windowData.close || '--';
+  if (open === '--' && close === '--') return dateLabel;
+  return `${dateLabel} de ${open} a ${close}`;
+}
+
+function formatVolume(value) {
+  const n = Number(value || 0);
+  if (!n) return '0 m3';
+  const m3 = n > 10 ? n / 1000000 : n;
+  return `${m3.toLocaleString('es-AR', { maximumFractionDigits: 2 })} m3`;
+}
+
+function ShipmentCard({ shipment, onDownload, labelFormat }) {
   const likelyAvailable = isLabelLikelyAvailable(shipment);
   return (
     <div key={shipment.id} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -48,6 +64,9 @@ function ShipmentCard({ shipment, onDownload }) {
           </span>
         </div>
         <div className="mobile-card-row"><span className="mobile-card-label">Paquetes</span><span className="mobile-card-value">{shipment.total_packages || 0}</span></div>
+        <div className="mobile-card-row"><span className="mobile-card-label">Destinatario</span><span className="mobile-card-value">{shipment.recipient_name || '-'}</span></div>
+        <div className="mobile-card-row"><span className="mobile-card-label">Destino</span><span className="mobile-card-value">{[shipment.city, shipment.province].filter(Boolean).join(', ') || '-'}</span></div>
+        <div className="mobile-card-row"><span className="mobile-card-label">Transporte</span><span className="mobile-card-value">{shipment.carrier_name || '-'}</span></div>
         <div className="mobile-card-row"><span className="mobile-card-label">Productos</span><span className="mobile-card-value">{shipment.products?.map((product) => product.name).filter(Boolean).join(', ') || '-'}</span></div>
         {shipment.downloaded_at ? (
           <div className="mobile-card-row"><span className="mobile-card-label">Marcado listo</span><span className="mobile-card-value">{new Date(shipment.downloaded_at).toLocaleString('es-AR')}</span></div>
@@ -63,7 +82,7 @@ function ShipmentCard({ shipment, onDownload }) {
             disabled={!likelyAvailable}
             title={likelyAvailable ? 'Descargar etiqueta de este envio' : 'Etiqueta no disponible todavia'}
           >
-            Descargar etiqueta
+            Descargar {labelFormat.toUpperCase()}
           </button>
         </div>
       </div>
@@ -71,7 +90,7 @@ function ShipmentCard({ shipment, onDownload }) {
   );
 }
 
-function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
+function SummaryBlock({ title, shipments, emptyLabel, downloadLabel, labelFormat }) {
   const groupedProducts = useMemo(() => groupProducts(shipments), [shipments]);
   const totalPackages = shipments.reduce((sum, shipment) => sum + (Number(shipment.total_packages || 0) || 1), 0);
   const availableCount = shipments.filter(isLabelLikelyAvailable).length;
@@ -89,7 +108,7 @@ function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
           onClick={downloadLabel}
           disabled={!shipments.length}
         >
-          Etiquetas PDF
+          Etiquetas {labelFormat.toUpperCase()}
         </button>
       </div>
 
@@ -122,7 +141,7 @@ function SummaryBlock({ title, shipments, emptyLabel, downloadLabel }) {
       {shipments.length > 0 && (
         <div style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
           {shipments.map((shipment) => (
-            <ShipmentCard key={shipment.id} shipment={shipment} onDownload={(s) => downloadLabel(s)} />
+            <ShipmentCard key={shipment.id} shipment={shipment} labelFormat={labelFormat} onDownload={(s) => downloadLabel(s)} />
           ))}
         </div>
       )}
@@ -134,12 +153,14 @@ export default function ZipnovaSection({ currentUser }) {
   const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
   const [pendingShipments, setPendingShipments] = useState([]);
   const [readyShipments, setReadyShipments] = useState([]);
+  const [collectionShipments, setCollectionShipments] = useState([]);
   const [totalShipments, setTotalShipments] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [downloadingGroup, setDownloadingGroup] = useState('');
+  const [labelFormat, setLabelFormat] = useState('zpl');
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
 
@@ -182,6 +203,7 @@ export default function ZipnovaSection({ currentUser }) {
       setLastSyncedAt(data.lastSyncedAt || '');
       setPendingShipments(data.pendingShipments || []);
       setReadyShipments(data.readyShipments || []);
+      setCollectionShipments(data.collectionShipments || []);
       setWarning(data.warning || '');
     } catch (err) {
       setError(err.message || 'Error inesperado');
@@ -292,7 +314,7 @@ export default function ZipnovaSection({ currentUser }) {
       const res = await fetch('/api/admin/zipnova/labels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shipmentIds, group }),
+        body: JSON.stringify({ shipmentIds, group, format: labelFormat }),
       });
 
       if (!res.ok) {
@@ -306,7 +328,7 @@ export default function ZipnovaSection({ currentUser }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `etiquetas-${group}.pdf`;
+      a.download = `etiquetas-${group}.${labelFormat}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -422,8 +444,8 @@ export default function ZipnovaSection({ currentUser }) {
 
           <div className="stats-grid" style={{ marginBottom: '18px' }}>
             <div className="stat-card card accent"><div className="stat-value">{totalShipments}</div><div className="stat-label">Zipnova hoy</div></div>
-            <div className="stat-card card info"><div className="stat-value">{pendingShipments.length}</div><div className="stat-label">Pendientes</div></div>
-            <div className="stat-card card success"><div className="stat-value">{readyShipments.length}</div><div className="stat-label">Listos</div></div>
+            <div className="stat-card card info"><div className="stat-value">{collectionShipments.length}</div><div className="stat-label">A recolectar</div></div>
+            <div className="stat-card card success"><div className="stat-value">{readyShipments.length}</div><div className="stat-label">Descargados</div></div>
           </div>
 
           <div className="card" style={{ marginBottom: '18px' }}>
@@ -442,20 +464,78 @@ export default function ZipnovaSection({ currentUser }) {
                   {syncing ? 'Sincronizando...' : 'Sincronizar ahora'}
                 </button>
               </div>
+              <div className="form-group" style={{ maxWidth: '180px' }}>
+                <label className="form-label">Formato etiquetas</label>
+                <select className="form-input" value={labelFormat} onChange={(e) => setLabelFormat(e.target.value)}>
+                  <option value="zpl">ZPL</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: '18px' }}>
+            <div className="flex-between mb-md" style={{ alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800 }}>Recolección programada</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                  {collectionShipments.length ? formatCollectionWindow(collectionShipments[0]?.collection_window) : 'Sin envíos listos para recolectar.'}
+                </p>
+              </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => downloadLabels('recoleccion-programada', collectionShipments)} disabled={!collectionShipments.length}>
+                Descargar {labelFormat.toUpperCase()}
+              </button>
+            </div>
+            <div className="stats-grid" style={{ marginBottom: '14px' }}>
+              <div className="stat-card card accent"><div className="stat-value">{collectionShipments.length}</div><div className="stat-label">Envíos</div></div>
+              <div className="stat-card card info"><div className="stat-value">{collectionShipments.reduce((sum, shipment) => sum + (Number(shipment.total_packages || 0) || 1), 0)}</div><div className="stat-label">Paquetes</div></div>
+              <div className="stat-card card success"><div className="stat-value">{Math.round(collectionShipments.reduce((sum, shipment) => sum + Number(shipment.total_weight || 0), 0) / 1000)}</div><div className="stat-label">Kg aprox.</div></div>
+              <div className="stat-card card"><div className="stat-value">{formatVolume(collectionShipments.reduce((sum, shipment) => sum + Number(shipment.total_volume || 0), 0))}</div><div className="stat-label">Volumen</div></div>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Envío</th>
+                    <th>Estado</th>
+                    <th>Destinatario</th>
+                    <th>Destino</th>
+                    <th>Transporte</th>
+                    <th>Paquetes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collectionShipments.map((shipment) => (
+                    <tr key={shipment.id}>
+                      <td><strong>{shipment.external_id || shipment.id}</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{shipment.delivery_id || shipment.id}</span></td>
+                      <td>{shipment.status_name || shipment.status || '-'}</td>
+                      <td>{shipment.recipient_name || '-'}</td>
+                      <td>{[shipment.city, shipment.province].filter(Boolean).join(', ') || '-'}</td>
+                      <td>{shipment.carrier_name || '-'}</td>
+                      <td>{shipment.total_packages || 0}</td>
+                    </tr>
+                  ))}
+                  {!collectionShipments.length ? (
+                    <tr><td colSpan="6" style={{ color: 'var(--text-muted)' }}>No hay envíos listos para recolectar.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
             <SummaryBlock
-              title="Pendientes"
+              title="Pendientes de etiqueta"
               shipments={pendingShipments}
               emptyLabel="No hay envíos nuevos pendientes."
+              labelFormat={labelFormat}
               downloadLabel={() => downloadLabels('pendientes', pendingShipments)}
             />
             <SummaryBlock
-              title="Listos para despachar"
+              title="Etiquetas descargadas"
               shipments={readyShipments}
               emptyLabel="No hay envíos listos para despacho."
+              labelFormat={labelFormat}
               downloadLabel={() => downloadLabels('listos-para-despachar', readyShipments)}
             />
           </div>

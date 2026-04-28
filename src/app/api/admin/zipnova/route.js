@@ -19,13 +19,13 @@ export async function GET(request) {
 
     if (shouldSync) {
       try {
-        await syncZipnovaVisibleShipments({ externalId, client });
+        await syncZipnovaVisibleShipments({ externalId, client, workspaceId: authResult.actor.workspaceId });
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Zipnova en vivo';
       }
     }
 
-    const response = await listStoredZipnovaToday({ externalId });
+    const response = await listStoredZipnovaToday({ externalId, workspaceId: authResult.actor.workspaceId });
     return NextResponse.json({ ...response, warning });
   } catch (error) {
     console.error('Zipnova list error:', error);

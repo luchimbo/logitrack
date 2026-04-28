@@ -51,13 +51,16 @@ export function createZipnovaClient({ token, secret, accessToken, baseUrl = ZIPN
     return data;
   }
 
-  async function listShipments({ page = 1, status = '', serviceType = '', orderId = '', externalId = '' } = {}) {
+  async function listShipments({ page = 1, status = '', serviceType = '', orderId = '', externalId = '', from = '', to = '', originId = '' } = {}) {
     const params = new URLSearchParams();
     params.set('page', String(page || 1));
     if (status) params.set('status', status);
     if (serviceType) params.set('service_type', serviceType);
     if (orderId) params.set('order_id', orderId);
     if (externalId) params.set('external_id', externalId);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (originId) params.set('origin_id', originId);
 
     return zipnovaFetch(`/shipments?${params.toString()}`);
   }
@@ -78,9 +81,20 @@ export function createZipnovaClient({ token, secret, accessToken, baseUrl = ZIPN
     return zipnovaFetch(`/shipments/${id}`);
   }
 
-  async function getShipmentDocumentation(id, { what = 'label', format = 'pdf' } = {}) {
-    const params = new URLSearchParams({ what, format });
-    return zipnovaFetch(`/shipments/${id}/documentation?${params.toString()}`);
+  async function getShipmentDocumentation(id, { what = 'label', format = 'pdf', noStatusChange = true } = {}) {
+    const normalizedWhat = what === 'document' ? 'document' : 'label';
+    const normalizedFormat = format === 'zpl' ? 'zpl' : 'pdf';
+    const params = new URLSearchParams();
+    if (noStatusChange) params.set('no_status_change', '1');
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return zipnovaFetch(`/shipments/${id}/${normalizedWhat}.${normalizedFormat}${suffix}`);
+  }
+
+  async function listAddresses({ accountId = '', page = 1 } = {}) {
+    const params = new URLSearchParams();
+    params.set('page', String(page || 1));
+    if (accountId) params.set('account_id', accountId);
+    return zipnovaFetch(`/addresses?${params.toString()}`);
   }
 
   return {
@@ -88,6 +102,7 @@ export function createZipnovaClient({ token, secret, accessToken, baseUrl = ZIPN
     listShipmentsByStatuses,
     getShipment,
     getShipmentDocumentation,
+    listAddresses,
   };
 }
 
@@ -114,6 +129,10 @@ export async function getZipnovaShipmentDocumentation(id, options) {
   return defaultClient.getShipmentDocumentation(id, options);
 }
 
+export async function listZipnovaAddresses(options) {
+  return defaultClient.listAddresses(options);
+}
+
 function extractZipnovaProducts(shipment) {
   const packages = Array.isArray(shipment?.packages) ? shipment.packages : [];
   return packages.map((pkg, index) => ({
@@ -128,14 +147,17 @@ function extractZipnovaProducts(shipment) {
 
 export function normalizeZipnovaShipment(shipment) {
   const destination = shipment?.destination || {};
+  const origin = shipment?.origin || {};
   const carrier = shipment?.carrier || shipment?.selected_rate?.carrier || null;
   const products = extractZipnovaProducts(shipment);
 
   return {
     id: shipment?.id,
+    account_id: shipment?.account_id,
     external_id: shipment?.external_id,
     delivery_id: shipment?.delivery_id,
     created_at: shipment?.created_at,
+    delivery_time: shipment?.delivery_time || null,
     status: shipment?.status,
     status_name: shipment?.status_name,
     logistic_type: shipment?.logistic_type,
@@ -149,13 +171,20 @@ export function normalizeZipnovaShipment(shipment) {
     city: destination?.city || null,
     province: destination?.state || null,
     postal_code: destination?.zipcode || null,
+    origin_id: origin?.id || shipment?.origin_id || null,
+    origin_name: origin?.name || null,
+    origin_address: [origin?.street, origin?.street_number, origin?.street_extras].filter(Boolean).join(' ').trim() || null,
+    origin_city: origin?.city || null,
+    origin_province: origin?.state || null,
     total_packages: shipment?.total_packages || 0,
     total_weight: shipment?.total_weight || 0,
+    total_volume: shipment?.total_volume || 0,
     declared_value: shipment?.declared_value || 0,
     price: shipment?.price_incl_tax || shipment?.price || 0,
     carrier_name: carrier?.name || null,
     carrier_logo: carrier?.logo || null,
     products,
+    packages: Array.isArray(shipment?.packages) ? shipment.packages : [],
   };
 }
 
