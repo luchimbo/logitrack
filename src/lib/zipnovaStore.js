@@ -210,7 +210,7 @@ async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow =
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+      ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
     )
     ON CONFLICT(zipnova_id) DO UPDATE SET
       workspace_id = excluded.workspace_id,
