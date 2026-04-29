@@ -12,6 +12,7 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const externalId = searchParams.get('external_id') || '';
+    const daysAhead = Number(searchParams.get('days_ahead') || 7) || 7;
     const shouldSync = searchParams.get('sync') !== '0';
     let warning = '';
 
@@ -19,13 +20,13 @@ export async function GET(request) {
 
     if (shouldSync) {
       try {
-        await syncZipnovaVisibleShipments({ externalId, client, workspaceId: authResult.actor.workspaceId });
+        await syncZipnovaVisibleShipments({ externalId, client, workspaceId: authResult.actor.workspaceId, daysAhead });
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Zipnova en vivo';
       }
     }
 
-    const response = await listStoredZipnovaToday({ externalId, workspaceId: authResult.actor.workspaceId });
+    const response = await listStoredZipnovaToday({ externalId, workspaceId: authResult.actor.workspaceId, daysAhead });
     return NextResponse.json({ ...response, warning });
   } catch (error) {
     console.error('Zipnova list error:', error);

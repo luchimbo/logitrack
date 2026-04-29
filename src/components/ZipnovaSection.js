@@ -31,13 +31,17 @@ function isLabelLikelyAvailable(shipment) {
   return status === 'documentation_ready' || status === 'ready_to_ship';
 }
 
-function formatCollectionWindow(windowData) {
-  if (!windowData) return 'Horario no informado por Zipnova';
-  const dateLabel = windowData.date ? new Date(`${windowData.date}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'numeric' }) : 'Fecha no informada';
-  const open = windowData.open || '--';
-  const close = windowData.close || '--';
-  if (open === '--' && close === '--') return dateLabel;
-  return `${dateLabel} de ${open} a ${close}`;
+function formatCollectionDateParts(collection) {
+  const dateLabel = collection?.scheduledDate
+    ? new Date(`${collection.scheduledDate}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric' })
+    : 'Fecha no informada';
+  const open = collection?.windowOpen || '--';
+  const close = collection?.windowClose || '--';
+  return { dateLabel, timeLabel: open === '--' && close === '--' ? 'Horario no informado' : `de ${open} a ${close} hs` };
+}
+
+function formatOrigin(collection) {
+  return [collection.originAddress, collection.originCity, collection.originProvince].filter(Boolean);
 }
 
 function formatVolume(value) {
@@ -86,6 +90,112 @@ function ShipmentCard({ shipment, onDownload, labelFormat }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CollectionDetail({ collection, labelFormat, onClose, onDownload }) {
+  if (!collection) return null;
+  const { dateLabel, timeLabel } = formatCollectionDateParts(collection);
+  const shipments = collection.shipments || [];
+  return (
+    <div className="card" style={{ marginBottom: '18px', border: '1px solid var(--accent)' }}>
+      <div className="flex-between mb-md" style={{ gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ fontSize: '18px', fontWeight: 800 }}>Detalle de recolección</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{collection.originName} · {dateLabel} {timeLabel}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, shipments)}>
+            Descargar {labelFormat.toUpperCase()}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+      <div className="stats-grid" style={{ marginBottom: '14px' }}>
+        <div className="stat-card card accent"><div className="stat-value">{collection.shipmentsCount}</div><div className="stat-label">Envíos</div></div>
+        <div className="stat-card card info"><div className="stat-value">{collection.packagesCount}</div><div className="stat-label">Paquetes</div></div>
+        <div className="stat-card card success"><div className="stat-value">{Math.round(Number(collection.totalWeight || 0) / 1000)}</div><div className="stat-label">Kg aprox.</div></div>
+        <div className="stat-card card"><div className="stat-value">{formatVolume(collection.totalVolume)}</div><div className="stat-label">Volumen</div></div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Envío</th><th>Estado</th><th>Destinatario</th><th>Destino</th><th>Transporte</th><th>Paquetes</th></tr>
+          </thead>
+          <tbody>
+            {shipments.map((shipment) => (
+              <tr key={shipment.id}>
+                <td><strong>{shipment.external_id || shipment.id}</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{shipment.delivery_id || shipment.id}</span></td>
+                <td>{shipment.status_name || shipment.status || '-'}</td>
+                <td>{shipment.recipient_name || '-'}</td>
+                <td>{[shipment.city, shipment.province].filter(Boolean).join(', ') || '-'}</td>
+                <td>{shipment.carrier_name || '-'}</td>
+                <td>{shipment.total_packages || 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CollectionRow({ collection, kind, labelFormat, onDetail, onDownload }) {
+  const { dateLabel, timeLabel } = formatCollectionDateParts(collection);
+  const originLines = formatOrigin(collection);
+  const isConfirmed = kind === 'confirmed';
+  const preparationCount = (collection.shipments || []).filter((shipment) => ['new', 'documentation_ready'].includes(String(shipment.status || '').toLowerCase())).length;
+  const readyCount = (collection.shipments || []).filter((shipment) => String(shipment.status || '').toLowerCase() === 'ready_to_ship').length;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(160px, 1fr) minmax(170px, 1fr) minmax(220px, 1.7fr) minmax(190px, 1.1fr)', gap: '28px', padding: '20px', borderTop: '1px solid var(--border)', alignItems: 'start' }}>
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>Origen</div>
+        <strong>{collection.originName}</strong>
+        {originLines.map((line) => <div key={line} style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>{line}</div>)}
+      </div>
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>Fecha a recolectar</div>
+        {!isConfirmed ? <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Próxima fecha posible:</div> : null}
+        <strong>{dateLabel}</strong>
+        <div>{timeLabel}</div>
+      </div>
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>{isConfirmed ? 'Quién recolecta' : 'Estado'}</div>
+        {isConfirmed ? (
+          <><strong style={{ color: 'var(--success)' }}>zipnova</strong><div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>Recolección unificada</div></>
+        ) : (
+          <><span style={{ display: 'inline-block', borderRadius: '999px', padding: '4px 10px', background: 'rgba(148,163,184,0.18)', color: 'var(--text)', fontSize: '12px', fontWeight: 800 }}>NO PROGRAMADA</span><div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '8px' }}>Debes confirmar la programación para que se recolecte en la fecha indicada.</div></>
+        )}
+      </div>
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>{isConfirmed ? 'Envíos' : 'Envíos a recolectar'}</div>
+        {isConfirmed ? (
+          <><strong>{readyCount || collection.shipmentsCount} envíos</strong><div style={{ marginTop: '10px' }}>{preparationCount} envíos aguardando distribución</div></>
+        ) : (
+          <><strong>{preparationCount || collection.shipmentsCount} envíos pendientes de preparación</strong><div style={{ color: 'var(--warning)', fontSize: '13px', marginTop: '10px' }}>Esta recolección puede tener costo adicional según Zipnova.</div></>
+        )}
+      </div>
+      <div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>Acciones</div>
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => onDetail(collection)}>{isConfirmed ? 'Ver detalle' : 'Gestionar recolección'}</button>
+          <button type="button" className={isConfirmed ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'} onClick={() => isConfirmed ? onDownload(`recoleccion-${collection.collectionKey}`, collection.shipments) : onDetail(collection)}>
+            {isConfirmed ? `Descargar ${labelFormat.toUpperCase()}` : 'Programar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollectionsPanel({ title, children, warning }) {
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '28px' }}>
+      <div style={{ padding: '16px 20px', fontSize: '16px', fontWeight: 800 }}>{title} <span style={{ color: 'var(--accent)' }}>?</span></div>
+      {warning ? <div style={{ background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)', padding: '14px 20px', fontSize: '14px' }}>{warning}</div> : null}
+      {children}
     </div>
   );
 }
@@ -154,6 +264,9 @@ export default function ZipnovaSection({ currentUser }) {
   const [pendingShipments, setPendingShipments] = useState([]);
   const [readyShipments, setReadyShipments] = useState([]);
   const [collectionShipments, setCollectionShipments] = useState([]);
+  const [confirmedCollections, setConfirmedCollections] = useState([]);
+  const [possibleCollections, setPossibleCollections] = useState([]);
+  const [selectedCollection, setSelectedCollection] = useState(null);
   const [totalShipments, setTotalShipments] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [search, setSearch] = useState('');
@@ -204,6 +317,8 @@ export default function ZipnovaSection({ currentUser }) {
       setPendingShipments(data.pendingShipments || []);
       setReadyShipments(data.readyShipments || []);
       setCollectionShipments(data.collectionShipments || []);
+      setConfirmedCollections(data.confirmedCollections || []);
+      setPossibleCollections(data.possibleCollections || []);
       setWarning(data.warning || '');
     } catch (err) {
       setError(err.message || 'Error inesperado');
@@ -474,54 +589,27 @@ export default function ZipnovaSection({ currentUser }) {
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: '18px' }}>
-            <div className="flex-between mb-md" style={{ alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
-              <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800 }}>Recolección programada</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
-                  {collectionShipments.length ? formatCollectionWindow(collectionShipments[0]?.collection_window) : 'Sin envíos listos para recolectar.'}
-                </p>
-              </div>
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => downloadLabels('recoleccion-programada', collectionShipments)} disabled={!collectionShipments.length}>
-                Descargar {labelFormat.toUpperCase()}
-              </button>
-            </div>
-            <div className="stats-grid" style={{ marginBottom: '14px' }}>
-              <div className="stat-card card accent"><div className="stat-value">{collectionShipments.length}</div><div className="stat-label">Envíos</div></div>
-              <div className="stat-card card info"><div className="stat-value">{collectionShipments.reduce((sum, shipment) => sum + (Number(shipment.total_packages || 0) || 1), 0)}</div><div className="stat-label">Paquetes</div></div>
-              <div className="stat-card card success"><div className="stat-value">{Math.round(collectionShipments.reduce((sum, shipment) => sum + Number(shipment.total_weight || 0), 0) / 1000)}</div><div className="stat-label">Kg aprox.</div></div>
-              <div className="stat-card card"><div className="stat-value">{formatVolume(collectionShipments.reduce((sum, shipment) => sum + Number(shipment.total_volume || 0), 0))}</div><div className="stat-label">Volumen</div></div>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Envío</th>
-                    <th>Estado</th>
-                    <th>Destinatario</th>
-                    <th>Destino</th>
-                    <th>Transporte</th>
-                    <th>Paquetes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collectionShipments.map((shipment) => (
-                    <tr key={shipment.id}>
-                      <td><strong>{shipment.external_id || shipment.id}</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{shipment.delivery_id || shipment.id}</span></td>
-                      <td>{shipment.status_name || shipment.status || '-'}</td>
-                      <td>{shipment.recipient_name || '-'}</td>
-                      <td>{[shipment.city, shipment.province].filter(Boolean).join(', ') || '-'}</td>
-                      <td>{shipment.carrier_name || '-'}</td>
-                      <td>{shipment.total_packages || 0}</td>
-                    </tr>
-                  ))}
-                  {!collectionShipments.length ? (
-                    <tr><td colSpan="6" style={{ color: 'var(--text-muted)' }}>No hay envíos listos para recolectar.</td></tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+          <div className="flex-between" style={{ margin: '10px 0 18px', gap: '12px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 800 }}>Envíos pendientes de despacho</h2>
+            <button type="button" className="btn btn-ghost btn-sm">Ver recolecciones pasadas</button>
           </div>
+
+          <CollectionsPanel title="Recolecciones confirmadas" warning="Atención: No mezcles envíos que vayan a ser recolectados por Zipnova con envíos a recolectar directamente por otros transportes, de lo contrario tus envíos fallarán y deberás hacerlos nuevamente.">
+            {confirmedCollections.map((collection) => (
+              <CollectionRow key={collection.collectionKey} collection={collection} kind="confirmed" labelFormat={labelFormat} onDetail={setSelectedCollection} onDownload={downloadLabels} />
+            ))}
+            {!confirmedCollections.length ? <div style={{ padding: '20px', color: 'var(--text-muted)' }}>No hay recolecciones confirmadas activas.</div> : null}
+          </CollectionsPanel>
+
+          <h3 style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 12px' }}>Próximas recolecciones posibles</h3>
+          <CollectionsPanel title="A recolectar por Zipnova">
+            {possibleCollections.map((collection) => (
+              <CollectionRow key={collection.collectionKey} collection={collection} kind="possible" labelFormat={labelFormat} onDetail={setSelectedCollection} onDownload={downloadLabels} />
+            ))}
+            {!possibleCollections.length ? <div style={{ padding: '20px', color: 'var(--text-muted)' }}>No hay próximas recolecciones posibles.</div> : null}
+          </CollectionsPanel>
+
+          <CollectionDetail collection={selectedCollection} labelFormat={labelFormat} onClose={() => setSelectedCollection(null)} onDownload={downloadLabels} />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
             <SummaryBlock

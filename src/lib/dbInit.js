@@ -203,12 +203,38 @@ export async function initDb() {
       products_json TEXT,
       packages_json TEXT,
       collection_window_json TEXT,
+      collection_key TEXT,
       label_downloaded_at DATETIME,
       label_downloaded_by TEXT,
       label_pdf_downloaded_at DATETIME,
       label_zpl_downloaded_at DATETIME,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS zipnova_collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      collection_key TEXT NOT NULL,
+      zipnova_collection_external_id TEXT,
+      origin_id INTEGER,
+      origin_name TEXT,
+      origin_address TEXT,
+      origin_city TEXT,
+      origin_province TEXT,
+      scheduled_date TEXT,
+      window_open TEXT,
+      window_close TEXT,
+      cutoff_label TEXT,
+      status TEXT,
+      collector_name TEXT,
+      shipments_count INTEGER DEFAULT 0,
+      packages_count INTEGER DEFAULT 0,
+      total_weight FLOAT DEFAULT 0,
+      total_volume FLOAT DEFAULT 0,
+      shipment_ids_json TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, collection_key)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_app_users_clerk ON app_users(clerk_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id)`,
@@ -232,6 +258,8 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_created_date ON zipnova_shipments(created_date)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_external_id ON zipnova_shipments(external_id)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_collection ON zipnova_shipments(workspace_id, collection_key)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_collections_workspace_date ON zipnova_collections(workspace_id, scheduled_date)`,
     `CREATE TABLE IF NOT EXISTS workspace_integrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL,
@@ -371,8 +399,12 @@ export async function initDb() {
   await addColumnIfMissing("zipnova_shipments", "total_volume", "FLOAT DEFAULT 0");
   await addColumnIfMissing("zipnova_shipments", "packages_json", "TEXT");
   await addColumnIfMissing("zipnova_shipments", "collection_window_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "collection_key", "TEXT");
   await addColumnIfMissing("zipnova_shipments", "label_pdf_downloaded_at", "DATETIME");
   await addColumnIfMissing("zipnova_shipments", "label_zpl_downloaded_at", "DATETIME");
+  await addColumnIfMissing("zipnova_collections", "workspace_id", "INTEGER");
+  await addColumnIfMissing("zipnova_collections", "zipnova_collection_external_id", "TEXT");
+  await addColumnIfMissing("zipnova_collections", "cutoff_label", "TEXT");
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");

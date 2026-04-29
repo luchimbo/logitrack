@@ -1,9 +1,11 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
-import { getDefaultZipnovaClient, isZipnovaToday, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { getDefaultZipnovaClient, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
 
-export const ZIPNOVA_VISIBLE_STATUSES = ['new', 'documentation_ready', 'ready_to_ship'];
+export const ZIPNOVA_VISIBLE_STATUSES = ['new', 'documentation_ready', 'ready_to_ship', 'shipped', 'in_transit_to_crossdock'];
 export const ZIPNOVA_COLLECTION_STATUSES = ['ready_to_ship'];
+const ZIPNOVA_POSSIBLE_COLLECTION_STATUSES = ['new', 'documentation_ready'];
+const ZIPNOVA_CONFIRMED_COLLECTION_STATUSES = ['ready_to_ship', 'shipped', 'in_transit_to_crossdock'];
 
 function getArgentinaDateOnly(value) {
   if (!value) return null;
@@ -16,6 +18,12 @@ function getArgentinaDateOnly(value) {
     month: '2-digit',
     day: '2-digit',
   }).format(date);
+}
+
+function addDays(value, days) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + days);
+  return date;
 }
 
 async function enrichShipments(shipments, client = null) {
@@ -32,10 +40,15 @@ async function enrichShipments(shipments, client = null) {
   );
 }
 
-function filterVisibleShipments(shipments, externalId) {
+function filterVisibleShipments(shipments, { externalId = '', from = '', to = '' } = {}) {
   return shipments.filter((shipment) => {
-    if (!isZipnovaToday(shipment.created_at)) {
-      return false;
+    const createdDate = getArgentinaDateOnly(shipment.created_at);
+    if (from && createdDate && createdDate < from) return false;
+    if (to && createdDate && createdDate > to) return false;
+    if (!createdDate && (from || to)) {
+      const collectionDate = shipment.collection_window?.date || '';
+      if (from && collectionDate && collectionDate < from) return false;
+      if (to && collectionDate && collectionDate > to) return false;
     }
     if (externalId && String(shipment.external_id || '').toLowerCase() !== String(externalId).toLowerCase()) {
       return false;
@@ -113,6 +126,29 @@ function buildCollectionWindow(shipment, addresses) {
   };
 }
 
+function sanitizeCollectionPart(value, fallback = 'na') {
+  return String(value || fallback).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || fallback;
+}
+
+function buildCollectionKey({ workspaceId, shipment, collectionWindow }) {
+  const date = collectionWindow?.date || getArgentinaDateOnly(shipment.created_at) || getArgentinaDateOnly(new Date());
+  return [
+    workspaceId || 'global',
+    shipment.origin_id || 'origin-na',
+    date,
+    collectionWindow?.open || 'open-na',
+    collectionWindow?.close || 'close-na',
+    'zipnova',
+  ].map((part) => sanitizeCollectionPart(part)).join('__');
+}
+
+function getShipmentCollectionStatus(shipment) {
+  const status = String(shipment.status || '').toLowerCase();
+  if (ZIPNOVA_CONFIRMED_COLLECTION_STATUSES.includes(status)) return 'confirmed';
+  if (ZIPNOVA_POSSIBLE_COLLECTION_STATUSES.includes(status)) return 'possible';
+  return 'other';
+}
+
 function mapLocalRow(row) {
   const collectionWindow = parseJson(row.collection_window_json, null);
   return {
@@ -150,6 +186,7 @@ function mapLocalRow(row) {
     products: parseProducts(row.products_json),
     packages: parseJson(row.packages_json, []),
     collection_window: collectionWindow,
+    collection_key: row.collection_key || null,
     downloaded_at: row.label_downloaded_at || null,
     downloaded_by: row.label_downloaded_by || null,
     label_pdf_downloaded_at: row.label_pdf_downloaded_at || null,
@@ -157,7 +194,7 @@ function mapLocalRow(row) {
   };
 }
 
-async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow = null } = {}) {
+async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow = null, collectionKey = null } = {}) {
   const createdDate = getArgentinaDateOnly(shipment.created_at);
   await db.execute({
     sql: `INSERT INTO zipnova_shipments (
@@ -166,7 +203,7 @@ async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow =
       origin_id, origin_name, origin_address, origin_city, origin_province,
       recipient_name, recipient_email, recipient_phone, address, city, province,
       postal_code, total_packages, total_weight, total_volume, declared_value, price,
-      carrier_name, carrier_logo, products_json, packages_json, collection_window_json, synced_at
+      carrier_name, carrier_logo, products_json, packages_json, collection_window_json, collection_key, synced_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?,
@@ -211,6 +248,7 @@ async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow =
       products_json = excluded.products_json,
       packages_json = excluded.packages_json,
       collection_window_json = excluded.collection_window_json,
+      collection_key = excluded.collection_key,
       synced_at = CURRENT_TIMESTAMP`,
     args: [
       workspaceId || null,
@@ -249,17 +287,111 @@ async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow =
       JSON.stringify(Array.isArray(shipment.products) ? shipment.products : []),
       JSON.stringify(Array.isArray(shipment.packages) ? shipment.packages : []),
       collectionWindow ? JSON.stringify(collectionWindow) : null,
+      collectionKey || null,
     ],
   });
 }
 
-export async function syncZipnovaVisibleShipments({ externalId = '', client = null, workspaceId = null } = {}) {
+function aggregateCollections(shipments, { workspaceId }) {
+  const groups = new Map();
+
+  for (const shipment of shipments) {
+    const collectionKey = shipment.collection_key || buildCollectionKey({ workspaceId, shipment, collectionWindow: shipment.collection_window });
+    const current = groups.get(collectionKey) || {
+      collectionKey,
+      originId: shipment.origin_id || null,
+      originName: shipment.collection_window?.originName || shipment.origin_name || 'Origen sin nombre',
+      originAddress: shipment.origin_address || '',
+      originCity: shipment.origin_city || '',
+      originProvince: shipment.origin_province || '',
+      scheduledDate: shipment.collection_window?.date || getArgentinaDateOnly(shipment.created_at),
+      windowOpen: shipment.collection_window?.open || null,
+      windowClose: shipment.collection_window?.close || null,
+      cutoffLabel: shipment.delivery_time?.dropoff_deadline_at ? new Date(shipment.delivery_time.dropoff_deadline_at).toLocaleString('es-AR') : null,
+      collectorName: 'zipnova',
+      shipments: [],
+      shipmentsCount: 0,
+      packagesCount: 0,
+      totalWeight: 0,
+      totalVolume: 0,
+      statusRank: 'possible',
+    };
+
+    const shipmentStatus = getShipmentCollectionStatus(shipment);
+    if (shipmentStatus === 'confirmed') current.statusRank = 'confirmed';
+    current.shipments.push(shipment);
+    current.shipmentsCount += 1;
+    current.packagesCount += Number(shipment.total_packages || 0) || 1;
+    current.totalWeight += Number(shipment.total_weight || 0);
+    current.totalVolume += Number(shipment.total_volume || 0);
+    groups.set(collectionKey, current);
+  }
+
+  return [...groups.values()].map((collection) => ({
+    ...collection,
+    status: collection.statusRank === 'confirmed' ? 'confirmed' : 'possible',
+  })).sort((a, b) => String(a.scheduledDate || '').localeCompare(String(b.scheduledDate || '')) || a.originName.localeCompare(b.originName));
+}
+
+async function upsertZipnovaCollections(collections, workspaceId) {
+  for (const collection of collections) {
+    await db.execute({
+      sql: `INSERT INTO zipnova_collections (
+        workspace_id, collection_key, origin_id, origin_name, origin_address, origin_city, origin_province,
+        scheduled_date, window_open, window_close, cutoff_label, status, collector_name,
+        shipments_count, packages_count, total_weight, total_volume, shipment_ids_json, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(workspace_id, collection_key) DO UPDATE SET
+        origin_id = excluded.origin_id,
+        origin_name = excluded.origin_name,
+        origin_address = excluded.origin_address,
+        origin_city = excluded.origin_city,
+        origin_province = excluded.origin_province,
+        scheduled_date = excluded.scheduled_date,
+        window_open = excluded.window_open,
+        window_close = excluded.window_close,
+        cutoff_label = excluded.cutoff_label,
+        status = excluded.status,
+        collector_name = excluded.collector_name,
+        shipments_count = excluded.shipments_count,
+        packages_count = excluded.packages_count,
+        total_weight = excluded.total_weight,
+        total_volume = excluded.total_volume,
+        shipment_ids_json = excluded.shipment_ids_json,
+        synced_at = CURRENT_TIMESTAMP`,
+      args: [
+        workspaceId || null,
+        collection.collectionKey,
+        collection.originId,
+        collection.originName,
+        collection.originAddress,
+        collection.originCity,
+        collection.originProvince,
+        collection.scheduledDate,
+        collection.windowOpen,
+        collection.windowClose,
+        collection.cutoffLabel,
+        collection.status,
+        collection.collectorName,
+        collection.shipmentsCount,
+        collection.packagesCount,
+        collection.totalWeight,
+        collection.totalVolume,
+        JSON.stringify(collection.shipments.map((shipment) => shipment.id)),
+      ],
+    });
+  }
+}
+
+export async function syncZipnovaVisibleShipments({ externalId = '', client = null, workspaceId = null, daysAhead = 7 } = {}) {
   await ensureDb();
 
   const zipnovaClient = client || getDefaultZipnovaClient();
-  const results = await zipnovaClient.listShipmentsByStatuses(ZIPNOVA_VISIBLE_STATUSES, { page: 1, externalId });
+  const from = getArgentinaDateOnly(addDays(new Date(), -7));
+  const to = getArgentinaDateOnly(addDays(new Date(), daysAhead));
+  const results = await zipnovaClient.listShipmentsByStatuses(ZIPNOVA_VISIBLE_STATUSES, { page: 1, externalId, from, to });
   const shipmentsBase = results.flatMap((entry) => entry.response?.data || []);
-  const shipments = filterVisibleShipments(await enrichShipments(shipmentsBase, zipnovaClient), externalId);
+  const enrichedShipments = await enrichShipments(shipmentsBase, zipnovaClient);
   let addresses = [];
   try {
     const addressResponse = await zipnovaClient.listAddresses({ page: 1 });
@@ -268,47 +400,61 @@ export async function syncZipnovaVisibleShipments({ externalId = '', client = nu
     addresses = [];
   }
 
+  const shipments = filterVisibleShipments(enrichedShipments.map((shipment) => {
+    const collectionWindow = buildCollectionWindow(shipment, addresses);
+    const collectionKey = buildCollectionKey({ workspaceId, shipment, collectionWindow });
+    return { ...shipment, collection_window: collectionWindow, collection_key: collectionKey };
+  }), { externalId, from, to });
+
   await Promise.all(shipments.map((shipment) => upsertZipnovaShipment(shipment, {
     workspaceId,
-    collectionWindow: buildCollectionWindow(shipment, addresses),
+    collectionWindow: shipment.collection_window,
+    collectionKey: shipment.collection_key,
   })));
+
+  const collections = aggregateCollections(shipments, { workspaceId });
+  await upsertZipnovaCollections(collections, workspaceId);
   return shipments.length;
 }
 
-export async function listStoredZipnovaToday({ externalId = '', workspaceId = null } = {}) {
+export async function listStoredZipnovaToday({ externalId = '', workspaceId = null, daysAhead = 7 } = {}) {
   await ensureDb();
 
-  const today = getArgentinaDateOnly(new Date());
+  const from = getArgentinaDateOnly(addDays(new Date(), -7));
+  const to = getArgentinaDateOnly(addDays(new Date(), daysAhead));
   const [result, syncInfo] = await Promise.all([
     db.execute({
     sql: `SELECT *
           FROM zipnova_shipments
-          WHERE created_date = ?
+          WHERE created_date >= ? AND created_date <= ?
             AND (? IS NULL OR workspace_id = ?)
             AND (? = '' OR LOWER(COALESCE(external_id, '')) = LOWER(?))
           ORDER BY CASE WHEN label_downloaded_at IS NULL THEN 0 ELSE 1 END ASC,
                    external_id ASC,
                    zipnova_id ASC`,
-    args: [today, workspaceId, workspaceId, externalId, externalId],
+    args: [from, to, workspaceId, workspaceId, externalId, externalId],
     }),
     db.execute({
       sql: `SELECT MAX(synced_at) AS last_synced_at
             FROM zipnova_shipments
-            WHERE created_date = ?
+            WHERE created_date >= ? AND created_date <= ?
               AND (? IS NULL OR workspace_id = ?)
               AND (? = '' OR LOWER(COALESCE(external_id, '')) = LOWER(?))`,
-      args: [today, workspaceId, workspaceId, externalId, externalId],
+      args: [from, to, workspaceId, workspaceId, externalId, externalId],
     }),
   ]);
 
   const shipments = (result.rows || []).map(mapLocalRow);
   const collectionShipments = shipments.filter((shipment) => ZIPNOVA_COLLECTION_STATUSES.includes(String(shipment.status || '').toLowerCase()));
+  const collections = aggregateCollections(shipments, { workspaceId });
   return {
     totalShipments: shipments.length,
     lastSyncedAt: syncInfo.rows[0]?.last_synced_at || null,
     pendingShipments: shipments.filter((shipment) => !shipment.downloaded_at),
     readyShipments: shipments.filter((shipment) => shipment.downloaded_at),
     collectionShipments,
+    confirmedCollections: collections.filter((collection) => collection.status === 'confirmed'),
+    possibleCollections: collections.filter((collection) => collection.status !== 'confirmed'),
   };
 }
 
