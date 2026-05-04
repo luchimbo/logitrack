@@ -3,14 +3,12 @@
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
     const [pickingList, setPickingList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const isMobile = useIsMobile();
 
     useEffect(() => {
         async function fetchData() {
@@ -76,6 +74,8 @@ export default function PickingList() {
     const totalUnits = pickingList.reduce((sum, p) => sum + p.total_quantity, 0);
     const colectaUnits = colectaItems.reduce((sum, p) => sum + p.total_quantity, 0);
     const flexUnits = flexItems.reduce((sum, p) => sum + p.total_quantity, 0);
+    const priorityItems = pickingList.filter(item => item.total_quantity >= 3).slice(0, 5);
+    const summaryItems = priorityItems.length ? priorityItems : pickingList.slice(0, 5);
 
     const handleExportPdf = async () => {
         try {
@@ -210,47 +210,98 @@ export default function PickingList() {
 
     const renderItem = (item, idx) => {
         return (
-            <div key={idx} className={`picking-item`}>
-                <div className="picking-qty">{item.total_quantity}</div>
+            <div key={idx} className={`picking-item ${item.total_quantity >= 6 ? 'picking-item-priority' : ''}`}>
+                <div className="picking-qty">
+                    <span>{item.total_quantity}</span>
+                    <small>uds</small>
+                </div>
                 <div className="picking-info">
                     <div className="picking-name">{item.product_name}</div>
                     <div className="picking-sku">
-                        SKU: {item.sku || 'N/A'}{item.color ? ` · ${item.color}` : ''} · {item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}
+                        <span>SKU: {item.sku || 'N/A'}</span>
+                        {item.color && <span>{item.color}</span>}
+                        <span>{item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}</span>
                     </div>
                 </div>
             </div>
         );
     };
 
+    const renderSection = (title, type, items, units) => {
+        if (!items.length) return null;
+
+        return (
+            <section className={`picking-group picking-group-${type}`}>
+                <div className="picking-group-header">
+                    <div>
+                        <h2>{title}</h2>
+                        <p>{items.length} productos · {units} unidades</p>
+                    </div>
+                    <span className={`badge badge-${type}`}>{items.length}</span>
+                </div>
+                <div className="picking-items">
+                    {items.map((item, i) => renderItem(item, type === 'colecta' ? i : colectaItems.length + i))}
+                </div>
+            </section>
+        );
+    };
+
     return (
-        <div className="section active">
-            <div className="section-header flex-between">
+        <div className="section active picking-section">
+            <div className="picking-hero">
                 <div>
-                    <h1 className="section-title">📋 Lista de Picking</h1>
-                    <p className="section-subtitle">{totalProducts} productos — {totalUnits} unidades ({colectaItems.length} colecta, {flexItems.length} flex)</p>
+                    <p className="picking-kicker">Operación diaria</p>
+                    <h1 className="section-title">Lista de Picking</h1>
+                    <p className="section-subtitle">Productos a preparar, priorizados por unidades pendientes.</p>
                 </div>
                 <button className="btn btn-primary" onClick={handleExportPdf}>
-                    📄 Exportar PDF
+                    Exportar PDF
                 </button>
             </div>
 
-            {colectaItems.length > 0 && (
-                <div className="card mb-md" style={{ borderLeft: "3px solid #f59e0b" }}>
-                    <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        📦 Colecta <span className="badge badge-colecta">{colectaItems.length} productos · {colectaUnits} uds</span>
-                    </h3>
-                    <div>{colectaItems.map((item, i) => renderItem(item, i))}</div>
+            <div className="picking-metrics" aria-label="Resumen de picking">
+                <div className="picking-metric picking-metric-primary">
+                    <span>{totalUnits}</span>
+                    <p>unidades totales</p>
                 </div>
-            )}
+                <div className="picking-metric">
+                    <span>{totalProducts}</span>
+                    <p>productos</p>
+                </div>
+                <div className="picking-metric picking-metric-colecta">
+                    <span>{colectaUnits}</span>
+                    <p>uds colecta · {colectaItems.length} prod.</p>
+                </div>
+                <div className="picking-metric picking-metric-flex">
+                    <span>{flexUnits}</span>
+                    <p>uds flex · {flexItems.length} prod.</p>
+                </div>
+            </div>
 
-            {flexItems.length > 0 && (
-                <div className="card" style={{ borderLeft: "3px solid var(--accent)" }}>
-                    <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                        🚀 Flex <span className="badge badge-flex">{flexItems.length} productos · {flexUnits} uds</span>
-                    </h3>
-                    <div>{flexItems.map((item, i) => renderItem(item, colectaItems.length + i))}</div>
-                </div>
-            )}
+            <div className="picking-layout">
+                <main className="picking-main" aria-label="Productos para picking">
+                    {renderSection('Colecta', 'colecta', colectaItems, colectaUnits)}
+                    {renderSection('Flex', 'flex', flexItems, flexUnits)}
+                </main>
+
+                <aside className="picking-summary" aria-label="Prioridades de picking">
+                    <div className="picking-summary-card">
+                        <h2>Prioridad</h2>
+                        <p className="picking-summary-subtitle">Productos con más unidades para buscar primero.</p>
+                        <div className="picking-priority-list">
+                            {summaryItems.map((item, index) => (
+                                <div className="picking-priority-item" key={`${item.product_name}-${item.sku}-${index}`}>
+                                    <strong>{item.total_quantity}</strong>
+                                    <div>
+                                        <span>{item.product_name}</span>
+                                        <small>{item.sku || 'N/A'} · {item.shipping_method}</small>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </aside>
+            </div>
         </div>
     );
 }
