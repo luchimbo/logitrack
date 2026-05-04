@@ -270,6 +270,7 @@ export default function TiendanubeSection({ currentUser }) {
   const [pendingStoreId, setPendingStoreId] = useState('');
   const [hasLoadedOrders, setHasLoadedOrders] = useState(() => Boolean(tiendanubeSectionCache.initialized));
   const searchRef = useRef(search);
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     searchRef.current = search;
@@ -319,9 +320,12 @@ export default function TiendanubeSection({ currentUser }) {
     setVerifyAfterOauth(false);
   }, []);
 
-  const load = useCallback(async ({ syncMode = 'auto', q } = {}) => {
+  const load = useCallback(async ({ syncMode = 'auto', q, silent = false } = {}) => {
     const showSyncing = syncMode === 'force';
-    const showLoading = !showSyncing;
+    const showLoading = !showSyncing && !silent;
+
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
 
     if (showSyncing) {
       setSyncing(true);
@@ -346,6 +350,7 @@ export default function TiendanubeSection({ currentUser }) {
     } catch (err) {
       setError(err.message || 'Error inesperado');
     } finally {
+      refreshInFlightRef.current = false;
       setLoading(false);
       setSyncing(false);
     }
@@ -402,6 +407,16 @@ export default function TiendanubeSection({ currentUser }) {
         load({ syncMode: '0' });
       }
     }
+  }, [connected, hasLoadedOrders, load]);
+
+  useEffect(() => {
+    if (!connected || !hasLoadedOrders) return undefined;
+
+    const interval = setInterval(() => {
+      load({ syncMode: '0', silent: true });
+    }, 20000);
+
+    return () => clearInterval(interval);
   }, [connected, hasLoadedOrders, load]);
 
   useEffect(() => {
