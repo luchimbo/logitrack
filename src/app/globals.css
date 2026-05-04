@@ -153,7 +153,7 @@ a{color:var(--accent);text-decoration:none} a:hover{color:var(--accent-hover)}
 .picking-group{background:rgba(26,31,46,.72);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .picking-group-colecta{border-left:3px solid var(--warning)}
 .picking-group-flex{border-left:3px solid var(--accent)}
-.picking-group-header{position:sticky;top:73px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;background:rgba(17,24,39,.96);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.picking-group-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;background:var(--bg-secondary);border-bottom:1px solid var(--border)}
 .picking-group-header h2{font-size:16px;font-weight:800;line-height:1.2;color:var(--text)}
 .picking-group-header p{font-size:12px;color:var(--text-muted);margin-top:2px}
 .picking-items{padding:8px;display:grid;gap:6px}
@@ -329,7 +329,7 @@ tr:hover td{background:var(--surface-hover)}
   .picking-metric-primary span{font-size:30px}
   .picking-metric p{font-size:10px}
   .picking-layout{grid-template-columns:1fr;gap:14px}
-  .picking-group-header{top:65px;padding:12px 14px}
+  .picking-group-header{padding:12px 14px}
   .picking-items{padding:6px;gap:6px}
   .picking-item{padding:12px;gap:10px}
   .picking-qty{min-width:42px;height:42px}
