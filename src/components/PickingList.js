@@ -74,8 +74,6 @@ export default function PickingList() {
     const totalUnits = pickingList.reduce((sum, p) => sum + p.total_quantity, 0);
     const colectaUnits = colectaItems.reduce((sum, p) => sum + p.total_quantity, 0);
     const flexUnits = flexItems.reduce((sum, p) => sum + p.total_quantity, 0);
-    const priorityItems = pickingList.filter(item => item.total_quantity >= 3).slice(0, 5);
-    const summaryItems = priorityItems.length ? priorityItems : pickingList.slice(0, 5);
 
     const handleExportPdf = async () => {
         try {
@@ -283,24 +281,6 @@ export default function PickingList() {
                     {renderSection('Colecta', 'colecta', colectaItems, colectaUnits)}
                     {renderSection('Flex', 'flex', flexItems, flexUnits)}
                 </main>
-
-                <aside className="picking-summary" aria-label="Prioridades de picking">
-                    <div className="picking-summary-card">
-                        <h2>Prioridad</h2>
-                        <p className="picking-summary-subtitle">Productos con más unidades para buscar primero.</p>
-                        <div className="picking-priority-list">
-                            {summaryItems.map((item, index) => (
-                                <div className="picking-priority-item" key={`${item.product_name}-${item.sku}-${index}`}>
-                                    <strong>{item.total_quantity}</strong>
-                                    <div>
-                                        <span>{item.product_name}</span>
-                                        <small>{item.sku || 'N/A'} · {item.shipping_method}</small>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </aside>
             </div>
         </div>
     );
