@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { api, toast, downloadLabelZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { getArgentinaDateString } from "@/lib/dateUtils";
 import LabelViewer from "./LabelViewer";
 
 export default function UploadSection() {
@@ -167,7 +168,7 @@ export default function UploadSection() {
         }
     };
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getArgentinaDateString();
     const todayBatches = batches.filter(b => b.date === today);
 
     return (

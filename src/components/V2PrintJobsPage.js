@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, toast } from "@/lib/api";
+import { formatArgentinaDateTime } from "@/lib/dateUtils";
 
 function formatDate(value) {
   if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("es-AR");
+  return formatArgentinaDateTime(value);
 }
 
 export default function V2PrintJobsPage() {

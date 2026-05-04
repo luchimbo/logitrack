@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatArgentinaDateTime } from "@/lib/dateUtils";
 
 export default function UserManagementSection() {
   const [users, setUsers] = useState([]);
@@ -92,7 +93,7 @@ export default function UserManagementSection() {
                   </div>
                   <div className="mobile-card-row">
                     <span className="mobile-card-label">Creado</span>
-                    <span className="mobile-card-value">{u.created_at ? new Date(u.created_at).toLocaleString("es-AR") : "-"}</span>
+                    <span className="mobile-card-value">{u.created_at ? formatArgentinaDateTime(u.created_at) : "-"}</span>
                   </div>
                   <div className="mobile-card-row" style={{ alignItems: "center" }}>
                     <span className="mobile-card-label">Rol</span>

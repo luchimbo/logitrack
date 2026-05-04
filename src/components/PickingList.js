@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
+import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
@@ -172,7 +173,7 @@ export default function PickingList() {
             pdf.setFont("helvetica", "normal");
             pdf.setFontSize(7);
             pdf.setTextColor(90, 99, 116);
-            pdf.text(`Generado: ${new Date().toLocaleString("es-AR")}`, margin, y);
+            pdf.text(`Generado: ${formatArgentinaDateTime(new Date())}`, margin, y);
             y += 4;
 
             pdf.setDrawColor(225, 232, 240);
@@ -198,7 +199,7 @@ export default function PickingList() {
                 writeItemsGrid(flexItems);
             }
 
-            pdf.save(`picking-list-${new Date().toISOString().slice(0, 10)}.pdf`);
+            pdf.save(`picking-list-${getArgentinaDateString()}.pdf`);
             toast('PDF generado correctamente', 'success');
         } catch (err) {
             console.error(err);

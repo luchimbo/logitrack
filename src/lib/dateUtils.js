@@ -1,10 +1,47 @@
 // src/lib/dateUtils.js
-// Computes SQL-friendly date ranges for period filtering
+// Computes SQL-friendly date ranges for period filtering.
+
+export const ARGENTINA_TIME_ZONE = 'America/Argentina/Buenos_Aires';
+
+function parseDateValue(value) {
+    if (value instanceof Date) return value;
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+        return new Date(`${value.trim()}T12:00:00Z`);
+    }
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value.trim())) {
+        return new Date(`${value.trim().replace(' ', 'T')}Z`);
+    }
+    return new Date(value);
+}
+
+export function getArgentinaDateString(value = new Date()) {
+    const date = parseDateValue(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: ARGENTINA_TIME_ZONE });
+}
+
+export function formatArgentinaDate(value, options = {}) {
+    const date = parseDateValue(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('es-AR', {
+        timeZone: ARGENTINA_TIME_ZONE,
+        ...options,
+    });
+}
+
+export function formatArgentinaDateTime(value, options = {}) {
+    const date = parseDateValue(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('es-AR', {
+        timeZone: ARGENTINA_TIME_ZONE,
+        ...options,
+    });
+}
 
 export function getDateRange(period, specificDate, fromDate, toDate) {
     const now = new Date();
     // Format: YYYY-MM-DD
-    const fmt = (d) => d.toISOString().slice(0, 10);
+    const fmt = getArgentinaDateString;
 
     switch (period) {
         case 'today':

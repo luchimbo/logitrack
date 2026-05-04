@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getDateRange } from '@/lib/dateUtils';
+import { getArgentinaDateString, getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { fetchStoredZipnovaDashboardRows } from '@/lib/zipnovaStore';
 
 function getComparisonRange(period) {
     const now = new Date();
-    const fmt = (d) => d.toISOString().slice(0, 10);
+    const fmt = getArgentinaDateString;
 
     if (period === 'today') {
         const prev = new Date(now);

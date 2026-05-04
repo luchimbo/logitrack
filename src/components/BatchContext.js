@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { getArgentinaDateString } from "@/lib/dateUtils";
 
 const BatchContext = createContext();
 
@@ -21,7 +22,7 @@ export function BatchProvider({ children }) {
                 const data = await api("/batches");
                 setBatches(data);
                 if (data.length > 0) {
-                    const today = new Date().toISOString().slice(0, 10);
+                    const today = getArgentinaDateString();
                     const todayBatch = data.find((b) => b.date === today);
                     setCurrentBatchId(todayBatch ? todayBatch.id : data[0].id);
                 }

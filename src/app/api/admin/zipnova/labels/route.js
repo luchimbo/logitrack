@@ -3,6 +3,7 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { markZipnovaShipmentsDownloaded } from '@/lib/zipnovaStore';
 import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
+import { getArgentinaDateString } from '@/lib/dateUtils';
 
 function decodeBase64ToBytes(base64) {
   return Uint8Array.from(Buffer.from(base64, 'base64'));
@@ -87,7 +88,7 @@ export async function POST(request) {
     );
 
     if (requestedFormat === 'zpl') {
-      const fileName = `etiquetas-${group}-${new Date().toISOString().slice(0, 10)}.zpl`;
+      const fileName = `etiquetas-${group}-${getArgentinaDateString()}.zpl`;
       return new NextResponse(zplBlocks.join('\r\n'), {
         status: 200,
         headers: {
@@ -100,7 +101,7 @@ export async function POST(request) {
     }
 
     const mergedBytes = await mergedPdf.save();
-    const fileName = `etiquetas-${group}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const fileName = `etiquetas-${group}-${getArgentinaDateString()}.pdf`;
 
     return new NextResponse(Buffer.from(mergedBytes), {
       status: 200,

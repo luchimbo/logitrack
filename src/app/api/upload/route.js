@@ -5,6 +5,7 @@ import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { getArgentinaDateString } from '@/lib/dateUtils';
 
 function toDbValue(value) {
     if (value === undefined || value === null) return null;
@@ -56,9 +57,10 @@ export async function POST(request) {
 
         // Daily batch management
         let batchId;
+        const today = getArgentinaDateString();
         const todayResult = await db.execute({
-            sql: "SELECT id, filenames FROM daily_batches WHERE workspace_id = ? AND date = CURRENT_DATE",
-            args: [workspaceId],
+            sql: "SELECT id, filenames FROM daily_batches WHERE workspace_id = ? AND date = ?",
+            args: [workspaceId, today],
         });
 
         if (todayResult.rows.length > 0) {
@@ -71,8 +73,8 @@ export async function POST(request) {
             });
         } else {
             const result = await db.execute({
-                sql: "INSERT INTO daily_batches (workspace_id, created_by_app_user_id, filenames) VALUES (?, ?, ?)",
-                args: [workspaceId, actor.appUserId, filenames.join(', ')]
+                sql: "INSERT INTO daily_batches (workspace_id, created_by_app_user_id, date, filenames) VALUES (?, ?, ?, ?)",
+                args: [workspaceId, actor.appUserId, today, filenames.join(', ')]
             });
             batchId = Number(result.lastInsertRowid);
         }

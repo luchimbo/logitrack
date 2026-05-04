@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/lib/api";
+import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 
 let tiendanubeSectionCache = {
   orders: [],
@@ -41,9 +42,7 @@ function badgeStyle(color) {
 
 function formatOrderDate(value) {
   if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString('es-AR', {
+  return formatArgentinaDate(value, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -52,9 +51,7 @@ function formatOrderDate(value) {
 
 function formatDateTime(value) {
   if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('es-AR', {
+  return formatArgentinaDateTime(value, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -65,10 +62,8 @@ function formatDateTime(value) {
 
 function isSameArgentinaDay(value) {
   if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-  const target = date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const today = getArgentinaDateString();
+  const target = getArgentinaDateString(value);
   return today === target;
 }
 

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
 import { assignCarrier } from "@/lib/zoneMapper";
+import { getArgentinaDateString } from "@/lib/dateUtils";
 
 const MAX_LABELS = 5000;
 const CHUNK_SIZE = 300;
@@ -107,7 +108,7 @@ function extractDateOnly(value) {
 
 async function getOrCreateBatch(workspaceId, sourceFiles, batchDate = null) {
   const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
-  const dateValue = extractDateOnly(batchDate) || new Date().toISOString().slice(0, 10);
+  const dateValue = extractDateOnly(batchDate) || getArgentinaDateString();
 
   const todayResult = await db.execute({
     sql: "SELECT id, filenames FROM daily_batches WHERE workspace_id = ? AND date = ?",

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { api, toast, downloadLabelZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { getArgentinaDateString } from "@/lib/dateUtils";
 import LabelViewer from "./LabelViewer";
 
 export default function Dashboard() {
@@ -22,6 +23,7 @@ export default function Dashboard() {
     const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const isMobile = useIsMobile();
+    const today = getArgentinaDateString();
 
     const PERIODS = [
         { id: 'today', label: 'Hoy', icon: '📅' },
@@ -123,7 +125,7 @@ export default function Dashboard() {
                         }}
                         value={draftSpecificDate}
                         onChange={(e) => setDraftSpecificDate(e.target.value)}
-                        max={new Date().toISOString().slice(0, 10)}
+                        max={today}
                     />
                     <button
                         type="button"
@@ -149,7 +151,7 @@ export default function Dashboard() {
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeFrom}
                             onChange={(e) => setDraftRangeFrom(e.target.value)}
-                            max={new Date().toISOString().slice(0, 10)}
+                            max={today}
                         />
                         <input
                             type="date"
@@ -157,7 +159,7 @@ export default function Dashboard() {
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeTo}
                             onChange={(e) => setDraftRangeTo(e.target.value)}
-                            max={new Date().toISOString().slice(0, 10)}
+                            max={today}
                         />
                     </div>
                     <button

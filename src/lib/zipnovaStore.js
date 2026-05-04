@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { getDefaultZipnovaClient, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { formatArgentinaDateTime, getArgentinaDateString } from '@/lib/dateUtils';
 
 export const ZIPNOVA_VISIBLE_STATUSES = ['new', 'documentation_ready', 'ready_to_ship', 'shipped', 'in_transit_to_crossdock'];
 export const ZIPNOVA_COLLECTION_STATUSES = ['ready_to_ship'];
@@ -9,15 +10,7 @@ const ZIPNOVA_CONFIRMED_COLLECTION_STATUSES = ['ready_to_ship', 'shipped', 'in_t
 
 function getArgentinaDateOnly(value) {
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+  return getArgentinaDateString(value) || null;
 }
 
 function addDays(value, days) {
@@ -307,7 +300,7 @@ function aggregateCollections(shipments, { workspaceId }) {
       scheduledDate: shipment.collection_window?.date || getArgentinaDateOnly(shipment.created_at),
       windowOpen: shipment.collection_window?.open || null,
       windowClose: shipment.collection_window?.close || null,
-      cutoffLabel: shipment.delivery_time?.dropoff_deadline_at ? new Date(shipment.delivery_time.dropoff_deadline_at).toLocaleString('es-AR') : null,
+      cutoffLabel: shipment.delivery_time?.dropoff_deadline_at ? formatArgentinaDateTime(shipment.delivery_time.dropoff_deadline_at) : null,
       collectorName: 'zipnova',
       shipments: [],
       shipmentsCount: 0,
