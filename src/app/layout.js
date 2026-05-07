@@ -1,6 +1,7 @@
 import "./globals.css";
 import { BatchProvider } from "@/components/BatchContext";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "GeoModi | Gestión",
@@ -21,6 +22,7 @@ export default function RootLayout({ children }) {
             {children}
           </BatchProvider>
         </ClerkProvider>
+        <Analytics />
       </body>
     </html>
   );
