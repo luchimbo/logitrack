@@ -13,7 +13,6 @@ import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
 import TiendanubeSection from "@/components/TiendanubeSection";
-import CorreoArgentinoSection from "@/components/CorreoArgentinoSection";
 import GeoModiLogo from "@/components/GeoModiLogo";
 import OnboardingTour from "@/components/OnboardingTour";
 
@@ -135,7 +134,6 @@ export default function AppHome() {
       case "map": return <MapSection />;
       case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "correoArgentino": return currentUser ? <CorreoArgentinoSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -164,7 +162,6 @@ export default function AppHome() {
       items: [
         { id: "zipnova", icon: "📮", label: "Zipnova" },
         { id: "tiendanube", icon: "🛒", label: "Tiendanube" },
-        { id: "correoArgentino", icon: "✉️", label: "Correo Argentino" },
       ],
     },
   ];
