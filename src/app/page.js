@@ -129,11 +129,6 @@ function HeroMockup() {
         <div className={styles.mockupTopbar}>
           <div>
             <strong>Lista de Picking</strong>
-            <span className={styles.mockupUser}>admin</span>
-          </div>
-          <div className={styles.previewTopChips}>
-            <span>GeoModi Legacy</span>
-            <span>Admin maestro</span>
           </div>
         </div>
 
