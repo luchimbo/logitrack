@@ -3,8 +3,27 @@ import { BatchProvider } from "@/components/BatchContext";
 import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata = {
-  title: "GeoModi | Gestión",
-  description: "Plataforma de gestión logística GeoModi",
+  title: "GeoModi | Logística e-commerce en un solo lugar",
+  description: "GeoModi unifica etiquetas y despachos de Mercado Libre y Tiendanube: lotes, picking, Flex, Colecta, transportistas y métricas operativas.",
+  keywords: [
+    "GeoModi",
+    "Mercado Libre",
+    "Tiendanube",
+    "etiquetas Mercado Libre",
+    "etiquetas ZPL",
+    "picking ecommerce",
+    "logistica ecommerce",
+    "Flex",
+    "Colecta",
+    "Tiendanube",
+    "Zipnova",
+  ],
+  openGraph: {
+    title: "GeoModi | Logística e-commerce en un solo lugar",
+    description: "Centralizá Mercado Libre y Tiendanube: etiquetas, pedidos, lotes, picking, Flex, Colecta, transportistas y métricas en un mismo workspace.",
+    type: "website",
+    locale: "es_AR",
+  },
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",

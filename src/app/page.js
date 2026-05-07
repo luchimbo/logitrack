@@ -1,358 +1,283 @@
-"use client";
+import Image from "next/image";
+import Link from "next/link";
+import styles from "./page.module.css";
 
-import { useEffect, useState } from "react";
-import { useClerk, useAuth } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
-import UploadSection from "@/components/UploadSection";
-import ZoneConfig from "@/components/ZoneConfig";
-import FlexSection from "@/components/FlexSection";
-import ColectaSection from "@/components/ColectaSection";
-import PickingList from "@/components/PickingList";
-import Dashboard from "@/components/Dashboard";
-import MapSection from "@/components/MapSection";
-import UserManagementSection from "@/components/UserManagementSection";
-import AdminOverviewSection from "@/components/AdminOverviewSection";
-import ZipnovaSection from "@/components/ZipnovaSection";
-import TiendanubeSection from "@/components/TiendanubeSection";
-import GeoModiLogo from "@/components/GeoModiLogo";
-import OnboardingTour from "@/components/OnboardingTour";
+const workflow = [
+  {
+    step: "01",
+    title: "Cargá etiquetas y pedidos",
+    text: "Subí etiquetas ZPL/TXT de Mercado Libre y conectá tus pedidos de Tiendanube para reunir la operación diaria en un mismo workspace.",
+  },
+  {
+    step: "02",
+    title: "Ordená el lote del día",
+    text: "Cada carga queda agrupada por día, con duplicados omitidos, totales claros y etiquetas disponibles.",
+  },
+  {
+    step: "03",
+    title: "Prepará picking",
+    text: "GeoModi agrupa productos, cantidades, SKU y método de envío para que tu equipo prepare pedidos sin saltar entre canales.",
+  },
+  {
+    step: "04",
+    title: "Controlá Flex y Colecta",
+    text: "Separá envíos por método, revisá etiquetas y mantené visibles los despachos pendientes.",
+  },
+  {
+    step: "05",
+    title: "Asigná transportistas",
+    text: "Configurá zonas por partido y reasigná Flex según los transportistas de tu operación.",
+  },
+];
 
-export default function Home() {
-  const { signOut } = useClerk();
-  const { isSignedIn, isLoaded } = useAuth();
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("upload");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [authError, setAuthError] = useState(null);
+const modules = [
+  ["labels", "Centralizá Mercado Libre y Tiendanube", "Etiquetas, pedidos, lotes diarios y control de duplicados en un solo lugar."],
+  ["picking", "Prepará picking", "Productos agrupados por cantidad, SKU y método de envío para preparar más rápido."],
+  ["flex", "Controlá Flex", "Resumen operativo, envíos por zona y transportista asignado."],
+  ["colecta", "Ordená Colecta", "Listado de envíos tradicionales con acceso rápido a etiquetas."],
+  ["map", "Visualizá entregas", "Direcciones geocodificadas para revisar distribución antes de despachar."],
+  ["dashboard", "Medí la operación", "Volumen por día, semana, mes, año o rango personalizado."],
+];
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          setCurrentUser(null);
-          setAuthChecked(true);
-          setAuthError(errorData.errorDetail || errorData.error || `Error ${res.status}`);
-          if (!isSignedIn) {
-            router.replace("/login");
-          }
-          return;
-        }
-        const data = await res.json();
-        setCurrentUser(data.user || null);
-        setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.isGlobalAdmin && !data.user.onboardingCompleted));
-        setAuthChecked(true);
-        setAuthError(null);
-      } catch (err) {
-        setCurrentUser(null);
-        setAuthChecked(true);
-        setAuthError(err.message || "Error de autenticación");
-        if (!isSignedIn) {
-          router.replace("/login");
-        }
-      }
-    };
+const integrations = [
+  ["Mercado Libre", "Carga de etiquetas ZPL/TXT, Flex, Colecta y operación diaria de despachos."],
+  ["Tiendanube", "Pedidos por enviar o despachados, productos y datos de envío."],
+  ["Zipnova", "Envíos, recolecciones, etiquetas disponibles y estados de preparación."],
+  ["Correo Argentino", "Próximamente: creación de envíos, consulta de agencias, tracking y etiquetas."],
+  ["Más integraciones", "Estamos sumando nuevos canales y operadores logísticos para centralizar más partes de tu operación."],
+];
 
-    if (isLoaded) {
-      loadUser();
-    }
-  }, [router, isSignedIn, isLoaded]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const tabFromUrl = new URLSearchParams(window.location.search).get("tab");
-      if (tabFromUrl) {
-        setActiveTab(tabFromUrl);
-      }
-    }
-  }, []);
-
-  // Close sidebar when clicking outside or pressing escape
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') setSidebarOpen(false);
-    };
-    
-    if (sidebarOpen) {
-      document.body.classList.add('sidebar-open');
-      window.addEventListener('keydown', handleEscape);
-    } else {
-      document.body.classList.remove('sidebar-open');
-    }
-    
-    return () => {
-      document.body.classList.remove('sidebar-open');
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [sidebarOpen]);
-
-  const isAdmin = currentUser?.role === "admin";
-  const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
-  const canManageUsers = canManageWorkspace;
-
-  const handleLogout = async () => {
-    const isClerkUser = currentUser?.authType === "clerk";
-
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      setCurrentUser(null);
-
-      if (isClerkUser) {
-        await signOut();
-        window.location.assign('/login');
-        return;
-      }
-
-      window.location.assign('/admin-login');
-    } catch (err) {
-      console.error("Logout error", err);
-      window.location.assign(isClerkUser ? '/login' : '/admin-login');
-    }
+function ModuleIcon({ type }) {
+  const common = {
+    width: "28",
+    height: "28",
+    viewBox: "0 0 28 28",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+    "aria-hidden": "true",
   };
 
-  const handleNavClick = (tabId) => {
-    setActiveTab(tabId);
-    setSidebarOpen(false); // Close sidebar on mobile after navigation
-  };
-
-  const handleOnboardingClose = async (completed) => {
-    try {
-      await fetch('/api/onboarding', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed }),
-      });
-      setCurrentUser((prev) => prev ? { ...prev, onboardingCompleted: true } : prev);
-    } catch (err) {
-      console.error('Onboarding update error', err);
-    } finally {
-      setShowOnboarding(false);
-    }
-  };
-
-  const renderSection = () => {
-    switch (activeTab) {
-      case "upload": return <UploadSection />;
-      case "pickingList": return <PickingList />;
-      case "flex": return <FlexSection />;
-      case "colecta": return <ColectaSection />;
-      case "zoneConfig": return <ZoneConfig />;
-      case "dashboard": return <Dashboard />;
-      case "map": return <MapSection />;
-      case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
-      case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
-      default: return <div>Página no encontrada</div>;
-    }
-  };
-
-  const navGroups = [
-    {
-      title: "Operación",
-      items: [
-        { id: "upload", icon: "📦", label: "Subir Etiquetas" },
-        { id: "pickingList", icon: "📋", label: "Lista de Picking" },
-        { id: "flex", icon: "🚀", label: "Logística Flex" },
-        { id: "colecta", icon: "📦", label: "Colecta" },
-        { id: "map", icon: "📍", label: "Mapa" },
-        { id: "dashboard", icon: "📊", label: "Dashboard" },
-      ],
-    },
-    {
-      title: "Configuración",
-      items: [
-        { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
-      ],
-    },
-    {
-      title: "Integraciones",
-      items: [
-        { id: "zipnova", icon: "📮", label: "Zipnova" },
-        { id: "tiendanube", icon: "🛒", label: "Tiendanube" },
-      ],
-    },
-  ];
-
-  if (currentUser?.isGlobalAdmin || canManageUsers) {
-    const adminItems = [];
-    if (currentUser?.isGlobalAdmin) {
-      adminItems.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
-    }
-    if (canManageUsers) {
-      adminItems.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
-    }
-    navGroups.push({ title: "Administración", items: adminItems });
-  }
-
-  const navLinks = navGroups.flatMap((group) => group.items);
-
-  // Get current section title
-  const currentSection = navLinks.find(l => l.id === activeTab);
-  const sectionTitle = currentSection?.label || 'GeoModi';
-
-  if (!authChecked) {
-    return (
-      <main className="main-content" style={{ marginLeft: 0 }}>
-        <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-          <div className="spinner"></div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!currentUser) {
-    if (isSignedIn) {
+  switch (type) {
+    case "labels":
       return (
-        <main className="main-content" style={{ marginLeft: 0 }}>
-          <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>Error de autenticación</h2>
-              <p style={{ color: 'var(--text-muted)' }}>No se pudo sincronizar tu cuenta. Intentá de nuevo.</p>
-              {authError && (
-                <div style={{ 
-                  color: 'var(--danger)', 
-                  fontSize: '12px', 
-                  marginTop: '8px',
-                  padding: '8px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  borderRadius: '4px',
-                  maxWidth: '400px',
-                  wordBreak: 'break-word'
-                }}>
-                  <strong>Error técnico:</strong><br/>
-                  {authError}
-                </div>
-              )}
-            </div>
-            <button 
-              onClick={handleLogout}
-              className="btn btn-primary"
-            >
-              Cerrar sesión e intentar de nuevo
-            </button>
-          </div>
-        </main>
+        <svg {...common}>
+          <path d="M7 4.5h10.5L22 9v14.5H7V4.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M17.5 4.5V9H22" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M10 14h9M10 18h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M6 8.5H4v14h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.45" />
+        </svg>
       );
-    }
-    return null;
+    case "picking":
+      return (
+        <svg {...common}>
+          <rect x="6" y="5" width="16" height="19" rx="3" stroke="currentColor" strokeWidth="2" />
+          <path d="M10 11l2 2 4-4M10 17l2 2 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M11 4h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case "flex":
+      return (
+        <svg {...common}>
+          <path d="M15 3 6 16h7l-1 9 10-14h-7l0-8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+        </svg>
+      );
+    case "colecta":
+      return (
+        <svg {...common}>
+          <path d="M5 10.5 14 6l9 4.5v9L14 24l-9-4.5v-9Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="m5 10.5 9 4.5 9-4.5M14 15v9" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="m9.5 8.2 9 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
+        </svg>
+      );
+    case "map":
+      return (
+        <svg {...common}>
+          <path d="M14 24s7-6.4 7-13a7 7 0 1 0-14 0c0 6.6 7 13 7 13Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <circle cx="14" cy="11" r="2.6" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      );
+    case "dashboard":
+      return (
+        <svg {...common}>
+          <rect x="5" y="5" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
+          <path d="M10 18v-4M14 18V9M18 18v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    default:
+      return null;
   }
+}
 
+function HeroMockup() {
   return (
-    <>
-      {showOnboarding && <OnboardingTour activeTab={activeTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
-      {/* Mobile Sidebar Overlay */}
-      <div 
-        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-      />
+    <div className={styles.mockup} aria-label="Vista previa operativa de GeoModi">
+      <aside className={styles.previewSidebar}>
+        <div className={styles.previewLogo}>GEOMODI</div>
+        <small>OPERACIÓN</small>
+        <span>📦 Subir Etiquetas</span>
+        <span className={styles.previewNavActive}>📋 Lista de Picking</span>
+        <span>🚀 Logística Flex</span>
+        <span>📦 Colecta</span>
+        <span>📍 Mapa</span>
+        <span>📊 Dashboard</span>
+        <small>INTEGRACIONES</small>
+        <span>🛒 Tiendanube</span>
+        <span>📮 Zipnova</span>
+      </aside>
 
-      <nav 
-        className={`sidebar ${sidebarOpen ? 'open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sidebar-header">
-          <GeoModiLogo size="sm" />
-          <button 
-            className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Cerrar menú"
-          >
-            ✕
-          </button>
+      <div className={styles.previewApp}>
+        <div className={styles.mockupTopbar}>
+          <div>
+            <strong>Lista de Picking</strong>
+            <span className={styles.mockupUser}>admin</span>
+          </div>
+          <div className={styles.previewTopChips}>
+            <span>GeoModi Legacy</span>
+            <span>Admin maestro</span>
+          </div>
         </div>
-        <div className="nav-links">
-          {navGroups.map((group) => (
-            <div key={group.title} className="nav-group">
-              <div className="nav-group-title">{group.title}</div>
-              <ul className="nav-group-list">
-                {group.items.map((link) => (
-                  <li key={link.id}>
-                    <a
-                      href="#"
-                      className={`nav-link ${activeTab === link.id ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleNavClick(link.id);
-                      }}
-                    >
-                      <span className="nav-icon">{link.icon}</span>
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+
+        <section className={styles.previewContentHeader}>
+          <div>
+            <span className={styles.mockupEyebrow}>Operación diaria</span>
+            <h3>Lista de Picking</h3>
+            <p>Productos a preparar, priorizados por unidades pendientes.</p>
+          </div>
+          <button>Exportar PDF</button>
+        </section>
+
+        <div className={styles.previewStats}>
+          <div><strong>86</strong><span>Etiquetas cargadas</span></div>
+          <div><strong>42</strong><span>Uds Flex · 25 prod.</span></div>
+          <div><strong>40</strong><span>Uds Colecta · 19 prod.</span></div>
+          <div><strong>2</strong><span>Duplicados omitidos</span></div>
+        </div>
+
+        <section className={styles.previewPickingList}>
+          <div className={styles.previewGroupHeader}>
+            <div><strong>Colecta</strong><span>19 productos · 40 unidades</span></div>
+            <b>19</b>
+          </div>
+          <div className={styles.previewPickingItemHighlight}><b>12<small>uds</small></b><span>Remera Oversize Algodón Negro</span></div>
+          <div className={styles.previewPickingItem}><b>5<small>uds</small></b><span>Buzo Canguro Frisa Gris Melange</span></div>
+          <div className={styles.previewPickingItem}><b>3<small>uds</small></b><span>Campera Nylon Urbana Azul</span></div>
+          <div className={styles.previewPickingItem}><b>2<small>uds</small></b><span>Pantalón Cargo Gabardina Verde</span></div>
+        </section>
+
+      </div>
+    </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <a href="#inicio" className={styles.brand} aria-label="GeoModi inicio">
+          <Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority />
+        </a>
+        <nav className={styles.nav} aria-label="Navegación principal">
+          <a href="#flujo">Flujo</a>
+          <a href="#modulos">Módulos</a>
+          <a href="#integraciones">Integraciones</a>
+        </nav>
+        <Link className={styles.loginButton} href="/login">Entrar</Link>
+      </header>
+
+      <section id="inicio" className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span className={styles.kicker}>Centro operativo para e-commerce</span>
+          <h1>Controlá toda tu logística en un solo lugar</h1>
+          <p>
+            Tus etiquetas y despachos de Mercado Libre y Tiendanube, unificados en una sola plataforma. GeoModi te permite cargar etiquetas,
+            ordenar lotes, preparar picking, separar Flex/Colecta, asignar transportistas y medir la operación diaria sin perder el control.
+          </p>
+          <div className={styles.heroActions}>
+            <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
+            <a className={styles.secondaryCta} href="#flujo">Ver cómo funciona</a>
+          </div>
+        </div>
+        <HeroMockup />
+      </section>
+
+      <section className={styles.definitionSection}>
+        <span className={styles.sectionLabel}>Qué es GeoModi</span>
+        <h2>El centro operativo para preparar y despachar ventas de Mercado Libre y Tiendanube</h2>
+        <p>
+          GeoModi concentra etiquetas, pedidos, productos, lotes, transportistas, métodos de envío y métricas en un mismo workspace para que tu equipo tenga visibilidad y control antes de despachar.
+        </p>
+      </section>
+
+      <section className={styles.problem}>
+        <div>
+          <span className={styles.sectionLabel}>El problema</span>
+          <h2>Cuando la operación crece, el control se fragmenta</h2>
+        </div>
+        <p>
+          Etiquetas descargadas, pedidos en diferentes canales, picking en otro lugar, transportistas por fuera y métricas separadas hacen que el despacho dependa de demasiados controles manuales.
+        </p>
+      </section>
+
+      <section id="flujo" className={styles.workflowSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Flujo operativo</span>
+          <h2>Un flujo claro para tener el despacho bajo control</h2>
+        </div>
+        <div className={styles.workflowGrid}>
+          {workflow.map((item) => (
+            <article className={styles.workflowCard} key={item.step}>
+              <span>{item.step}</span>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </article>
           ))}
         </div>
-        {currentUser && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
-            <div className="user-profile" style={{ justifyContent: 'flex-start', marginBottom: '16px' }}>
-              <div className="avatar">{currentUser.username?.[0]?.toUpperCase()}</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.email || currentUser.username}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {currentUser.workspaceName ? `${currentUser.workspaceName} · ` : ''}{currentUser.role}
-                </div>
-              </div>
-            </div>
-            <button 
-              onClick={handleLogout}
-              className="btn btn-ghost"
-              style={{ 
-                width: '100%', 
-                justifyContent: 'center',
-                padding: '12px',
-                fontSize: '13px'
-              }}
-            >
-              Cerrar sesión
-            </button>
-          </div>
-        )}
-      </nav>
+      </section>
 
-      <main className="main-content">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button 
-              className="mobile-menu-btn"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Abrir menú"
-            >
-              ☰
-            </button>
-            <div>
-              <div className="topbar-title">{sectionTitle}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '2px' }} className="desktop-only">
-                {currentUser?.email || currentUser?.username}
-              </div>
-            </div>
-          </div>
-          <div className="topbar-context desktop-only">
-            <span className="topbar-chip">{currentUser?.workspaceName || 'Sin workspace'}</span>
-            <span className="topbar-chip subtle">{currentUser?.role || 'user'}</span>
-            {currentUser?.isGlobalAdmin ? <span className="topbar-chip accent">Admin maestro</span> : null}
-          </div>
-          {currentUser && (
-            <button
-              onClick={handleLogout}
-              className="btn btn-ghost btn-sm"
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              Cerrar sesión
-            </button>
-          )}
-        </header>
-
-        <div className="content-area">
-          {renderSection()}
+      <section id="modulos" className={styles.modulesSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Módulos</span>
+          <h2>Todo el control operativo antes de despachar</h2>
         </div>
-      </main>
-    </>
+        <div className={styles.moduleGrid}>
+          {modules.map(([type, title, text]) => (
+            <article className={styles.moduleCard} key={title}>
+              <div className={styles.moduleIcon}><ModuleIcon type={type} /></div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="integraciones" className={styles.integrationsSection}>
+        <div className={styles.integrationVisual}>
+          <span>Tiendanube</span>
+          <strong>GeoModi</strong>
+          <span>Zipnova</span>
+          <span>Correo Argentino · Próximamente</span>
+          <span>Más integraciones próximamente</span>
+        </div>
+        <div className={styles.integrationCopy}>
+          <span className={styles.sectionLabel}>Integraciones</span>
+          <h2>Conectado con tus canales operativos</h2>
+          <div className={styles.integrationList}>
+            {integrations.map(([title, text]) => (
+              <div key={title}>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.finalCta}>
+        <span className={styles.sectionLabel}>Prepará el próximo lote</span>
+        <h2>Unificá etiquetas, preparación y despacho</h2>
+        <p>Concentrá la operación diaria en un solo lugar: etiquetas, lotes, picking, métodos de envío, transportistas y métricas.</p>
+        <Link className={styles.primaryCta} href="/login">Entrar a la plataforma</Link>
+      </section>
+    </main>
   );
 }

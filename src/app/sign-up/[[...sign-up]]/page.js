@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
 import GeoModiLogo from "@/components/GeoModiLogo";
 
@@ -28,15 +27,9 @@ export default function SignUpPage() {
             routing="path"
             path="/sign-up"
             signInUrl="/login"
-            fallbackRedirectUrl="/"
-            forceRedirectUrl="/"
+            fallbackRedirectUrl="/app"
+            forceRedirectUrl="/app"
           />
-        </div>
-
-        <div style={{ textAlign: "center", marginTop: "16px" }}>
-          <Link href="/admin-login" style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-            Ingresar como admin local
-          </Link>
         </div>
 
         <style jsx global>{`
