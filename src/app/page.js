@@ -253,7 +253,7 @@ export default function LandingPage() {
       <section id="integraciones" className={styles.integrationsSection}>
         <div className={styles.integrationVisual}>
           <span>Tiendanube</span>
-          <strong>GeoModi</strong>
+          <strong>Mercado Libre</strong>
           <span>Zipnova</span>
           <span>Correo Argentino · Próximamente</span>
           <span>Más integraciones próximamente</span>
