@@ -244,7 +244,7 @@ function OrderCard({ order, isExpanded, onToggle, selected, onSelectionToggle, o
 }
 
 export default function TiendanubeSection({ currentUser }) {
-  const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
+  const canManageIntegration = ['owner', 'admin'].includes(currentUser?.role);
   const [orders, setOrders] = useState(() => tiendanubeSectionCache.orders || []);
   const [search, setSearch] = useState(() => tiendanubeSectionCache.search || '');
   const [viewMode, setViewMode] = useState(() => tiendanubeSectionCache.viewMode || 'to_send');

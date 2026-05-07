@@ -44,7 +44,10 @@ next-env.d.ts
 ultimo_ordenado_v2.txt
 
 # local databases and backups
+local.db
 *.db
+*.sqlite
+*.sqlite3
 _backup/
 _legacy_backup/
 

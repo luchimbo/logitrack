@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 
 function isLabelLikelyAvailable(shipment) {
   const status = String(shipment.status || '').toLowerCase();
@@ -9,7 +10,7 @@ function isLabelLikelyAvailable(shipment) {
 
 function formatCollectionDateParts(collection) {
   const dateLabel = collection?.scheduledDate
-    ? new Date(`${collection.scheduledDate}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric' })
+    ? formatArgentinaDate(`${collection.scheduledDate}T12:00:00`, { day: 'numeric', month: 'numeric', year: 'numeric' })
     : 'Fecha no informada';
   const open = collection?.windowOpen || '--';
   const close = collection?.windowClose || '--';
@@ -127,7 +128,7 @@ function CollectionsPanel({ title, children, warning }) {
 }
 
 export default function ZipnovaSection({ currentUser }) {
-  const canManageIntegration = currentUser?.isGlobalAdmin || ['owner', 'admin'].includes(currentUser?.role);
+  const canManageIntegration = ['owner', 'admin'].includes(currentUser?.role);
   const [readyShipments, setReadyShipments] = useState([]);
   const [collectionShipments, setCollectionShipments] = useState([]);
   const [confirmedCollections, setConfirmedCollections] = useState([]);
@@ -408,7 +409,7 @@ export default function ZipnovaSection({ currentUser }) {
           <div className="card" style={{ marginBottom: '12px' }}>
             <div className="flex-between" style={{ flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                Integración activa {connectedAt ? `· Conectado el ${new Date(connectedAt).toLocaleString('es-AR')}` : ''}
+                Integración activa {connectedAt ? `· Conectado el ${formatArgentinaDateTime(connectedAt)}` : ''}
               </div>
               {canManageIntegration ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={handleDisconnect} disabled={connecting}>
@@ -435,7 +436,7 @@ export default function ZipnovaSection({ currentUser }) {
                 </button>
               </div>
               <div className="form-group" style={{ color: 'var(--text-muted)', fontSize: '12px', minWidth: '220px' }}>
-                Última sincronización:<br />{lastSyncedAt ? new Date(lastSyncedAt).toLocaleString('es-AR') : 'sin datos todavía'}
+                Última sincronización:<br />{lastSyncedAt ? formatArgentinaDateTime(lastSyncedAt) : 'sin datos todavía'}
               </div>
             </div>
           </div>

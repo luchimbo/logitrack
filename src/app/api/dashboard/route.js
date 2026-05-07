@@ -102,7 +102,7 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
 
     const result = await db.execute({ sql, args });
     const shipments = result.rows;
-    const zipnovaShipments = !batchId && actor.isGlobalAdmin ? await fetchStoredZipnovaDashboardRows(range) : [];
+    const zipnovaShipments = [];
     return summarizeShipments([...shipments, ...zipnovaShipments], period);
 }
 

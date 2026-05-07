@@ -11,6 +11,7 @@ import PickingList from "@/components/PickingList";
 import Dashboard from "@/components/Dashboard";
 import MapSection from "@/components/MapSection";
 import UserManagementSection from "@/components/UserManagementSection";
+import AdminOverviewSection from "@/components/AdminOverviewSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
 import TiendanubeSection from "@/components/TiendanubeSection";
 import GeoModiLogo from "@/components/GeoModiLogo";
@@ -43,7 +44,7 @@ export default function AppHome() {
         }
         const data = await res.json();
         setCurrentUser(data.user || null);
-        setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.onboardingCompleted));
+        setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.isGlobalAdmin && !data.user.onboardingCompleted));
         setAuthChecked(true);
         setAuthError(null);
       } catch (err) {
@@ -88,18 +89,26 @@ export default function AppHome() {
     };
   }, [sidebarOpen]);
 
-  const canManageWorkspace = ["owner", "admin"].includes(currentUser?.role);
+  const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
   const canManageUsers = canManageWorkspace;
 
   const handleLogout = async () => {
+    const isClerkUser = currentUser?.authType === "clerk";
+
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setCurrentUser(null);
-      await signOut();
-      window.location.assign('/login');
+
+      if (isClerkUser) {
+        await signOut();
+        window.location.assign('/login');
+        return;
+      }
+
+      window.location.assign('/admin-login');
     } catch (err) {
       console.error("Logout error", err);
-      window.location.assign('/login');
+      window.location.assign(isClerkUser ? '/login' : '/admin-login');
     }
   };
 
@@ -132,6 +141,7 @@ export default function AppHome() {
       case "zoneConfig": return <ZoneConfig />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
+      case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
       case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
@@ -166,8 +176,11 @@ export default function AppHome() {
     },
   ];
 
-  if (canManageUsers) {
+  if (currentUser?.isGlobalAdmin || canManageUsers) {
     const adminItems = [];
+    if (currentUser?.isGlobalAdmin) {
+      adminItems.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
+    }
     if (canManageUsers) {
       adminItems.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
     }

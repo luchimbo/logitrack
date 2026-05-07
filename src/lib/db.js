@@ -8,7 +8,10 @@ if (!hasDbCredentials) {
     console.warn("⚠️ DATABASE CREDENTIALS NOT FOUND. Ensure TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set.");
 }
 
-export const db = createClient({
-    url: dbUrl || "libsql://default-placeholder.turso.io",
-    authToken: dbAuthToken || "dummy-token",
-});
+const dbConfig = { url: dbUrl || "libsql://default-placeholder.turso.io" };
+
+if (dbAuthToken) {
+    dbConfig.authToken = dbAuthToken;
+}
+
+export const db = createClient(dbConfig);

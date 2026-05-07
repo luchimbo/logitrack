@@ -22,7 +22,7 @@ export default function AdminLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al iniciar sesión");
-      window.location.href = "/";
+      window.location.href = "/app";
     } catch (err) {
       setError(err.message || "Error al iniciar sesión");
       setLoading(false);

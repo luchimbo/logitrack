@@ -65,6 +65,12 @@ npm run dev
 
 App en `http://localhost:3000`.
 
+Sandbox visual sin login ni DB:
+
+- `http://localhost:3000/dev/geomodi-preview`
+- usa datos mock permanentes para probar cambios de UI
+- si definis `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, la pestaña mapa usa el componente real
+
 Build de verificacion:
 
 ```bash
@@ -80,6 +86,7 @@ npm run build
 - `npm run start`: servir build
 - `npm run lint`: lint
 - `npm run bootstrap:legacy-admin -- --username <usuario> --password <clave-segura>`: crear o rotar admin legacy
+- `npm run db:pull-prod:yes`: borrar la base Turso local y copiar schema/datos desde produccion
 
 ---
 
@@ -100,12 +107,11 @@ npm run bootstrap:legacy-admin -- --username admin --password "<clave-segura-de-
 Desde la UI principal (`/`):
 
 - `Subir Etiquetas`: parsea labels y guarda en `shipments`
-- `Logistica Flex`: agrupacion por carrier + zonas
+- `Logistica Flex`: resumen operativo, transportistas y zonas detectadas
 - `Colecta`: gestion de estado
 - `Lista de Picking`: consolidado por SKU
 - `Dashboard`: metricas por periodo
 - `Config. Zonas`: mapeo `partido -> carrier`
-- `Transportistas`: vista de agrupacion Flex
 
 API relevante:
 

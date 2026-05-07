@@ -60,7 +60,7 @@ export default function UserManagementSection() {
       <div className="card" style={{ marginBottom: "18px" }}>
         <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.7 }}>
           Los usuarios se registran solos desde <strong>/sign-up</strong>. Cada cuenta nueva crea su propio workspace <strong>Mi espacio</strong>.
-          Este panel administra el rol local dentro del workspace activo. El acceso legacy por <strong>/admin-login</strong> se mantiene solo para administraciÃ³n restringida y debe configurarse manualmente.
+          Este panel administra el rol local dentro del workspace activo. La administración global vive en una app separada.
         </p>
       </div>
 

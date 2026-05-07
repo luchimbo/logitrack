@@ -47,13 +47,6 @@ export async function initDb() {
       lng FLOAT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
-    `CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
     `CREATE TABLE IF NOT EXISTS app_users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       clerk_user_id TEXT NOT NULL UNIQUE,
@@ -116,7 +109,7 @@ export async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER,
       created_by_app_user_id INTEGER,
-      date DATE DEFAULT CURRENT_DATE,
+      date DATE DEFAULT (date('now', '-3 hours')),
       total_packages INTEGER DEFAULT 0,
       filenames TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -236,6 +229,27 @@ export async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id, collection_key)
     )`,
+    `CREATE TABLE IF NOT EXISTS correo_argentino_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      external_reference TEXT,
+      correo_shipping_id TEXT,
+      tracking_number TEXT,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      recipient_phone TEXT,
+      address_json TEXT,
+      package_json TEXT,
+      service_code TEXT,
+      rate_json TEXT,
+      label_url TEXT,
+      label_base64 TEXT,
+      status TEXT,
+      raw_response_json TEXT,
+      tracking_response_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_app_users_clerk ON app_users(clerk_user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(app_user_id)`,
@@ -260,6 +274,8 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_collection ON zipnova_shipments(workspace_id, collection_key)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_collections_workspace_date ON zipnova_collections(workspace_id, scheduled_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_correo_argentino_workspace_created ON correo_argentino_shipments(workspace_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_correo_argentino_tracking ON correo_argentino_shipments(tracking_number)`,
     `CREATE TABLE IF NOT EXISTS workspace_integrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL,
@@ -522,21 +538,6 @@ export async function initDb() {
 
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
   await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
-
-  // Migration: add role to users table and ensure admin role
-  try {
-    const tableInfo = await exec("PRAGMA table_info(users)");
-    const cols = tableInfo.rows.map(r => r.name);
-
-    if (!cols.includes('role')) {
-      await exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
-      console.log("Migration: added role column to users table");
-    }
-
-    await exec("UPDATE users SET role = 'admin' WHERE username = 'admin'");
-  } catch (e) {
-    console.error("Migration error (users.role):", e.message || e);
-  }
 
   // Seed critical sub-zones for La Matanza split
   try {
