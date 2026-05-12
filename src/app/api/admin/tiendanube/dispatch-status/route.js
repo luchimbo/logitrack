@@ -16,7 +16,7 @@ function getActorLabel(actor) {
   return actor?.email || actor?.username || actor?.id || 'usuario';
 }
 
-async function updateOrderInTiendanube({ client, workspaceId, orderId, targetStatus }) {
+async function updateOrderInTiendanube({ client, workspaceId, orderId, targetStatus, connectionId, externalStoreId }) {
   const fulfillmentTarget = mapTargetToFulfillmentStatus(targetStatus);
   const fulfillmentOrders = await client.listFulfillmentOrders(orderId);
 
@@ -35,8 +35,8 @@ async function updateOrderInTiendanube({ client, workspaceId, orderId, targetSta
   }
 
   const refreshedOrder = await client.getOrder(orderId);
-  await upsertTiendanubeOrder(workspaceId, refreshedOrder);
-  return getStoredTiendanubeOrder({ workspaceId, id: orderId });
+  await upsertTiendanubeOrder(workspaceId, refreshedOrder, { connectionId, externalStoreId });
+  return getStoredTiendanubeOrder({ workspaceId, id: orderId, connectionId });
 }
 
 export async function POST(request) {
@@ -47,6 +47,7 @@ export async function POST(request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const connectionId = String(body?.connectionId || body?.connection_id || '').trim();
     const ids = Array.isArray(body?.ids) ? body.ids : [];
     const normalizedIds = [...new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
 
@@ -58,6 +59,7 @@ export async function POST(request) {
     const actor = authResult.actor;
     const client = await resolveTiendanubeClient(actor.workspaceId, {
       requiredScopes: ['read_orders', 'write_fulfillment_orders'],
+      connectionId,
     });
 
     const updatedOrders = [];
@@ -70,6 +72,8 @@ export async function POST(request) {
           workspaceId: actor.workspaceId,
           orderId,
           targetStatus,
+          connectionId,
+          externalStoreId: '',
         });
         if (updatedOrder) {
           updatedOrders.push(updatedOrder);
@@ -94,6 +98,7 @@ export async function POST(request) {
         updated: updatedOrders.length,
         failed: failures.length,
         targetStatus,
+        connectionId,
       },
     });
 

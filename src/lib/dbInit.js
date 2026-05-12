@@ -289,6 +289,22 @@ export async function initDb() {
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id)`,
+    `CREATE TABLE IF NOT EXISTS workspace_integration_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      external_store_id TEXT NOT NULL,
+      display_name TEXT,
+      config_json TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      connected_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider, external_store_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integration_connections_workspace ON workspace_integration_connections(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integration_connections_provider ON workspace_integration_connections(provider, external_store_id)`,
     `CREATE TABLE IF NOT EXISTS tiendanube_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL,
@@ -326,6 +342,37 @@ export async function initDb() {
       expires_at DATETIME NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS shopify_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      integration_connection_id INTEGER,
+      external_store_id TEXT,
+      shopify_gid TEXT NOT NULL,
+      shopify_legacy_id TEXT,
+      name TEXT,
+      financial_status TEXT,
+      fulfillment_status TEXT,
+      cancel_reason TEXT,
+      cancelled_at_external TEXT,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      shipping_address_json TEXT,
+      products_json TEXT,
+      shipping_method TEXT,
+      shipping_carrier TEXT,
+      subtotal TEXT,
+      total TEXT,
+      currency TEXT,
+      created_at_external TEXT,
+      updated_at_external TEXT,
+      dispatched_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_shopify_orders_connection_gid ON shopify_orders(integration_connection_id, shopify_gid) WHERE integration_connection_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_shopify_orders_workspace ON shopify_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_shopify_orders_created ON shopify_orders(created_at_external)`,
     `CREATE TABLE IF NOT EXISTS geocode_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL,
@@ -404,6 +451,8 @@ export async function initDb() {
   await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
   await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
   await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
+  await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
   await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
@@ -427,6 +476,7 @@ export async function initDb() {
     await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
   }
@@ -538,6 +588,67 @@ export async function initDb() {
 
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
   await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+
+  // Migration: Tiendanube orders must allow the same external order id across multiple stores.
+  try {
+    const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
+    const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
+
+    if (hasLegacyUnique) {
+      await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
+      await exec(`CREATE TABLE tiendanube_orders_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id INTEGER NOT NULL,
+        integration_connection_id INTEGER,
+        external_store_id TEXT,
+        tiendanube_id BIGINT NOT NULL,
+        number TEXT,
+        status TEXT,
+        payment_status TEXT,
+        shipping_status TEXT,
+        dispatch_status TEXT DEFAULT 'to_send',
+        dispatch_marked_at DATETIME,
+        dispatch_marked_by TEXT,
+        shipping_method TEXT,
+        shipping_carrier TEXT,
+        is_zipnova INTEGER DEFAULT 0,
+        contact_name TEXT,
+        contact_email TEXT,
+        contact_phone TEXT,
+        shipping_address_json TEXT,
+        products_json TEXT,
+        subtotal TEXT,
+        total TEXT,
+        currency TEXT,
+        created_at_external TEXT,
+        updated_at_external TEXT,
+        dispatched_at_external TEXT,
+        synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await exec(`INSERT INTO tiendanube_orders_new (
+        id, workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status,
+        payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatch_marked_by,
+        shipping_method, shipping_carrier, is_zipnova, contact_name, contact_email, contact_phone,
+        shipping_address_json, products_json, subtotal, total, currency, created_at_external,
+        updated_at_external, dispatched_at_external, synced_at, created_at
+      ) SELECT
+        id, workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status,
+        payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatch_marked_by,
+        shipping_method, shipping_carrier, is_zipnova, contact_name, contact_email, contact_phone,
+        shipping_address_json, products_json, subtotal, total, currency, created_at_external,
+        updated_at_external, dispatched_at_external, synced_at, created_at
+        FROM tiendanube_orders`);
+      await exec("DROP TABLE tiendanube_orders");
+      await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
+      await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
+      await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
+      console.log("Tiendanube migration: enabled multi-store order ids");
+    }
+  } catch (e) {
+    try { await exec("DROP TABLE IF EXISTS tiendanube_orders_new"); } catch (_) { }
+    console.error("Tiendanube multi-store migration error:", e.message || e);
+  }
 
   // Seed critical sub-zones for La Matanza split
   try {

@@ -33,11 +33,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <div style={{ textAlign: "center", marginTop: "16px" }}>
-          <Link href="/admin-login" style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-            Ingresar como admin local
-          </Link>
-        </div>
+
 
         <style jsx global>{`
           .clerk-auth-shell input {

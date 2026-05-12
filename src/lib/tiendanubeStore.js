@@ -8,6 +8,8 @@ function normalizeDispatchStatus(value) {
 function mapStoredTiendanubeRow(row) {
   return {
     id: Number(row.tiendanube_id),
+    connectionId: row.integration_connection_id ? Number(row.integration_connection_id) : null,
+    externalStoreId: row.external_store_id || '',
     number: row.number,
     status: row.status,
     paymentStatus: row.payment_status,
@@ -95,14 +97,25 @@ function extractExternalDispatchDate(order) {
   return candidates[0] || '';
 }
 
-export async function upsertTiendanubeOrder(workspaceId, order) {
+export async function upsertTiendanubeOrder(workspaceId, order, { connectionId = null, externalStoreId = '' } = {}) {
   await ensureDb();
   const normalized = normalizeTiendanubeOrder(order);
+  const resolvedConnectionId = connectionId ? Number(connectionId) : null;
+  let resolvedExternalStoreId = String(externalStoreId || '');
+  const lookupCondition = resolvedConnectionId
+    ? 'integration_connection_id = ? AND tiendanube_id = ?'
+    : 'workspace_id = ? AND tiendanube_id = ? AND integration_connection_id IS NULL';
+  const lookupArgs = resolvedConnectionId
+    ? [resolvedConnectionId, normalized.tiendanubeId]
+    : [workspaceId, normalized.tiendanubeId];
   const existing = await db.execute({
-    sql: `SELECT shipping_status, dispatched_at_external FROM tiendanube_orders WHERE workspace_id = ? AND tiendanube_id = ? LIMIT 1`,
-    args: [workspaceId, normalized.tiendanubeId],
+    sql: `SELECT id, external_store_id, shipping_status, dispatched_at_external FROM tiendanube_orders WHERE ${lookupCondition} LIMIT 1`,
+    args: lookupArgs,
   });
   const prev = existing.rows?.[0] || null;
+  if (!resolvedExternalStoreId && prev?.external_store_id) {
+    resolvedExternalStoreId = String(prev.external_store_id || '');
+  }
   const prevShippingStatus = String(prev?.shipping_status || '');
   const prevDispatchedAt = String(prev?.dispatched_at_external || '');
   const externalDispatchDate = extractExternalDispatchDate(order);
@@ -116,59 +129,61 @@ export async function upsertTiendanubeOrder(workspaceId, order) {
     dispatchedAtExternal = prevDispatchedAt;
   }
 
+  const values = [
+    resolvedConnectionId,
+    resolvedExternalStoreId,
+    normalized.number,
+    normalized.status,
+    normalized.paymentStatus,
+    normalized.shippingStatus,
+    normalized.shippingMethod,
+    normalized.shippingCarrier,
+    normalized.isZipnova,
+    normalized.contactName,
+    normalized.contactEmail,
+    normalized.contactPhone,
+    normalized.shippingAddressJson,
+    normalized.productsJson,
+    normalized.subtotal,
+    normalized.total,
+    normalized.currency,
+    normalized.createdAtExternal,
+    normalized.updatedAtExternal,
+    dispatchedAtExternal,
+  ];
+
+  if (prev?.id) {
+    await db.execute({
+      sql: `UPDATE tiendanube_orders SET
+        integration_connection_id = ?, external_store_id = ?, number = ?, status = ?, payment_status = ?,
+        shipping_status = ?, shipping_method = ?, shipping_carrier = ?, is_zipnova = ?, contact_name = ?,
+        contact_email = ?, contact_phone = ?, shipping_address_json = ?, products_json = ?, subtotal = ?,
+        total = ?, currency = ?, created_at_external = ?, updated_at_external = ?, dispatched_at_external = ?,
+        synced_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      args: [...values, Number(prev.id)],
+    });
+    return;
+  }
+
   await db.execute({
     sql: `INSERT INTO tiendanube_orders (
-      workspace_id, tiendanube_id, number, status, payment_status, shipping_status,
+      workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status, payment_status, shipping_status,
       shipping_method, shipping_carrier, is_zipnova,
       contact_name, contact_email, contact_phone, shipping_address_json, products_json,
       subtotal, total, currency, created_at_external, updated_at_external, dispatched_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(workspace_id, tiendanube_id) DO UPDATE SET
-      number = excluded.number,
-      status = excluded.status,
-      payment_status = excluded.payment_status,
-      shipping_status = excluded.shipping_status,
-      shipping_method = excluded.shipping_method,
-      shipping_carrier = excluded.shipping_carrier,
-      is_zipnova = excluded.is_zipnova,
-      contact_name = excluded.contact_name,
-      contact_email = excluded.contact_email,
-      contact_phone = excluded.contact_phone,
-      shipping_address_json = excluded.shipping_address_json,
-      products_json = excluded.products_json,
-      subtotal = excluded.subtotal,
-      total = excluded.total,
-      currency = excluded.currency,
-      created_at_external = excluded.created_at_external,
-      updated_at_external = excluded.updated_at_external,
-      dispatched_at_external = excluded.dispatched_at_external,
-      synced_at = CURRENT_TIMESTAMP`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: [
       workspaceId,
+      resolvedConnectionId,
+      resolvedExternalStoreId,
       normalized.tiendanubeId,
-      normalized.number,
-      normalized.status,
-      normalized.paymentStatus,
-      normalized.shippingStatus,
-      normalized.shippingMethod,
-      normalized.shippingCarrier,
-      normalized.isZipnova,
-      normalized.contactName,
-      normalized.contactEmail,
-      normalized.contactPhone,
-      normalized.shippingAddressJson,
-      normalized.productsJson,
-      normalized.subtotal,
-      normalized.total,
-      normalized.currency,
-      normalized.createdAtExternal,
-      normalized.updatedAtExternal,
-      dispatchedAtExternal,
+      ...values.slice(2),
     ],
   });
 }
 
-export async function syncTiendanubeOrders({ workspaceId, client, status = '', paymentStatus = '', q = '' } = {}) {
+export async function syncTiendanubeOrders({ workspaceId, client, status = '', paymentStatus = '', q = '', connectionId = null, externalStoreId = '' } = {}) {
   await ensureDb();
   if (!client) throw new Error('Cliente de Tiendanube no disponible');
 
@@ -185,7 +200,7 @@ export async function syncTiendanubeOrders({ workspaceId, client, status = '', p
       break;
     }
     for (const order of items) {
-      await upsertTiendanubeOrder(workspaceId, order);
+      await upsertTiendanubeOrder(workspaceId, order, { connectionId, externalStoreId });
       totalSynced++;
     }
     hasMore = items.length === perPage;
@@ -195,7 +210,7 @@ export async function syncTiendanubeOrders({ workspaceId, client, status = '', p
   return totalSynced;
 }
 
-export async function listStoredTiendanubeOrders({ workspaceId, status = '', paymentStatus = '', q = '', limit = 500 } = {}) {
+export async function listStoredTiendanubeOrders({ workspaceId, status = '', paymentStatus = '', q = '', limit = 500, connectionId = '' } = {}) {
   await ensureDb();
   const conditions = ['workspace_id = ?'];
   const args = [workspaceId];
@@ -231,6 +246,10 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
     conditions.push('(number LIKE ? OR contact_name LIKE ? OR contact_email LIKE ?)');
     args.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
+  if (connectionId) {
+    conditions.push('integration_connection_id = ?');
+    args.push(Number(connectionId));
+  }
 
   const where = conditions.join(' AND ');
   const result = await db.execute({
@@ -241,13 +260,19 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
   return (result.rows || []).map(mapStoredTiendanubeRow);
 }
 
-export async function getTiendanubeSyncMeta({ workspaceId } = {}) {
+export async function getTiendanubeSyncMeta({ workspaceId, connectionId = '' } = {}) {
   await ensureDb();
+  const conditions = ['workspace_id = ?'];
+  const args = [workspaceId];
+  if (connectionId) {
+    conditions.push('integration_connection_id = ?');
+    args.push(Number(connectionId));
+  }
   const result = await db.execute({
     sql: `SELECT MAX(synced_at) AS last_synced_at, COUNT(*) AS total_orders
       FROM tiendanube_orders
-      WHERE workspace_id = ?`,
-    args: [workspaceId],
+      WHERE ${conditions.join(' AND ')}`,
+    args,
   });
 
   const row = result.rows?.[0] || {};
@@ -257,18 +282,24 @@ export async function getTiendanubeSyncMeta({ workspaceId } = {}) {
   };
 }
 
-export async function getStoredTiendanubeOrder({ workspaceId, id }) {
+export async function getStoredTiendanubeOrder({ workspaceId, id, connectionId = '' }) {
   await ensureDb();
+  const conditions = ['workspace_id = ?', 'tiendanube_id = ?'];
+  const args = [workspaceId, id];
+  if (connectionId) {
+    conditions.push('integration_connection_id = ?');
+    args.push(Number(connectionId));
+  }
   const result = await db.execute({
-    sql: `SELECT * FROM tiendanube_orders WHERE workspace_id = ? AND tiendanube_id = ? LIMIT 1`,
-    args: [workspaceId, id],
+    sql: `SELECT * FROM tiendanube_orders WHERE ${conditions.join(' AND ')} LIMIT 1`,
+    args,
   });
   if (!result.rows.length) return null;
   const row = result.rows[0];
   return mapStoredTiendanubeRow(row);
 }
 
-export async function updateTiendanubeDispatchStatus({ workspaceId, ids = [], dispatchStatus = 'to_send', actorLabel = '' } = {}) {
+export async function updateTiendanubeDispatchStatus({ workspaceId, ids = [], dispatchStatus = 'to_send', actorLabel = '', connectionId = '' } = {}) {
   await ensureDb();
 
   const normalizedIds = [...new Set((Array.isArray(ids) ? ids : [])
@@ -290,8 +321,9 @@ export async function updateTiendanubeDispatchStatus({ workspaceId, ids = [], di
           dispatch_marked_at = ?,
           dispatch_marked_by = ?
       WHERE workspace_id = ?
-        AND tiendanube_id IN (${placeholders})`,
-    args: [normalizedStatus, markedAt, markedBy, workspaceId, ...normalizedIds],
+        AND tiendanube_id IN (${placeholders})
+        ${connectionId ? 'AND integration_connection_id = ?' : ''}`,
+    args: [normalizedStatus, markedAt, markedBy, workspaceId, ...normalizedIds, ...(connectionId ? [Number(connectionId)] : [])],
   });
 
   return { updated: Number(result.rowsAffected || 0) };

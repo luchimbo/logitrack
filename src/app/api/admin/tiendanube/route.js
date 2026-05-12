@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceActor } from '@/lib/auth';
-import { resolveTiendanubeClient } from '@/lib/tiendanubeResolver';
+import { listTiendanubeClientTargets } from '@/lib/tiendanubeResolver';
 import { getTiendanubeSyncMeta, listStoredTiendanubeOrders, syncTiendanubeOrders } from '@/lib/tiendanubeStore';
 
 export async function GET(request) {
@@ -15,22 +15,34 @@ export async function GET(request) {
     const paymentStatus = searchParams.get('payment_status') || '';
     const q = searchParams.get('q') || '';
     const syncMode = searchParams.get('sync') || '0';
+    const connectionId = searchParams.get('connection_id') || '';
     let warning = '';
     let didSync = false;
 
     const workspaceId = authResult.actor.workspaceId;
     if (syncMode === 'force') {
       try {
-        const client = await resolveTiendanubeClient(workspaceId);
-        await syncTiendanubeOrders({ workspaceId, client, status, paymentStatus, q: '' });
+        const targets = await listTiendanubeClientTargets(workspaceId, { connectionId });
+        if (!targets.length) throw new Error('Tiendanube no está conectado para este workspace');
+        for (const target of targets) {
+          await syncTiendanubeOrders({
+            workspaceId,
+            client: target.client,
+            status,
+            paymentStatus,
+            q: '',
+            connectionId: target.connectionId,
+            externalStoreId: target.externalStoreId,
+          });
+        }
         didSync = true;
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Tiendanube en vivo';
       }
     }
 
-    const orders = await listStoredTiendanubeOrders({ workspaceId, status, paymentStatus, q });
-    const updatedSyncMeta = await getTiendanubeSyncMeta({ workspaceId });
+    const orders = await listStoredTiendanubeOrders({ workspaceId, status, paymentStatus, q, connectionId });
+    const updatedSyncMeta = await getTiendanubeSyncMeta({ workspaceId, connectionId });
     return NextResponse.json({
       orders,
       warning,

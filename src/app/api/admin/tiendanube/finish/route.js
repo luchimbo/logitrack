@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceAdmin } from '@/lib/auth';
-import { saveIntegration } from '@/lib/integrationService';
+import { saveIntegration, saveIntegrationConnection } from '@/lib/integrationService';
 import { createTiendanubeClient } from '@/lib/tiendanubeClient';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
@@ -81,15 +81,26 @@ export async function POST(request) {
     }
 
     const workspaceId = authResult.actor.workspaceId;
+    const config = {
+      accessToken: session.accessToken,
+      tokenType: 'bearer',
+      scope: session.scope,
+      storeId,
+    };
+
+    const connectionId = await saveIntegrationConnection({
+      workspaceId,
+      provider: 'tiendanube',
+      externalStoreId: storeId,
+      displayName: `Tienda ${storeId}`,
+      config,
+    });
+
+    // Legacy slot remains updated during the migration so existing code paths keep working.
     await saveIntegration({
       workspaceId,
       provider: 'tiendanube',
-      config: {
-        accessToken: session.accessToken,
-        tokenType: 'bearer',
-        scope: session.scope,
-        storeId,
-      },
+      config,
     });
 
     let webhookWarning = '';
@@ -100,7 +111,7 @@ export async function POST(request) {
       webhookWarning = error.message || 'No se pudieron registrar los webhooks de Tiendanube';
     }
 
-    return NextResponse.json({ success: true, webhookWarning });
+    return NextResponse.json({ success: true, webhookWarning, connectionId });
   } catch (error) {
     console.error('Tiendanube finish error:', error);
     return NextResponse.json({ error: error.message || 'Error al finalizar la conexion con Tiendanube' }, { status: 500 });

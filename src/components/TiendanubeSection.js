@@ -11,6 +11,8 @@ let tiendanubeSectionCache = {
   connected: false,
   connectedAt: '',
   lastSyncedAt: '',
+  connections: [],
+  selectedConnectionId: '',
   initialized: false,
 };
 
@@ -260,6 +262,8 @@ export default function TiendanubeSection({ currentUser }) {
   const [connected, setConnected] = useState(() => Boolean(tiendanubeSectionCache.connected));
   const [connectedAt, setConnectedAt] = useState(() => tiendanubeSectionCache.connectedAt || '');
   const [lastSyncedAt, setLastSyncedAt] = useState(() => tiendanubeSectionCache.lastSyncedAt || '');
+  const [connections, setConnections] = useState(() => tiendanubeSectionCache.connections || []);
+  const [selectedConnectionId, setSelectedConnectionId] = useState(() => tiendanubeSectionCache.selectedConnectionId || '');
   const [connecting, setConnecting] = useState(false);
   const [verifyAfterOauth, setVerifyAfterOauth] = useState(false);
   const [pendingStoreId, setPendingStoreId] = useState('');
@@ -277,11 +281,13 @@ export default function TiendanubeSection({ currentUser }) {
       search,
       viewMode,
       connected,
-      connectedAt,
-      lastSyncedAt,
-      initialized: hasLoadedOrders,
-    };
-  }, [orders, search, viewMode, connected, connectedAt, lastSyncedAt, hasLoadedOrders]);
+        connectedAt,
+        lastSyncedAt,
+        connections,
+        selectedConnectionId,
+        initialized: hasLoadedOrders,
+      };
+  }, [orders, search, viewMode, connected, connectedAt, lastSyncedAt, connections, selectedConnectionId, hasLoadedOrders]);
 
   const loadStatus = useCallback(async (retries = 5) => {
     try {
@@ -290,6 +296,11 @@ export default function TiendanubeSection({ currentUser }) {
       if (res.ok) {
         setConnected(Boolean(data.connected));
         setConnectedAt(data.connectedAt || '');
+        const nextConnections = Array.isArray(data.connections) ? data.connections : [];
+        setConnections(nextConnections);
+        setSelectedConnectionId((prev) => (
+          prev && nextConnections.some((connection) => String(connection.id) === String(prev)) ? prev : ''
+        ));
         if (!data.connected && retries > 0) {
           setWarning('Verificando conexión con Tiendanube...');
           setTimeout(() => loadStatus(retries - 1), 2500);
@@ -334,6 +345,7 @@ export default function TiendanubeSection({ currentUser }) {
       const params = new URLSearchParams();
       const query = typeof q === 'string' ? q : searchRef.current;
       if (query) params.set('q', query);
+      if (selectedConnectionId) params.set('connection_id', selectedConnectionId);
       params.set('sync', syncMode);
       const res = await fetch(`/api/admin/tiendanube?${params.toString()}`);
       const data = await res.json();
@@ -349,7 +361,7 @@ export default function TiendanubeSection({ currentUser }) {
       setLoading(false);
       setSyncing(false);
     }
-  }, []);
+  }, [selectedConnectionId]);
 
   const finishConnection = useCallback(async (storeId) => {
     try {
@@ -403,6 +415,12 @@ export default function TiendanubeSection({ currentUser }) {
       }
     }
   }, [connected, hasLoadedOrders, load]);
+
+  useEffect(() => {
+    if (!connected || !hasLoadedOrders) return;
+    setSelectedOrderIds([]);
+    load({ syncMode: '0' });
+  }, [selectedConnectionId, connected, hasLoadedOrders, load]);
 
   useEffect(() => {
     if (!connected || !hasLoadedOrders) return undefined;
@@ -517,6 +535,12 @@ export default function TiendanubeSection({ currentUser }) {
   const updateDispatchStatus = async (status, ids = selectedOrderIds) => {
     const targetIds = [...new Set((Array.isArray(ids) ? ids : []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
     if (!targetIds.length) return;
+    if (connections.length > 1 && !selectedConnectionId) {
+      const message = 'Seleccioná una tienda antes de actualizar estados en Tiendanube.';
+      setError(message);
+      toast(message, 'error');
+      return;
+    }
 
     setUpdatingDispatchStatus(true);
     setUpdatingOrderIds((prev) => [...new Set([...prev, ...targetIds])]);
@@ -526,7 +550,7 @@ export default function TiendanubeSection({ currentUser }) {
       const res = await fetch('/api/admin/tiendanube/dispatch-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: targetIds, status }),
+        body: JSON.stringify({ ids: targetIds, status, connectionId: selectedConnectionId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el estado de despacho');
@@ -661,6 +685,28 @@ export default function TiendanubeSection({ currentUser }) {
 
           <div className="card" style={{ marginBottom: '18px', padding: '14px' }}>
             <div className="form-row">
+              {connections.length > 1 ? (
+                <div className="form-group" style={{ minWidth: '240px' }}>
+                  <label className="form-label">Tienda</label>
+                  <select
+                    className="form-input"
+                    value={selectedConnectionId}
+                    onChange={(e) => setSelectedConnectionId(e.target.value)}
+                  >
+                    <option value="">Todas las tiendas</option>
+                    {connections.map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.displayName || connection.externalStoreId || `Tienda ${connection.id}`}
+                      </option>
+                    ))}
+                  </select>
+                  {!selectedConnectionId ? (
+                    <div style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      Para marcar despachos, seleccioná una tienda específica.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="form-group" style={{ minWidth: '280px' }}>
                 <label className="form-label">Buscar</label>
                 <div style={{ display: 'flex', gap: '8px' }}>

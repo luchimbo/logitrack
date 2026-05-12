@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createTiendanubeClient } from '@/lib/tiendanubeClient';
-import { findIntegrationByConfigValue } from '@/lib/integrationService';
+import { findIntegrationByConfigValue, findIntegrationConnectionByStore } from '@/lib/integrationService';
 import { upsertTiendanubeOrder } from '@/lib/tiendanubeStore';
 
 const TIENDANUBE_CLIENT_SECRET = process.env.TIENDANUBE_CLIENT_SECRET || '';
@@ -70,7 +70,12 @@ export async function POST(request) {
       return NextResponse.json({ received: true, ignored: 'sin order id' });
     }
 
-    const integration = await findIntegrationByConfigValue({
+    const connection = await findIntegrationConnectionByStore({
+      provider: 'tiendanube',
+      externalStoreId: storeId,
+      includeConfig: true,
+    });
+    const integration = connection || await findIntegrationByConfigValue({
       provider: 'tiendanube',
       key: 'storeId',
       value: storeId,
@@ -85,7 +90,10 @@ export async function POST(request) {
       storeId: integration.config.storeId,
     });
     const order = await client.getOrder(orderId);
-    await upsertTiendanubeOrder(integration.workspaceId, order);
+    await upsertTiendanubeOrder(integration.workspaceId, order, {
+      connectionId: connection?.id || null,
+      externalStoreId: storeId,
+    });
 
     return NextResponse.json({ received: true, updated: true });
   } catch (error) {

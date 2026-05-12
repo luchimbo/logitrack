@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceAdmin } from '@/lib/auth';
-import { deleteIntegration } from '@/lib/integrationService';
+import { deleteIntegration, deleteIntegrationConnections } from '@/lib/integrationService';
 import { buildTiendanubeAuthorizeUrl, isTiendanubeOAuthConfigured } from '@/lib/tiendanubeOAuth';
 
 export async function POST(request) {
@@ -45,6 +45,7 @@ export async function DELETE(request) {
     }
 
     await deleteIntegration({ workspaceId, provider: 'tiendanube' });
+    await deleteIntegrationConnections({ workspaceId, provider: 'tiendanube' });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Tiendanube disconnect error:', error);

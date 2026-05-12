@@ -14,6 +14,8 @@ import UserManagementSection from "@/components/UserManagementSection";
 import AdminOverviewSection from "@/components/AdminOverviewSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
 import TiendanubeSection from "@/components/TiendanubeSection";
+import IntegrationsSection from "@/components/IntegrationsSection";
+import ShopifySection from "@/components/ShopifySection";
 import GeoModiLogo from "@/components/GeoModiLogo";
 import OnboardingTour from "@/components/OnboardingTour";
 
@@ -27,6 +29,7 @@ export default function AppHome() {
   const [authChecked, setAuthChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [connectedProviders, setConnectedProviders] = useState([]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -61,6 +64,24 @@ export default function AppHome() {
       loadUser();
     }
   }, [router, isSignedIn, isLoaded]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadIntegrations = async () => {
+      try {
+        const res = await fetch('/api/admin/integrations');
+        const data = await res.json();
+        if (res.ok) {
+          setConnectedProviders(Array.isArray(data.connectedProviders) ? data.connectedProviders : []);
+        }
+      } catch (err) {
+        console.error('Integrations nav load error', err);
+      }
+    };
+
+    loadIntegrations();
+  }, [currentUser]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -141,9 +162,11 @@ export default function AppHome() {
       case "zoneConfig": return <ZoneConfig />;
       case "dashboard": return <Dashboard />;
       case "map": return <MapSection />;
+      case "integrations": return currentUser ? <IntegrationsSection onNavigate={handleNavClick} /> : <div>No autorizado</div>;
       case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
       case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
+      case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -170,11 +193,20 @@ export default function AppHome() {
     {
       title: "Integraciones",
       items: [
-        { id: "zipnova", icon: "📮", label: "Zipnova" },
-        { id: "tiendanube", icon: "🛒", label: "Tiendanube" },
+        { id: "integrations", icon: "🔌", label: "Conectar" },
       ],
     },
   ];
+
+  const activeIntegrationItems = [
+    connectedProviders.includes('shopify') ? { id: "shopify", icon: "🟢", label: "Shopify" } : null,
+    connectedProviders.includes('zipnova') ? { id: "zipnova", icon: "📮", label: "Zipnova" } : null,
+    connectedProviders.includes('tiendanube') ? { id: "tiendanube", icon: "🛒", label: "Tiendanube" } : null,
+  ].filter(Boolean);
+
+  if (activeIntegrationItems.length) {
+    navGroups.push({ title: "Conectadas", items: activeIntegrationItems });
+  }
 
   if (currentUser?.isGlobalAdmin || canManageUsers) {
     const adminItems = [];
