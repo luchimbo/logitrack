@@ -5,33 +5,44 @@ import styles from "./page.module.css";
 const workflow = [
   {
     step: "01",
-    title: "Cargá etiquetas y pedidos",
-    text: "Subí etiquetas ZPL/TXT de Mercado Libre y conectá tus pedidos de Tiendanube para reunir la operación diaria en un mismo workspace.",
+    title: "Cargá etiquetas o conectá tus canales",
+    action: "Subís archivos ZPL/TXT o sincronizás envíos desde Mercado Libre, Tiendanube, Shopify, Zipnova y otros canales.",
+    result: "GeoModi reúne las etiquetas y los envíos operativos en un solo workspace.",
   },
   {
     step: "02",
-    title: "Ordená el lote del día",
-    text: "Cada carga queda agrupada por día, con duplicados omitidos, totales claros y etiquetas disponibles.",
+    title: "GeoModi ordena los envíos",
+    action: "Cada envío queda visible con su etiqueta, producto, destino, método de entrega y estado operativo.",
+    result: "Detectás duplicados, pendientes y etiquetas disponibles antes de mover el despacho.",
   },
   {
     step: "03",
     title: "Prepará picking",
-    text: "GeoModi agrupa productos, cantidades, SKU y método de envío para que tu equipo prepare pedidos sin saltar entre canales.",
+    action: "La app agrupa productos, cantidades, SKU y método de envío.",
+    result: "Tu equipo sabe qué buscar y cuántas unidades preparar sin saltar entre canales.",
   },
   {
     step: "04",
-    title: "Controlá Flex y Colecta",
-    text: "Separá envíos por método, revisá etiquetas y mantené visibles los despachos pendientes.",
+    title: "Separá Flex, Colecta y operadores",
+    action: "Filtrás los envíos por método y revisás las etiquetas que corresponden a cada salida.",
+    result: "La preparación queda dividida por la forma real en que vas a despachar.",
   },
   {
     step: "05",
     title: "Asigná transportistas",
-    text: "Configurá zonas por partido y reasigná Flex según los transportistas de tu operación.",
+    action: "Configurás zonas por partido y reasignás Flex según los transportistas de tu operación.",
+    result: "Ves qué envíos ya tienen transportista y cuáles siguen sin asignar.",
+  },
+  {
+    step: "06",
+    title: "Controlá antes de despachar",
+    action: "Revisás mapa, métricas, pendientes, etiquetas y distribución diaria.",
+    result: "Llegás al despacho con una vista clara de qué falta y qué ya está listo.",
   },
 ];
 
 const modules = [
-  ["labels", "Centralizá Mercado Libre y Tiendanube", "Etiquetas, pedidos, lotes diarios y control de duplicados en un solo lugar."],
+  ["labels", "Centralizá etiquetas y envíos", "Etiquetas, pedidos operativos, duplicados y estados de despacho en un solo lugar."],
   ["picking", "Prepará picking", "Productos agrupados por cantidad, SKU y método de envío para preparar más rápido."],
   ["flex", "Controlá Flex", "Resumen operativo, envíos por zona y transportista asignado."],
   ["colecta", "Ordená Colecta", "Listado de envíos tradicionales con acceso rápido a etiquetas."],
@@ -189,11 +200,11 @@ export default function LandingPage() {
 
       <section id="inicio" className={styles.hero}>
         <div className={styles.heroCopy}>
-          <span className={styles.kicker}>Centro operativo para e-commerce</span>
-          <h1>Controlá toda tu logística en un solo lugar</h1>
+          <span className={styles.kicker}>Etiquetas y envíos bajo control</span>
+          <h1>Ordená tus etiquetas y envíos antes de despachar</h1>
           <p>
-            Tus etiquetas y despachos de Mercado Libre y Tiendanube, unificados en una sola plataforma. GeoModi te permite cargar etiquetas,
-            ordenar lotes, preparar picking, separar Flex/Colecta, asignar transportistas y medir la operación diaria sin perder el control.
+            GeoModi reúne etiquetas, envíos y pedidos operativos para que puedas preparar picking, separar Flex y Colecta,
+            asignar transportistas y controlar el despacho diario desde un solo lugar.
           </p>
           <div className={styles.heroActions}>
             <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
@@ -205,33 +216,34 @@ export default function LandingPage() {
 
       <section className={styles.definitionSection}>
         <span className={styles.sectionLabel}>Qué es GeoModi</span>
-        <h2>El centro operativo para preparar y despachar ventas de Mercado Libre y Tiendanube</h2>
+        <h2>No reemplaza tu tienda ni tu operador logístico. Ordena tus etiquetas y envíos.</h2>
         <p>
-          GeoModi concentra etiquetas, pedidos, productos, lotes, transportistas, métodos de envío y métricas en un mismo workspace para que tu equipo tenga visibilidad y control antes de despachar.
+          GeoModi concentra etiquetas, envíos, productos, transportistas, métodos de entrega y métricas en un mismo workspace para que tu equipo tenga visibilidad y control antes de despachar.
         </p>
       </section>
 
       <section className={styles.problem}>
         <div>
           <span className={styles.sectionLabel}>El problema</span>
-          <h2>Cuando la operación crece, el control se fragmenta</h2>
+          <h2>Cuando las etiquetas se acumulan, el despacho se vuelve difícil de controlar</h2>
         </div>
         <p>
-          Etiquetas descargadas, pedidos en diferentes canales, picking en otro lugar, transportistas por fuera y métricas separadas hacen que el despacho dependa de demasiados controles manuales.
+          Etiquetas descargadas, envíos en diferentes canales, picking manual, Flex sin asignar y métricas separadas hacen que el despacho dependa de demasiados controles por fuera de la operación.
         </p>
       </section>
 
       <section id="flujo" className={styles.workflowSection}>
         <div className={styles.sectionHeading}>
-          <span className={styles.sectionLabel}>Flujo operativo</span>
-          <h2>Un flujo claro para tener el despacho bajo control</h2>
+          <span className={styles.sectionLabel}>Cómo funciona</span>
+          <h2>De etiquetas y envíos dispersos a una operación lista para despachar</h2>
         </div>
         <div className={styles.workflowGrid}>
           {workflow.map((item) => (
             <article className={styles.workflowCard} key={item.step}>
               <span>{item.step}</span>
               <h3>{item.title}</h3>
-              <p>{item.text}</p>
+              <p><strong>Qué hacés:</strong> {item.action}</p>
+              <p><strong>Qué obtenés:</strong> {item.result}</p>
             </article>
           ))}
         </div>
@@ -240,7 +252,7 @@ export default function LandingPage() {
       <section id="modulos" className={styles.modulesSection}>
         <div className={styles.sectionHeading}>
           <span className={styles.sectionLabel}>Módulos</span>
-          <h2>Todo el control operativo antes de despachar</h2>
+          <h2>Cada módulo resuelve una parte concreta del despacho</h2>
         </div>
         <div className={styles.moduleGrid}>
           {modules.map(([type, title, text]) => (
@@ -281,8 +293,8 @@ export default function LandingPage() {
 
       <section className={styles.finalCta}>
         <span className={styles.sectionLabel}>Prepará el próximo lote</span>
-        <h2>Unificá etiquetas, preparación y despacho</h2>
-        <p>Concentrá la operación diaria en un solo lugar: etiquetas, lotes, picking, métodos de envío, transportistas y métricas.</p>
+        <h2>Unificá etiquetas, envíos y preparación diaria</h2>
+        <p>Concentrá la operación diaria en un solo lugar: etiquetas, envíos, picking, métodos de entrega, transportistas y métricas.</p>
         <Link className={styles.primaryCta} href="/login">Entrar a la plataforma</Link>
       </section>
     </main>

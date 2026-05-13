@@ -598,8 +598,8 @@
 
 .workflowGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .workflowCard,
@@ -611,14 +611,14 @@
 }
 
 .workflowCard {
-  min-height: 245px;
-  padding: 22px;
+  min-height: 285px;
+  padding: 24px;
   border-radius: 26px;
 }
 
 .workflowCard span {
   display: inline-flex;
-  margin-bottom: 34px;
+  margin-bottom: 28px;
   color: var(--landing-blue);
   font-size: 12px;
   font-weight: 950;
@@ -643,6 +643,15 @@
   color: var(--landing-muted);
   font-size: 14px;
   line-height: 1.65;
+}
+
+.workflowCard p + p {
+  margin-top: 12px;
+}
+
+.workflowCard strong {
+  color: var(--landing-ink);
+  font-weight: 900;
 }
 
 .moduleGrid {
