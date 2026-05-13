@@ -47,6 +47,14 @@ const integrations = [
   ["Más integraciones", "Estamos sumando nuevos canales y operadores logísticos para centralizar más partes de tu operación."],
 ];
 
+const integrationLogos = [
+  ["Tiendanube", "/LogoTiendaNube.png"],
+  ["Mercado Libre", "/LogoMercadoLibre.png"],
+  ["Shopify", "/LogoShopify.png"],
+  ["Zipnova", "/LogoZipnova.png"],
+  ["Correo Argentino", "/LogoCorreoArgentino.jpg"],
+];
+
 function ModuleIcon({ type }) {
   const common = {
     width: "28",
@@ -247,10 +255,14 @@ export default function LandingPage() {
 
       <section id="integraciones" className={styles.integrationsSection}>
         <div className={styles.integrationVisual}>
-          <span>Tiendanube</span>
-          <strong>Mercado Libre</strong>
-          <span>Zipnova</span>
-          <span>Correo Argentino · Próximamente</span>
+          {integrationLogos.map(([name, src], index) => {
+            const LogoCard = index === 1 ? "strong" : "span";
+            return (
+              <LogoCard key={name} className={styles.integrationLogoCard}>
+                <Image src={src} alt={name} width={170} height={58} />
+              </LogoCard>
+            );
+          })}
           <span>Más integraciones próximamente</span>
         </div>
         <div className={styles.integrationCopy}>

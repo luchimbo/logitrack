@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 const providerAccent = {
   shopify: '#22c55e',
   tiendanube: '#2563eb',
+  mercadolibre: '#facc15',
   zipnova: '#f97316',
   correo_argentino: '#facc15',
 };
@@ -12,8 +14,17 @@ const providerAccent = {
 const providerIcon = {
   shopify: 'S',
   tiendanube: 'TN',
+  mercadolibre: 'ML',
   zipnova: 'Z',
   correo_argentino: 'CA',
+};
+
+const providerLogo = {
+  shopify: '/LogoShopify.png',
+  tiendanube: '/LogoTiendaNube.png',
+  mercadolibre: '/LogoMercadoLibre.png',
+  zipnova: '/LogoZipnova.png',
+  correo_argentino: '/LogoCorreoArgentino.jpg',
 };
 
 function formatDateTime(value) {
@@ -37,8 +48,16 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
       <div style={{ padding: '18px', display: 'grid', gap: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', gap: '12px', minWidth: 0 }}>
-            <div style={{ width: '42px', height: '42px', borderRadius: '14px', display: 'grid', placeItems: 'center', background: `${accent}18`, color: accent, fontWeight: 900, border: `1px solid ${accent}35` }}>
-              {providerIcon[integration.provider] || integration.name[0]}
+            <div style={{ width: '54px', height: '54px', flex: '0 0 54px', borderRadius: '16px', display: 'grid', placeItems: 'center', background: '#ffffff', color: accent, fontWeight: 900, border: `1px solid ${accent}35`, padding: '6px' }}>
+              {providerLogo[integration.provider] ? (
+                <Image
+                  src={providerLogo[integration.provider]}
+                  alt={`${integration.name} logo`}
+                  width={42}
+                  height={42}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : providerIcon[integration.provider] || integration.name[0]}
             </div>
             <div style={{ minWidth: 0 }}>
               <h3 style={{ fontSize: '18px', fontWeight: 850, marginBottom: '4px' }}>{integration.name}</h3>
@@ -107,7 +126,7 @@ export default function IntegrationsSection({ onNavigate }) {
       onNavigate?.('shopify');
       return;
     }
-    if (provider === 'tiendanube' || provider === 'zipnova') {
+    if (provider === 'tiendanube' || provider === 'zipnova' || provider === 'mercadolibre') {
       onNavigate?.(provider);
       return;
     }

@@ -373,6 +373,58 @@ export async function initDb() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_shopify_orders_connection_gid ON shopify_orders(integration_connection_id, shopify_gid) WHERE integration_connection_id IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_shopify_orders_workspace ON shopify_orders(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_shopify_orders_created ON shopify_orders(created_at_external)`,
+    `CREATE TABLE IF NOT EXISTS mercadolibre_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      integration_connection_id INTEGER,
+      external_store_id TEXT,
+      user_id TEXT,
+      site_id TEXT,
+      order_id TEXT NOT NULL,
+      pack_id TEXT,
+      shipment_id TEXT,
+      status TEXT,
+      tags_json TEXT,
+      total TEXT,
+      currency TEXT,
+      buyer_id TEXT,
+      buyer_nickname TEXT,
+      recipient_name TEXT,
+      recipient_phone TEXT,
+      address_json TEXT,
+      products_json TEXT,
+      shipment_status TEXT,
+      shipment_substatus TEXT,
+      logistic_mode TEXT,
+      logistic_type TEXT,
+      shipping_method TEXT,
+      tracking_number TEXT,
+      lead_time_json TEXT,
+      delays_json TEXT,
+      carrier_json TEXT,
+      history_json TEXT,
+      raw_order_json TEXT,
+      raw_shipment_json TEXT,
+      label_imported_at DATETIME,
+      shipment_row_id INTEGER,
+      created_at_external TEXT,
+      updated_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_mercadolibre_orders_connection_order ON mercadolibre_orders(integration_connection_id, order_id) WHERE integration_connection_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace ON mercadolibre_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_shipment ON mercadolibre_orders(shipment_id)`,
+    `CREATE TABLE IF NOT EXISTS mercadolibre_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic TEXT,
+      resource TEXT,
+      user_id TEXT,
+      application_id TEXT,
+      payload_json TEXT,
+      processed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS geocode_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL,
@@ -453,6 +505,10 @@ export async function initDb() {
   await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
   await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
   await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
+  await addColumnIfMissing("shipments", "external_provider", "TEXT");
+  await addColumnIfMissing("shipments", "external_order_id", "TEXT");
+  await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
+  await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
@@ -477,6 +533,7 @@ export async function initDb() {
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
   }

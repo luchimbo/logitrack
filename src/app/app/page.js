@@ -16,6 +16,7 @@ import ZipnovaSection from "@/components/ZipnovaSection";
 import TiendanubeSection from "@/components/TiendanubeSection";
 import IntegrationsSection from "@/components/IntegrationsSection";
 import ShopifySection from "@/components/ShopifySection";
+import MercadoLibreSection from "@/components/MercadoLibreSection";
 import GeoModiLogo from "@/components/GeoModiLogo";
 import OnboardingTour from "@/components/OnboardingTour";
 
@@ -167,6 +168,7 @@ export default function AppHome() {
       case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
+      case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} /> : <div>No autorizado</div>;
       case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
       default: return <div>Página no encontrada</div>;
     }
@@ -202,6 +204,7 @@ export default function AppHome() {
     connectedProviders.includes('shopify') ? { id: "shopify", icon: "🟢", label: "Shopify" } : null,
     connectedProviders.includes('zipnova') ? { id: "zipnova", icon: "📮", label: "Zipnova" } : null,
     connectedProviders.includes('tiendanube') ? { id: "tiendanube", icon: "🛒", label: "Tiendanube" } : null,
+    connectedProviders.includes('mercadolibre') ? { id: "mercadolibre", icon: "🟡", label: "Mercado Libre" } : null,
   ].filter(Boolean);
 
   if (activeIntegrationItems.length) {

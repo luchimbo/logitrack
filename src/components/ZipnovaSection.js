@@ -29,9 +29,25 @@ function formatVolume(value) {
 }
 
 function CollectionDetail({ collection, onClose, onDownload }) {
+  const shipments = collection?.shipments || [];
+  const availableShipments = shipments.filter(isLabelLikelyAvailable);
+  const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
+
   if (!collection) return null;
   const { dateLabel, timeLabel } = formatCollectionDateParts(collection);
-  const shipments = collection.shipments || [];
+  const selectedShipments = availableShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id));
+  const allAvailableSelected = availableShipments.length > 0 && selectedShipments.length === availableShipments.length;
+  const toggleShipmentSelection = (shipmentId) => {
+    setSelectedShipmentIds((prev) => prev.includes(shipmentId) ? prev.filter((id) => id !== shipmentId) : [...prev, shipmentId]);
+  };
+  const toggleSelectAll = () => {
+    if (allAvailableSelected) {
+      setSelectedShipmentIds([]);
+      return;
+    }
+    setSelectedShipmentIds(availableShipments.map((shipment) => shipment.id));
+  };
+
   return (
     <div className="card" style={{ marginBottom: '18px', border: '1px solid var(--accent)' }}>
       <div className="flex-between mb-md" style={{ gap: '12px', flexWrap: 'wrap' }}>
@@ -40,14 +56,26 @@ function CollectionDetail({ collection, onClose, onDownload }) {
           <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{collection.originName} · {dateLabel} {timeLabel}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, shipments, 'pdf')}>
-            PDF
+          <button type="button" className="btn btn-ghost btn-sm" onClick={toggleSelectAll} disabled={!availableShipments.length}>
+            {allAvailableSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
           </button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, shipments, 'zpl')}>
-            ZPL
+          <button type="button" className="btn btn-primary btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'pdf')}>
+            PDF todas
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'pdf')}>
+            PDF seleccionadas
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'zpl')}>
+            ZPL seleccionadas
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'zpl')}>
+            ZPL todas
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar</button>
         </div>
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '12px' }}>
+        {selectedShipments.length ? `${selectedShipments.length} etiquetas seleccionadas` : 'Seleccioná las etiquetas que querés descargar de esta recolección.'}
       </div>
       <div className="stats-grid" style={{ marginBottom: '14px' }}>
         <div className="stat-card card accent"><div className="stat-value">{collection.shipmentsCount}</div><div className="stat-label">Envíos</div></div>
@@ -58,11 +86,14 @@ function CollectionDetail({ collection, onClose, onDownload }) {
       <div style={{ overflowX: 'auto' }}>
         <table className="data-table">
           <thead>
-            <tr><th>Envío</th><th>Estado</th><th>Destinatario</th><th>Destino</th><th>Transporte</th><th>Paquetes</th></tr>
+            <tr><th style={{ width: '42px' }}><input type="checkbox" checked={allAvailableSelected} onChange={toggleSelectAll} disabled={!availableShipments.length} aria-label="Seleccionar etiquetas Zipnova disponibles" /></th><th>Envío</th><th>Estado</th><th>Destinatario</th><th>Destino</th><th>Transporte</th><th>Paquetes</th></tr>
           </thead>
           <tbody>
             {shipments.map((shipment) => (
               <tr key={shipment.id}>
+                <td>
+                  <input type="checkbox" checked={selectedShipmentIds.includes(shipment.id)} onChange={() => toggleShipmentSelection(shipment.id)} disabled={!isLabelLikelyAvailable(shipment)} aria-label={`Seleccionar etiqueta Zipnova ${shipment.external_id || shipment.id}`} />
+                </td>
                 <td><strong>{shipment.external_id || shipment.id}</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{shipment.delivery_id || shipment.id}</span></td>
                 <td>{shipment.status_name || shipment.status || '-'}</td>
                 <td>{shipment.recipient_name || '-'}</td>
@@ -465,7 +496,7 @@ export default function ZipnovaSection({ currentUser }) {
             {!possibleCollections.length ? <div style={{ padding: '20px', color: 'var(--text-muted)' }}>No hay próximas recolecciones posibles.</div> : null}
           </CollectionsPanel>
 
-          <CollectionDetail collection={selectedCollection} onClose={() => setSelectedCollection(null)} onDownload={downloadLabels} />
+          <CollectionDetail key={selectedCollection?.collectionKey || 'sin-recoleccion'} collection={selectedCollection} onClose={() => setSelectedCollection(null)} onDownload={downloadLabels} />
 
           {downloadingGroup && (
             <div className="card" style={{ marginTop: '18px' }}>

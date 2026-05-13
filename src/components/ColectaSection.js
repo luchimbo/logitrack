@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl } from "@/lib/api";
+import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
@@ -12,6 +12,7 @@ export default function ColectaSection() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
+    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -21,7 +22,8 @@ export default function ColectaSection() {
             try {
                 const qs = getTodayQueryString('shipping_method=colecta');
                 const data = await api(`/shipments?${qs}`);
-                setShipments(data);
+                setShipments(Array.isArray(data) ? data : []);
+                setSelectedShipmentIds([]);
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -39,9 +41,33 @@ export default function ColectaSection() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setShipments(prev => prev.filter(s => s.id !== id));
+            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
+        }
+    };
+
+    const toggleShipmentSelection = (id) => {
+        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedShipmentIds.length === shipments.length) {
+            setSelectedShipmentIds([]);
+            return;
+        }
+        setSelectedShipmentIds(shipments.map((shipment) => shipment.id));
+    };
+
+    const handleBulkDownloadLabels = async () => {
+        const ids = shipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
+        if (!ids.length) return;
+        try {
+            await downloadLabelsZpl(ids);
+            toast(`${ids.length} etiquetas descargadas`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
         }
     };
 
@@ -100,12 +126,31 @@ export default function ColectaSection() {
                 <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total Colecta</div></div>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
+                <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                        {selectedShipmentIds.length > 0 ? `${selectedShipmentIds.length} envíos seleccionados` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
+                            {selectedShipmentIds.length === shipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                        </button>
+                        <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                            Descargar seleccionadas
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div className="card">
                 {/* Desktop Table */}
                 <div className="table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th style={{ width: '42px' }}>
+                                    <input type="checkbox" checked={shipments.length > 0 && selectedShipmentIds.length === shipments.length} onChange={toggleSelectAll} aria-label="Seleccionar todas las etiquetas de colecta" />
+                                </th>
                                 <th>Producto</th>
                                 <th>Destinatario</th>
                                 <th>Ciudad</th>
@@ -115,6 +160,9 @@ export default function ColectaSection() {
                         <tbody>
                             {shipments.map(s => (
                                 <tr key={s.id}>
+                                    <td>
+                                        <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
+                                    </td>
                                     <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                     <td>{s.recipient_name || 'N/A'}</td>
                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
@@ -154,6 +202,7 @@ export default function ColectaSection() {
                     {shipments.map(s => (
                         <div key={s.id} className="mobile-card">
                             <div className="mobile-card-header">
+                                <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                 <div className="mobile-card-title">{s.product_name}</div>
                             </div>
                             <div className="mobile-card-body">

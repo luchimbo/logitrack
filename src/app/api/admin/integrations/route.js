@@ -18,6 +18,13 @@ const AVAILABLE_INTEGRATIONS = [
     supportsMultiple: true,
   },
   {
+    provider: 'mercadolibre',
+    name: 'Mercado Libre',
+    description: 'Ventas pagadas, envios Flex/Colecta, estados, SLA y etiquetas ZPL.',
+    status: 'available',
+    supportsMultiple: true,
+  },
+  {
     provider: 'zipnova',
     name: 'Zipnova',
     description: 'Envios, recolecciones, etiquetas disponibles y estados de preparacion.',

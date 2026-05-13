@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl } from "@/lib/api";
+import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
@@ -13,6 +13,7 @@ export default function CarrierView() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
+    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -25,7 +26,9 @@ export default function CarrierView() {
                     api(`/shipments?${qs}`),
                     api('/carriers')
                 ]);
-                setShipments(shipmentsData);
+                const nextShipments = Array.isArray(shipmentsData) ? shipmentsData : [];
+                setShipments(nextShipments);
+                setSelectedShipmentIds((prev) => prev.filter((id) => nextShipments.some((shipment) => shipment.id === id)));
                 setCarriers(carriersData);
             } catch (err) {
                 setError(err.message);
@@ -65,9 +68,33 @@ export default function CarrierView() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setShipments(prev => prev.filter(s => s.id !== id));
+            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
+        }
+    };
+
+    const toggleShipmentSelection = (id) => {
+        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (shipments.length > 0 && shipments.every((shipment) => selectedShipmentIds.includes(shipment.id))) {
+            setSelectedShipmentIds([]);
+            return;
+        }
+        setSelectedShipmentIds(shipments.map((shipment) => shipment.id));
+    };
+
+    const handleBulkDownloadLabels = async () => {
+        const ids = shipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
+        if (!ids.length) return;
+        try {
+            await downloadLabelsZpl(ids);
+            toast(`${ids.length} etiquetas descargadas`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
         }
     };
 
@@ -144,6 +171,22 @@ export default function CarrierView() {
                 {unassignedFlex > 0 && <div className="stat-card card danger"><div className="stat-value">{unassignedFlex}</div><div className="stat-label">Sin Asignar</div></div>}
             </div>
 
+            <div className="card" style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
+                <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                        {selectedShipmentIds.length > 0 ? `${selectedShipmentIds.length} etiquetas seleccionadas` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
+                            {shipments.length > 0 && shipments.every((shipment) => selectedShipmentIds.includes(shipment.id)) ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                        </button>
+                        <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                            Descargar seleccionadas
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div className="carrier-grid">
                 {sortedGroups.map(([key, group]) => (
                     <div key={key} className="carrier-column card">
@@ -153,43 +196,46 @@ export default function CarrierView() {
                         </div>
                         <div className="carrier-shipments">
                             {group.shipments.map(s => (
-                                <div key={s.id} className="carrier-shipment-item">
-                                    <div className="product">{s.product_name}</div>
-                                    <div className="destination">📍 {s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</div>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
-                                        <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
-                                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                                            <button
-                                                className="btn btn-sm"
-                                                onClick={() => setViewingLabelId(s.id)}
-                                                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
-                                            >
-                                                Ver
-                                            </button>
-                                            <button
-                                                className="btn btn-sm"
-                                                onClick={() => handleDownloadLabel(s.id)}
-                                                style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
-                                            >
-                                                Descargar
-                                            </button>
-                                            <select
-                                                style={getCarrierSelectStyle(s.assigned_carrier)}
-                                                value={s.assigned_carrier || ''}
-                                                onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                            >
-                                                <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                                {carriers.map(c => (
-                                                    <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                                ))}
-                                            </select>
-                                            <button
-                                                className="btn btn-sm"
-                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
-                                                onClick={() => handleDeleteShipment(s.id)}
-                                            >
-                                                🗑️
-                                            </button>
+                                <div key={s.id} className="carrier-shipment-item" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px', alignItems: 'start' }}>
+                                    <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} style={{ marginTop: '3px' }} />
+                                    <div>
+                                        <div className="product">{s.product_name}</div>
+                                        <div className="destination">📍 {s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
+                                            <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>👤 {s.recipient_name || 'N/A'}</span>
+                                            <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={() => setViewingLabelId(s.id)}
+                                                    style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)' }}
+                                                >
+                                                    Ver
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    onClick={() => handleDownloadLabel(s.id)}
+                                                    style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
+                                                >
+                                                    Descargar
+                                                </button>
+                                                <select
+                                                    style={getCarrierSelectStyle(s.assigned_carrier)}
+                                                    value={s.assigned_carrier || ''}
+                                                    onChange={(e) => handleCarrierChange(s.id, e.target.value)}
+                                                >
+                                                    <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
+                                                    {carriers.map(c => (
+                                                        <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                    onClick={() => handleDeleteShipment(s.id)}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

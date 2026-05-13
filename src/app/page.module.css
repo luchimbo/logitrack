@@ -701,11 +701,17 @@
   font-weight: 950;
 }
 
+.integrationLogoCard img {
+  display: block;
+  width: min(170px, 78%);
+  height: auto;
+  max-height: 58px;
+  object-fit: contain;
+}
+
 .integrationVisual strong {
-  background: linear-gradient(135deg, var(--landing-blue), var(--landing-purple));
-  color: #ffffff;
-  font-size: 26px;
-  letter-spacing: -0.04em;
+  background: #fff159;
+  color: #1f2937;
   box-shadow: 0 18px 42px rgba(37, 99, 235, 0.22);
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl } from "@/lib/api";
+import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
@@ -13,6 +13,7 @@ export default function Dashboard() {
     const [shipments, setShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
     const [shipmentFilter, setShipmentFilter] = useState('all');
+    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [draftSpecificDate, setDraftSpecificDate] = useState(specificDate);
@@ -193,7 +194,8 @@ export default function Dashboard() {
                     api(`/shipments?${qs}`)
                 ]);
                 setData(result);
-                setShipments(shipmentsData);
+                setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
+                setSelectedShipmentIds([]);
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -290,6 +292,22 @@ export default function Dashboard() {
 
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
+    const filteredShipments = shipments.filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter);
+    const selectedVisibleCount = filteredShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).length;
+    const allVisibleSelected = filteredShipments.length > 0 && selectedVisibleCount === filteredShipments.length;
+
+    const toggleShipmentSelection = (id) => {
+        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
+    };
+
+    const toggleSelectVisible = () => {
+        const visibleIds = filteredShipments.map((shipment) => shipment.id);
+        if (allVisibleSelected) {
+            setSelectedShipmentIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+            return;
+        }
+        setSelectedShipmentIds((prev) => [...new Set([...prev, ...visibleIds])]);
+    };
 
     const handleDownloadLabel = async (id) => {
         try {
@@ -297,6 +315,17 @@ export default function Dashboard() {
             toast('Etiqueta descargada', 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiqueta', 'error');
+        }
+    };
+
+    const handleBulkDownloadLabels = async () => {
+        const ids = filteredShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
+        if (!ids.length) return;
+        try {
+            await downloadLabelsZpl(ids);
+            toast(`${ids.length} etiquetas descargadas`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
         }
     };
 
@@ -485,6 +514,15 @@ export default function Dashboard() {
                                     <option value="flex">Flex</option>
                                     <option value="colecta">Colecta</option>
                                 </select>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                                    {selectedVisibleCount > 0 ? `${selectedVisibleCount} seleccionados en esta vista` : 'Seleccioná etiquetas para descargar varias'}
+                                </span>
+                                <button className="btn btn-ghost btn-sm" onClick={toggleSelectVisible} disabled={!filteredShipments.length}>
+                                    {allVisibleSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
+                                </button>
+                                <button className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                                    Descargar seleccionadas
+                                </button>
                             </div>
 
                             {/* Desktop Table */}
@@ -492,6 +530,9 @@ export default function Dashboard() {
                                 <table>
                                     <thead>
                                         <tr>
+                                            <th style={{ width: '42px' }}>
+                                                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectVisible} aria-label="Seleccionar etiquetas visibles" />
+                                            </th>
                                             <th>Producto</th>
                                             <th>Destinatario</th>
                                             <th>Destino</th>
@@ -501,10 +542,11 @@ export default function Dashboard() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {shipments
-                                            .filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter)
-                                            .map(s => (
+                                        {filteredShipments.map(s => (
                                                 <tr key={s.id}>
+                                                    <td>
+                                                        <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
+                                                    </td>
                                                     <td style={{ fontWeight: 600 }}>{s.product_name}</td>
                                                     <td>{s.recipient_name || 'N/A'}</td>
                                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
@@ -543,11 +585,10 @@ export default function Dashboard() {
 
                             {/* Mobile Cards */}
                             <div className="mobile-cards-container" style={{ marginTop: '16px' }}>
-                                {shipments
-                                    .filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter)
-                                    .map(s => (
+                                {filteredShipments.map(s => (
                                         <div key={s.id} className="mobile-card">
                                             <div className="mobile-card-header">
+                                                <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                                 <div className="mobile-card-title">{s.product_name}</div>
                                             </div>
                                             <div className="mobile-card-body">

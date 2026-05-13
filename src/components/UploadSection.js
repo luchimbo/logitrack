@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { api, toast, downloadLabelZpl } from "@/lib/api";
+import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
@@ -24,7 +24,7 @@ export default function UploadSection() {
     const fetchTodayShipments = async () => {
         try {
             const data = await api('/shipments?period=today');
-            setTodayShipments(data);
+            setTodayShipments(Array.isArray(data) ? data : []);
             setSelectedShipmentIds([]);
         } catch (err) {
             console.error("Failed to load shipments:", err);
@@ -168,6 +168,17 @@ export default function UploadSection() {
         }
     };
 
+    const handleBulkDownloadLabels = async () => {
+        const ids = todayShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
+        if (!ids.length) return;
+        try {
+            await downloadLabelsZpl(ids);
+            toast(`${ids.length} etiquetas descargadas`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
+        }
+    };
+
     const today = getArgentinaDateString();
     const todayBatches = batches.filter(b => b.date === today);
 
@@ -273,15 +284,18 @@ export default function UploadSection() {
                                 <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
                                     {selectedShipmentIds.length > 0
                                         ? `${selectedShipmentIds.length} envíos seleccionados`
-                                        : 'Seleccioná envíos para borrar varios de una vez'}
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                    <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
-                                        {selectedShipmentIds.length === todayShipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
-                                    </button>
-                                    <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                                        🗑️ Eliminar seleccionados
-                                    </button>
+                                        : 'Seleccioná envíos para descargar o borrar varios de una vez'}
+                                 </div>
+                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                     <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
+                                         {selectedShipmentIds.length === todayShipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                     </button>
+                                     <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                                         Descargar seleccionadas
+                                     </button>
+                                     <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                         🗑️ Eliminar seleccionados
+                                     </button>
                                 </div>
                             </div>
                         </div>
