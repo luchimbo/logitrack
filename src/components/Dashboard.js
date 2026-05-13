@@ -6,6 +6,7 @@ import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 import LabelViewer from "./LabelViewer";
+import LoadingButton from "./LoadingButton";
 
 export default function Dashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
@@ -23,6 +24,8 @@ export default function Dashboard() {
     const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
     const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
     const [viewingLabelId, setViewingLabelId] = useState(null);
+    const [downloadingId, setDownloadingId] = useState(null);
+    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
     const isMobile = useIsMobile();
     const today = getArgentinaDateString();
 
@@ -310,22 +313,28 @@ export default function Dashboard() {
     };
 
     const handleDownloadLabel = async (id) => {
+        setDownloadingId(id);
         try {
             await downloadLabelZpl(id);
             toast('Etiqueta descargada', 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiqueta', 'error');
+        } finally {
+            setDownloadingId(null);
         }
     };
 
     const handleBulkDownloadLabels = async () => {
         const ids = filteredShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
         if (!ids.length) return;
+        setIsDownloadingBulk(true);
         try {
             await downloadLabelsZpl(ids);
             toast(`${ids.length} etiquetas descargadas`, 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
+        } finally {
+            setIsDownloadingBulk(false);
         }
     };
 
@@ -520,9 +529,9 @@ export default function Dashboard() {
                                 <button className="btn btn-ghost btn-sm" onClick={toggleSelectVisible} disabled={!filteredShipments.length}>
                                     {allVisibleSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
                                 </button>
-                                <button className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                                     Descargar seleccionadas
-                                </button>
+                                </LoadingButton>
                             </div>
 
                             {/* Desktop Table */}
@@ -568,13 +577,14 @@ export default function Dashboard() {
                                                             >
                                                                 Ver
                                                             </button>
-                                                            <button
+                                                            <LoadingButton
+                                                                isLoading={downloadingId === s.id}
                                                                 className="btn btn-sm"
                                                                 onClick={() => handleDownloadLabel(s.id)}
                                                                 style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                             >
                                                                 Descargar
-                                                            </button>
+                                                            </LoadingButton>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -624,13 +634,14 @@ export default function Dashboard() {
                                                 >
                                                     Ver
                                                 </button>
-                                                <button
+                                                <LoadingButton
+                                                    isLoading={downloadingId === s.id}
                                                     className="btn btn-sm"
                                                     onClick={() => handleDownloadLabel(s.id)}
                                                     style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                 >
                                                     Descargar
-                                                </button>
+                                                </LoadingButton>
                                             </div>
                                         </div>
                                     ))}

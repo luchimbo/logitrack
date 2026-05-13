@@ -130,6 +130,8 @@ a{color:var(--accent);text-decoration:none} a:hover{color:var(--accent-hover)}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#a78bfa,var(--accent));background-size:200% 100%;border-radius:var(--radius-full);transition:width 0.6s var(--ease);animation:shimmer 2s linear infinite}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto}
+.spinner-sm{width:14px;height:14px;border:2px solid var(--border);border-top-color:currentColor;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;flex-shrink:0}
+.spinner-md{width:18px;height:18px;border:2.5px solid var(--border);border-top-color:currentColor;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 .badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:var(--radius-full);font-size:11px;font-weight:600;letter-spacing:0.3px}

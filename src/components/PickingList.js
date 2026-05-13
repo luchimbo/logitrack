@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
+import LoadingButton from "./LoadingButton";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
     const [pickingList, setPickingList] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
     const [error, setError] = useState(null);
 
     useEffect(() => {
@@ -77,6 +79,7 @@ export default function PickingList() {
     const flexUnits = flexItems.reduce((sum, p) => sum + p.total_quantity, 0);
 
     const handleExportPdf = async () => {
+        setIsExportingPdf(true);
         try {
             const { jsPDF } = await import("jspdf");
             const pdf = new jsPDF({ unit: "mm", format: "a4" });
@@ -204,6 +207,8 @@ export default function PickingList() {
         } catch (err) {
             console.error(err);
             toast('Error al generar el PDF', 'error');
+        } finally {
+            setIsExportingPdf(false);
         }
     };
 
@@ -253,9 +258,9 @@ export default function PickingList() {
                     <h1 className="section-title">Lista de Picking</h1>
                     <p className="section-subtitle">Productos a preparar, priorizados por unidades pendientes.</p>
                 </div>
-                <button className="btn btn-primary" onClick={handleExportPdf}>
+                <LoadingButton isLoading={isExportingPdf} spinnerSize="md" className="btn btn-primary" onClick={handleExportPdf}>
                     Exportar PDF
-                </button>
+                </LoadingButton>
             </div>
 
             <div className="picking-metrics" aria-label="Resumen de picking">

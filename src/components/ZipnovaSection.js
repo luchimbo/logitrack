@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
+import LoadingButton from "./LoadingButton";
 
 function isLabelLikelyAvailable(shipment) {
   const status = String(shipment.status || '').toLowerCase();
@@ -28,7 +29,7 @@ function formatVolume(value) {
   return `${m3.toLocaleString('es-AR', { maximumFractionDigits: 2 })} m3`;
 }
 
-function CollectionDetail({ collection, onClose, onDownload }) {
+function CollectionDetail({ collection, onClose, onDownload, downloadingKey }) {
   const shipments = collection?.shipments || [];
   const availableShipments = shipments.filter(isLabelLikelyAvailable);
   const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
@@ -59,18 +60,18 @@ function CollectionDetail({ collection, onClose, onDownload }) {
           <button type="button" className="btn btn-ghost btn-sm" onClick={toggleSelectAll} disabled={!availableShipments.length}>
             {allAvailableSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
           </button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'pdf')}>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}:pdf`} type="button" className="btn btn-primary btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'pdf')}>
             PDF todas
-          </button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'pdf')}>
+          </LoadingButton>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}-seleccion:pdf`} type="button" className="btn btn-primary btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'pdf')}>
             PDF seleccionadas
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'zpl')}>
+          </LoadingButton>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}-seleccion:zpl`} type="button" className="btn btn-ghost btn-sm" disabled={!selectedShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}-seleccion`, selectedShipments, 'zpl')}>
             ZPL seleccionadas
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'zpl')}>
+          </LoadingButton>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}:zpl`} type="button" className="btn btn-ghost btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'zpl')}>
             ZPL todas
-          </button>
+          </LoadingButton>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar</button>
         </div>
       </div>
@@ -109,7 +110,7 @@ function CollectionDetail({ collection, onClose, onDownload }) {
   );
 }
 
-function CollectionRow({ collection, kind, onDetail, onDownload }) {
+function CollectionRow({ collection, kind, onDetail, onDownload, downloadingKey }) {
   const { dateLabel, timeLabel } = formatCollectionDateParts(collection);
   const originLines = formatOrigin(collection);
   const isConfirmed = kind === 'confirmed';
@@ -140,8 +141,8 @@ function CollectionRow({ collection, kind, onDetail, onDownload }) {
         </div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDetail(collection)}>Detalle</button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'pdf')}>PDF</button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'zpl')}>ZPL</button>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}:pdf`} type="button" className="btn btn-primary btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'pdf')}>PDF</LoadingButton>
+          <LoadingButton isLoading={downloadingKey === `recoleccion-${collection.collectionKey}:zpl`} type="button" className="btn btn-ghost btn-sm" disabled={!availableShipments.length} onClick={() => onDownload(`recoleccion-${collection.collectionKey}`, availableShipments, 'zpl')}>ZPL</LoadingButton>
         </div>
       </div>
     </div>
@@ -319,7 +320,7 @@ export default function ZipnovaSection({ currentUser }) {
     const shipments = isSingleShipment ? [groupOrShipment] : shipmentsOrSingle;
     const requestedFormat = formatOverride || 'zpl';
 
-    setDownloadingGroup(group);
+    setDownloadingGroup(`${group}:${requestedFormat}`);
     setError('');
     try {
       const shipmentIds = shipments.map((shipment) => shipment.id).filter(Boolean);
@@ -483,7 +484,7 @@ export default function ZipnovaSection({ currentUser }) {
 
           <CollectionsPanel title="Recolecciones confirmadas" warning="Atención: No mezcles envíos que vayan a ser recolectados por Zipnova con envíos a recolectar directamente por otros transportes, de lo contrario tus envíos fallarán y deberás hacerlos nuevamente.">
             {confirmedCollections.map((collection) => (
-              <CollectionRow key={collection.collectionKey} collection={collection} kind="confirmed" onDetail={setSelectedCollection} onDownload={downloadLabels} />
+              <CollectionRow key={collection.collectionKey} collection={collection} kind="confirmed" onDetail={setSelectedCollection} onDownload={downloadLabels} downloadingKey={downloadingGroup} />
             ))}
             {!confirmedCollections.length ? <div style={{ padding: '20px', color: 'var(--text-muted)' }}>No hay recolecciones confirmadas activas.</div> : null}
           </CollectionsPanel>
@@ -491,16 +492,16 @@ export default function ZipnovaSection({ currentUser }) {
           <h3 style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 12px' }}>Próximas recolecciones posibles</h3>
           <CollectionsPanel title="A recolectar por Zipnova">
             {possibleCollections.map((collection) => (
-              <CollectionRow key={collection.collectionKey} collection={collection} kind="possible" onDetail={setSelectedCollection} onDownload={downloadLabels} />
+              <CollectionRow key={collection.collectionKey} collection={collection} kind="possible" onDetail={setSelectedCollection} onDownload={downloadLabels} downloadingKey={downloadingGroup} />
             ))}
             {!possibleCollections.length ? <div style={{ padding: '20px', color: 'var(--text-muted)' }}>No hay próximas recolecciones posibles.</div> : null}
           </CollectionsPanel>
 
-          <CollectionDetail key={selectedCollection?.collectionKey || 'sin-recoleccion'} collection={selectedCollection} onClose={() => setSelectedCollection(null)} onDownload={downloadLabels} />
+          <CollectionDetail key={selectedCollection?.collectionKey || 'sin-recoleccion'} collection={selectedCollection} onClose={() => setSelectedCollection(null)} onDownload={downloadLabels} downloadingKey={downloadingGroup} />
 
           {downloadingGroup && (
             <div className="card" style={{ marginTop: '18px' }}>
-              Descargando etiquetas del grupo: <strong>{downloadingGroup}</strong>
+              Descargando etiquetas del grupo: <strong>{downloadingGroup.split(':')[0]}</strong>
             </div>
           )}
         </>

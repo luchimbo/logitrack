@@ -6,6 +6,7 @@ import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 import LabelViewer from "./LabelViewer";
+import LoadingButton from "./LoadingButton";
 
 export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
@@ -15,6 +16,12 @@ export default function UploadSection() {
     const [showShipments, setShowShipments] = useState(false);
     const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const [viewingLabelId, setViewingLabelId] = useState(null);
+    const [downloadingId, setDownloadingId] = useState(null);
+    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
+    const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
+    const [deletingBatchId, setDeletingBatchId] = useState(null);
     const isMobile = useIsMobile();
 
     const fileInputRef = useRef(null);
@@ -94,6 +101,7 @@ export default function UploadSection() {
     };
 
     const handleDeleteShipment = async (id) => {
+        setDeletingId(id);
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setTodayShipments(prev => prev.filter(s => s.id !== id));
@@ -101,6 +109,8 @@ export default function UploadSection() {
             toast('Envío eliminado', 'success');
         } catch (err) {
             toast('Error al eliminar', 'error');
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -120,6 +130,7 @@ export default function UploadSection() {
         if (!selectedShipmentIds.length) return;
         if (!confirm(`¿Eliminar ${selectedShipmentIds.length} envíos seleccionados? Esta acción no se puede deshacer.`)) return;
 
+        setIsDeletingBulk(true);
         try {
             const result = await api('/shipments/bulk', {
                 method: 'DELETE',
@@ -131,11 +142,14 @@ export default function UploadSection() {
             await reloadBatches();
         } catch (err) {
             toast('Error al eliminar envíos seleccionados', 'error');
+        } finally {
+            setIsDeletingBulk(false);
         }
     };
 
     const handleClearToday = async () => {
         if (!confirm('¿Seguro que querés eliminar TODOS los envíos de hoy? Esta acción no se puede deshacer.')) return;
+        setIsClearing(true);
         try {
             await api('/shipments?period=today', { method: 'DELETE' });
             setTodayShipments([]);
@@ -144,11 +158,14 @@ export default function UploadSection() {
             toast('Todos los envíos de hoy eliminados', 'success');
         } catch (err) {
             toast('Error al limpiar', 'error');
+        } finally {
+            setIsClearing(false);
         }
     };
 
     const handleDeleteBatch = async (batchId) => {
         if (!confirm('¿Eliminar todos los envíos de este lote?')) return;
+        setDeletingBatchId(batchId);
         try {
             await api(`/shipments?batch_id=${batchId}`, { method: 'DELETE' });
             fetchTodayShipments();
@@ -156,26 +173,34 @@ export default function UploadSection() {
             toast('Lote eliminado', 'success');
         } catch (err) {
             toast('Error al eliminar lote', 'error');
+        } finally {
+            setDeletingBatchId(null);
         }
     };
 
     const handleDownloadLabel = async (id) => {
+        setDownloadingId(id);
         try {
             await downloadLabelZpl(id);
             toast('Etiqueta descargada', 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiqueta', 'error');
+        } finally {
+            setDownloadingId(null);
         }
     };
 
     const handleBulkDownloadLabels = async () => {
         const ids = todayShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
         if (!ids.length) return;
+        setIsDownloadingBulk(true);
         try {
             await downloadLabelsZpl(ids);
             toast(`${ids.length} etiquetas descargadas`, 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
+        } finally {
+            setIsDownloadingBulk(false);
         }
     };
 
@@ -271,9 +296,9 @@ export default function UploadSection() {
                                 {showShipments ? '🔼 Ocultar' : '🔽 Ver'}
                             </button>
                             {todayShipments.length > 0 && (
-                                <button className="btn btn-sm" onClick={handleClearToday} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', flex: isMobile ? 1 : 'none' }}>
+                                <LoadingButton isLoading={isClearing} className="btn btn-sm" onClick={handleClearToday} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', flex: isMobile ? 1 : 'none' }}>
                                     🗑️ Limpiar
-                                </button>
+                                </LoadingButton>
                             )}
                         </div>
                     </div>
@@ -290,12 +315,12 @@ export default function UploadSection() {
                                      <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
                                          {selectedShipmentIds.length === todayShipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
                                      </button>
-                                     <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
-                                         Descargar seleccionadas
-                                     </button>
-                                     <button className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                                         🗑️ Eliminar seleccionados
-                                     </button>
+                                      <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                                          Descargar seleccionadas
+                                      </LoadingButton>
+                                      <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                          🗑️ Eliminar seleccionados
+                                      </LoadingButton>
                                 </div>
                             </div>
                         </div>
@@ -311,7 +336,7 @@ export default function UploadSection() {
                                         <span style={{ fontWeight: 600 }}>Lote #{b.id}</span>
                                         <span style={{ color: 'var(--text-muted)' }}>· {b.total_packages} envíos</span>
                                         {b.filenames && <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>· {b.filenames}</span>}
-                                        <button onClick={() => handleDeleteBatch(b.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', padding: '0 4px' }} title="Eliminar lote">🗑️</button>
+                                        <LoadingButton isLoading={deletingBatchId === b.id} onClick={() => handleDeleteBatch(b.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', padding: '0 4px' }} title="Eliminar lote">🗑️</LoadingButton>
                                     </div>
                                 ))}
                             </div>
@@ -359,14 +384,15 @@ export default function UploadSection() {
                                                     >
                                                         Ver etiqueta
                                                     </button>
-                                                    <button
+                                                    <LoadingButton
+                                                        isLoading={downloadingId === s.id}
                                                         className="btn btn-sm"
                                                         onClick={() => handleDownloadLabel(s.id)}
                                                         style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                     >
                                                         Descargar
-                                                    </button>
-                                                    <button onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</button>
+                                                    </LoadingButton>
+                                                    <LoadingButton isLoading={deletingId === s.id} onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</LoadingButton>
                                                 </div>
                                             </td>
                                             </tr>
@@ -407,20 +433,22 @@ export default function UploadSection() {
                                             >
                                                 Ver
                                             </button>
-                                            <button
+                                            <LoadingButton
+                                                isLoading={downloadingId === s.id}
                                                 className="btn btn-sm"
                                                 onClick={() => handleDownloadLabel(s.id)}
                                                 style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                             >
                                                 Descargar
-                                            </button>
-                                            <button 
+                                            </LoadingButton>
+                                            <LoadingButton 
+                                                isLoading={deletingId === s.id}
                                                 className="btn btn-sm" 
                                                 onClick={() => handleDeleteShipment(s.id)}
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                             >
                                                 🗑️
-                                            </button>
+                                            </LoadingButton>
                                         </div>
                                     </div>
                                 ))}

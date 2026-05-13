@@ -5,6 +5,7 @@ import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import LabelViewer from "./LabelViewer";
+import LoadingButton from "./LoadingButton";
 
 // Reverse lookup: partido_id -> zone group name
 const PARTIDO_ZONES = {
@@ -48,6 +49,9 @@ export default function FlexSection() {
     const [activeView, setActiveView] = useState('summary');
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
+    const [downloadingId, setDownloadingId] = useState(null);
+    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const isMobile = useIsMobile();
 
     const loadData = useCallback(async (opts = {}) => {
@@ -116,6 +120,7 @@ export default function FlexSection() {
         const ok = window.confirm(`¿Eliminar el envío #${id}? Esta acción no se puede deshacer.`);
         if (!ok) return;
 
+        setDeletingId(id);
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
@@ -123,15 +128,20 @@ export default function FlexSection() {
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
+        } finally {
+            setDeletingId(null);
         }
     };
 
     const handleDownloadLabel = async (id) => {
+        setDownloadingId(id);
         try {
             await downloadLabelZpl(id);
             toast('Etiqueta descargada', 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiqueta', 'error');
+        } finally {
+            setDownloadingId(null);
         }
     };
 
@@ -153,11 +163,14 @@ export default function FlexSection() {
     const handleBulkDownloadLabels = async (items) => {
         const ids = items.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
         if (!ids.length) return;
+        setIsDownloadingBulk(true);
         try {
             await downloadLabelsZpl(ids);
             toast(`${ids.length} etiquetas descargadas`, 'success');
         } catch (err) {
             toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
+        } finally {
+            setIsDownloadingBulk(false);
         }
     };
 
@@ -174,9 +187,9 @@ export default function FlexSection() {
                         <button className="btn btn-ghost btn-sm" onClick={() => toggleVisibleSelection(items)} disabled={!items.length}>
                             {allSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
                         </button>
-                        <button className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDownloadLabels(items)} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                        <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDownloadLabels(items)} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
-                        </button>
+                        </LoadingButton>
                     </div>
                 </div>
             </div>
@@ -418,13 +431,14 @@ export default function FlexSection() {
                                                         >
                                                             Ver
                                                         </button>
-                                                        <button
+                                                        <LoadingButton
+                                                            isLoading={downloadingId === s.id}
                                                             className="btn btn-sm"
                                                             onClick={() => handleDownloadLabel(s.id)}
                                                             style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                         >
                                                             Descargar
-                                                        </button>
+                                                        </LoadingButton>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -478,13 +492,14 @@ export default function FlexSection() {
                                             >
                                                 Ver
                                             </button>
-                                            <button
+                                            <LoadingButton
+                                                isLoading={downloadingId === s.id}
                                                 className="btn btn-sm"
                                                 onClick={() => handleDownloadLabel(s.id)}
                                                 style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                             >
                                                 Descargar
-                                            </button>
+                                            </LoadingButton>
                                         </div>
                                     </div>
                                 ))
@@ -545,13 +560,14 @@ export default function FlexSection() {
                                                 >
                                                     Ver
                                                 </button>
-                                                <button
+                                                <LoadingButton
+                                                    isLoading={downloadingId === s.id}
                                                     className="btn btn-sm"
                                                     onClick={() => handleDownloadLabel(s.id)}
                                                     style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                 >
                                                     Descargar
-                                                </button>
+                                                </LoadingButton>
                                                 <select
                                                     style={getCarrierSelectStyle(s.assigned_carrier)}
                                                     value={s.assigned_carrier || ''}
@@ -562,13 +578,14 @@ export default function FlexSection() {
                                                         <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                                     ))}
                                                 </select>
-                                                <button
+                                                <LoadingButton
+                                                    isLoading={deletingId === s.id}
                                                     className="btn btn-sm"
                                                     style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                                     onClick={() => handleDeleteShipment(s.id)}
                                                 >
                                                     🗑️ Eliminar
-                                                </button>
+                                                </LoadingButton>
                                             </td>
                                         </tr>
                                     ))}
@@ -602,13 +619,14 @@ export default function FlexSection() {
                                         >
                                             Ver
                                         </button>
-                                        <button
+                                        <LoadingButton
+                                            isLoading={downloadingId === s.id}
                                             className="btn btn-sm"
                                             onClick={() => handleDownloadLabel(s.id)}
                                             style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                         >
                                             Descargar
-                                        </button>
+                                        </LoadingButton>
                                         <select
                                             style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
                                             value={s.assigned_carrier || ''}
@@ -619,13 +637,14 @@ export default function FlexSection() {
                                                 <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                             ))}
                                         </select>
-                                        <button
+                                        <LoadingButton
+                                            isLoading={deletingId === s.id}
                                             className="btn btn-sm"
                                             style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                             onClick={() => handleDeleteShipment(s.id)}
                                         >
                                             🗑️
-                                        </button>
+                                        </LoadingButton>
                                     </div>
                                 </div>
                             ))}
@@ -662,13 +681,14 @@ export default function FlexSection() {
                                             >
                                                 Ver
                                             </button>
-                                            <button
+                                            <LoadingButton
+                                                isLoading={downloadingId === s.id}
                                                 className="btn btn-sm"
                                                 onClick={() => handleDownloadLabel(s.id)}
                                                 style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                             >
                                                 Descargar
-                                            </button>
+                                            </LoadingButton>
                                             <select
                                                 style={getCarrierSelectStyle(s.assigned_carrier)}
                                                 value={s.assigned_carrier || ''}
@@ -679,13 +699,14 @@ export default function FlexSection() {
                                                     <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                                 ))}
                                             </select>
-                                            <button
+                                            <LoadingButton
+                                                isLoading={deletingId === s.id}
                                                 className="btn btn-sm"
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                                 onClick={() => handleDeleteShipment(s.id)}
                                             >
                                                 🗑️ Eliminar
-                                            </button>
+                                            </LoadingButton>
                                         </td>
                                     </tr>
                                 ))}
@@ -719,13 +740,14 @@ export default function FlexSection() {
                                     >
                                         Ver
                                     </button>
-                                    <button
+                                    <LoadingButton
+                                        isLoading={downloadingId === s.id}
                                         className="btn btn-sm"
                                         onClick={() => handleDownloadLabel(s.id)}
                                         style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                     >
                                         Descargar
-                                    </button>
+                                    </LoadingButton>
                                     <select
                                         style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
                                         value={s.assigned_carrier || ''}
@@ -736,13 +758,14 @@ export default function FlexSection() {
                                             <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
                                         ))}
                                     </select>
-                                    <button
+                                    <LoadingButton
+                                        isLoading={deletingId === s.id}
                                         className="btn btn-sm"
                                         style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                         onClick={() => handleDeleteShipment(s.id)}
                                     >
                                         🗑️
-                                    </button>
+                                    </LoadingButton>
                                 </div>
                             </div>
                         ))}
