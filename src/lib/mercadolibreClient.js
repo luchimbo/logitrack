@@ -55,7 +55,8 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     try {
       return await request(`/shipments/${shipmentId}/delays`);
     } catch (error) {
-      if (String(error.message || '').toLowerCase().includes('not found')) return null;
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('not found') || message.includes('doesnt have any delay') || message.includes("doesn't have any delay")) return null;
       throw error;
     }
   }
