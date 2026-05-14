@@ -556,9 +556,11 @@ export async function initDb() {
     if (legacyWorkspace.rows.length) {
       legacyWorkspaceId = Number(legacyWorkspace.rows[0].id);
     } else {
-      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["GeoModi Legacy", "legacy"]);
+      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["GeoModi", "legacy"]);
       legacyWorkspaceId = Number(inserted.lastInsertRowid);
     }
+
+    await exec("UPDATE workspaces SET name = ? WHERE id = ?", ["GeoModi", legacyWorkspaceId]);
 
     await exec("INSERT OR IGNORE INTO workspace_settings (workspace_id, printing_setup_completed) VALUES (?, 0)", [legacyWorkspaceId]);
   } catch (e) {

@@ -47,6 +47,11 @@ function isGlobalAdminEmail(email) {
   return getGlobalAdminEmails().has(String(email || "").trim().toLowerCase());
 }
 
+function displayWorkspaceName(name, slug) {
+  if (slug === "legacy") return "GeoModi";
+  return name;
+}
+
 async function getLegacyWorkspaceId() {
   const result = await db.execute({
     sql: "SELECT id FROM workspaces WHERE slug = ? LIMIT 1",
@@ -234,7 +239,7 @@ async function bootstrapClerkUser() {
     username: email,
     role: membership.role || "user",
     workspaceId: Number(membership.workspace_id),
-    workspaceName: membership.workspace_name,
+    workspaceName: displayWorkspaceName(membership.workspace_name, membership.workspace_slug),
     workspaceSlug: membership.workspace_slug,
     printingSetupCompleted: Boolean(settings.rows[0]?.printing_setup_completed),
     onboardingCompleted,
@@ -266,7 +271,7 @@ async function getLegacyAdminFromRequest(request) {
       email: null,
       role: payload.role || "user",
       workspaceId,
-      workspaceName: workspaceId ? "GeoModi Legacy" : null,
+      workspaceName: workspaceId ? "GeoModi" : null,
       workspaceSlug: workspaceId ? "legacy" : null,
       printingSetupCompleted: true,
       onboardingCompleted: true,
