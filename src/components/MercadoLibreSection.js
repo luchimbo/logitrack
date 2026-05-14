@@ -76,7 +76,7 @@ export default function MercadoLibreSection({ currentUser }) {
   const [connections, setConnections] = useState([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState('');
   const [orders, setOrders] = useState([]);
-  const [view, setView] = useState('ready');
+  const [view, setView] = useState('');
   const [search, setSearch] = useState('');
   const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [loading, setLoading] = useState(true);
@@ -113,7 +113,15 @@ export default function MercadoLibreSection({ currentUser }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo cargar Mercado Libre');
       setOrders(data.orders || []);
-      setWarning(data.warning || '');
+      if (data.warning) {
+        setWarning(data.warning);
+      } else if (syncMode === 'force') {
+        setWarning(data.syncedCount > 0
+          ? `Sincronizacion completa: ${data.syncedCount} venta${data.syncedCount === 1 ? '' : 's'} actualizada${data.syncedCount === 1 ? '' : 's'}.`
+          : `Sincronizacion completa: no se encontraron ventas pagadas para importar. Total guardado: ${data.totalOrders || 0}.`);
+      } else {
+        setWarning('');
+      }
       setLastSyncedAt(data.lastSyncedAt || '');
     } catch (err) {
       setError(err.message || 'Error inesperado');
@@ -219,12 +227,12 @@ export default function MercadoLibreSection({ currentUser }) {
               <div className="form-group" style={{ minWidth: '210px' }}>
                 <label className="form-label">Vista</label>
                 <select className="form-input" value={view} onChange={(e) => setView(e.target.value)}>
+                  <option value="">Todos</option>
                   <option value="ready">Listos para preparar</option>
                   <option value="flex">Flex</option>
                   <option value="colecta">Colecta</option>
                   <option value="delayed">Demorados</option>
                   <option value="imported">Importados</option>
-                  <option value="">Todos</option>
                 </select>
               </div>
               <div className="form-group" style={{ minWidth: '240px' }}>

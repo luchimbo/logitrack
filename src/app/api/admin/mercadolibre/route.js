@@ -16,13 +16,14 @@ export async function GET(request) {
     const workspaceId = authResult.actor.workspaceId;
     let warning = '';
     let didSync = false;
+    let syncedCount = 0;
 
     if (syncMode === 'force') {
       try {
         const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
         if (!targets.length) throw new Error('Mercado Libre no esta conectado para este workspace');
         for (const target of targets) {
-          await syncMercadoLibreOrders({
+          syncedCount += await syncMercadoLibreOrders({
             workspaceId,
             client: target.client,
             connectionId: target.connectionId,
@@ -39,7 +40,7 @@ export async function GET(request) {
 
     const orders = await listStoredMercadoLibreOrders({ workspaceId, connectionId, q, view });
     const meta = await getMercadoLibreSyncMeta({ workspaceId, connectionId });
-    return NextResponse.json({ orders, warning, didSync, lastSyncedAt: meta.lastSyncedAt || '' });
+    return NextResponse.json({ orders, warning, didSync, syncedCount, totalOrders: meta.totalOrders || 0, lastSyncedAt: meta.lastSyncedAt || '' });
   } catch (error) {
     console.error('Mercado Libre list error:', error);
     return NextResponse.json({ error: error.message || 'Error al consultar Mercado Libre' }, { status: 500 });
