@@ -70,7 +70,7 @@ function mapOrderRow(row) {
 }
 
 function getAddress(shipment = {}) {
-  return shipment.destination?.shipping_address || {};
+  return shipment?.destination?.shipping_address || {};
 }
 
 function getShippingMethod(shipment = {}) {
