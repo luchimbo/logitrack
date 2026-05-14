@@ -318,7 +318,7 @@ export default function AppHome() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.email || currentUser.username}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {currentUser.workspaceName ? `${currentUser.workspaceName} · ` : ''}{currentUser.role}
+                  {currentUser.role}
                 </div>
               </div>
             </div>
@@ -356,7 +356,6 @@ export default function AppHome() {
             </div>
           </div>
           <div className="topbar-context desktop-only">
-            <span className="topbar-chip">{currentUser?.workspaceName || 'Sin workspace'}</span>
             <span className="topbar-chip subtle">{currentUser?.role || 'user'}</span>
           </div>
           {currentUser && (
