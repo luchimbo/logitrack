@@ -52,6 +52,7 @@ export async function initDb() {
       clerk_user_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
       last_seen_at DATETIME,
+      is_global_admin INTEGER DEFAULT 0,
       onboarding_completed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
@@ -494,6 +495,7 @@ export async function initDb() {
   await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
   await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
+  await addColumnIfMissing("app_users", "is_global_admin", "INTEGER DEFAULT 0");
   await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
   await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
   await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
@@ -565,6 +567,18 @@ export async function initDb() {
 
   if (legacyWorkspaceId) {
     try {
+      const globalAdmin = await exec("SELECT id FROM app_users WHERE lower(email) = lower(?) LIMIT 1", ["camilopcmidi@gmail.com"]);
+      if (globalAdmin.rows.length) {
+        const appUserId = Number(globalAdmin.rows[0].id);
+        await exec("UPDATE app_users SET is_global_admin = 1 WHERE id = ?", [appUserId]);
+        await exec(
+          `INSERT INTO workspace_members (workspace_id, app_user_id, role)
+           VALUES (?, ?, 'owner')
+           ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
+          [legacyWorkspaceId, appUserId]
+        );
+      }
+
       const tablesToBackfill = [
         "shipments",
         "daily_batches",

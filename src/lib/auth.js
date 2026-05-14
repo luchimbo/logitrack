@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { logAudit } from "@/lib/audit";
 
+const DEFAULT_GLOBAL_ADMIN_EMAIL = "camilopcmidi@gmail.com";
+
 // Verificar configuración de Clerk
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
@@ -31,6 +33,18 @@ function shouldRefreshLastSeen(value) {
   const prev = new Date(value).getTime();
   if (!Number.isFinite(prev)) return true;
   return Date.now() - prev > 5 * 60 * 1000;
+}
+
+function getGlobalAdminEmails() {
+  const configured = String(process.env.CLERK_GLOBAL_ADMIN_EMAILS || DEFAULT_GLOBAL_ADMIN_EMAIL)
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(configured.length ? configured : [DEFAULT_GLOBAL_ADMIN_EMAIL]);
+}
+
+function isGlobalAdminEmail(email) {
+  return getGlobalAdminEmails().has(String(email || "").trim().toLowerCase());
 }
 
 async function getLegacyWorkspaceId() {
@@ -67,6 +81,20 @@ async function createWorkspaceForClerkUser(email) {
   }
 }
 
+async function ensureLegacyWorkspaceOwner(appUserId) {
+  const workspaceId = await getLegacyWorkspaceId();
+  if (!workspaceId) return null;
+
+  await db.execute({
+    sql: `INSERT INTO workspace_members (workspace_id, app_user_id, role)
+          VALUES (?, ?, 'owner')
+          ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
+    args: [workspaceId, appUserId],
+  });
+
+  return workspaceId;
+}
+
 async function bootstrapClerkUser() {
   await ensureDb();
 
@@ -85,14 +113,19 @@ async function bootstrapClerkUser() {
   }
 
   let appUserResult = await db.execute({
-    sql: "SELECT id, email, last_seen_at, onboarding_completed FROM app_users WHERE clerk_user_id = ? LIMIT 1",
+    sql: "SELECT id, email, last_seen_at, onboarding_completed, is_global_admin FROM app_users WHERE clerk_user_id = ? LIMIT 1",
     args: [clerkAuth.userId],
   });
 
   let appUserId;
+  const shouldBeGlobalAdmin = isGlobalAdminEmail(email);
+  let dbGlobalAdmin = shouldBeGlobalAdmin;
+  let onboardingCompleted = false;
   let lastSeenTouched = false;
   if (appUserResult.rows.length) {
     appUserId = Number(appUserResult.rows[0].id);
+    dbGlobalAdmin = shouldBeGlobalAdmin || Number(appUserResult.rows[0].is_global_admin || 0) === 1;
+    onboardingCompleted = Boolean(appUserResult.rows[0].onboarding_completed);
     if (shouldRefreshLastSeen(appUserResult.rows[0].last_seen_at)) {
       await db.execute({
         sql: "UPDATE app_users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -106,30 +139,42 @@ async function bootstrapClerkUser() {
         args: [email, appUserId],
       });
     }
+    if (shouldBeGlobalAdmin && Number(appUserResult.rows[0].is_global_admin || 0) !== 1) {
+      await db.execute({
+        sql: "UPDATE app_users SET is_global_admin = 1 WHERE id = ?",
+        args: [appUserId],
+      });
+    }
   } else {
     // Buscar si ya existe un usuario con este email (puede tener otro clerk_user_id)
     const existingByEmail = await db.execute({
-      sql: "SELECT id, email, last_seen_at, onboarding_completed FROM app_users WHERE email = ? LIMIT 1",
+      sql: "SELECT id, email, last_seen_at, onboarding_completed, is_global_admin FROM app_users WHERE email = ? LIMIT 1",
       args: [email],
     });
 
     if (existingByEmail.rows.length) {
       // Actualizar el clerk_user_id del usuario existente
       appUserId = Number(existingByEmail.rows[0].id);
+      dbGlobalAdmin = shouldBeGlobalAdmin || Number(existingByEmail.rows[0].is_global_admin || 0) === 1;
+      onboardingCompleted = Boolean(existingByEmail.rows[0].onboarding_completed);
       await db.execute({
-        sql: "UPDATE app_users SET clerk_user_id = ?, last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
-        args: [clerkAuth.userId, appUserId],
+        sql: "UPDATE app_users SET clerk_user_id = ?, last_seen_at = CURRENT_TIMESTAMP, is_global_admin = CASE WHEN ? = 1 THEN 1 ELSE is_global_admin END WHERE id = ?",
+        args: [clerkAuth.userId, shouldBeGlobalAdmin ? 1 : 0, appUserId],
       });
       lastSeenTouched = true;
       console.log("[bootstrapClerkUser] Updated existing user with new clerk_user_id:", appUserId);
     } else {
       const insertedUser = await db.execute({
-        sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-        args: [clerkAuth.userId, email],
+        sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at, is_global_admin) VALUES (?, ?, CURRENT_TIMESTAMP, ?)",
+        args: [clerkAuth.userId, email, shouldBeGlobalAdmin ? 1 : 0],
       });
       appUserId = Number(insertedUser.lastInsertRowid);
       lastSeenTouched = true;
     }
+  }
+
+  if (shouldBeGlobalAdmin) {
+    await ensureLegacyWorkspaceOwner(appUserId);
   }
 
   let membershipResult = await db.execute({
@@ -137,9 +182,9 @@ async function bootstrapClerkUser() {
           FROM workspace_members wm
           JOIN workspaces w ON w.id = wm.workspace_id
           WHERE wm.app_user_id = ?
-          ORDER BY wm.id ASC
+          ORDER BY CASE WHEN ? = 1 AND w.slug = 'legacy' THEN 0 ELSE 1 END, wm.id ASC
           LIMIT 1`,
-    args: [appUserId],
+    args: [appUserId, shouldBeGlobalAdmin ? 1 : 0],
   });
 
   if (!membershipResult.rows.length) {
@@ -181,7 +226,7 @@ async function bootstrapClerkUser() {
   return {
     authType: "clerk",
     isAuthenticated: true,
-    isGlobalAdmin: false,
+    isGlobalAdmin: dbGlobalAdmin,
     id: `clerk:${clerkAuth.userId}`,
     appUserId,
     clerkUserId: clerkAuth.userId,
@@ -192,11 +237,13 @@ async function bootstrapClerkUser() {
     workspaceName: membership.workspace_name,
     workspaceSlug: membership.workspace_slug,
     printingSetupCompleted: Boolean(settings.rows[0]?.printing_setup_completed),
-    onboardingCompleted: Boolean(appUserResult.rows[0]?.onboarding_completed),
+    onboardingCompleted,
   };
 }
 
 async function getLegacyAdminFromRequest(request) {
+  if (process.env.ENABLE_LEGACY_ADMIN !== "true") return null;
+
   const token = request.cookies.get("auth_token")?.value;
   if (!token) return null;
 

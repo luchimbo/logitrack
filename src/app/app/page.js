@@ -115,22 +115,14 @@ export default function AppHome() {
   const canManageUsers = canManageWorkspace;
 
   const handleLogout = async () => {
-    const isClerkUser = currentUser?.authType === "clerk";
-
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setCurrentUser(null);
-
-      if (isClerkUser) {
-        await signOut();
-        window.location.assign('/login');
-        return;
-      }
-
-      window.location.assign('/admin-login');
+      await signOut();
+      window.location.assign('/login');
     } catch (err) {
       console.error("Logout error", err);
-      window.location.assign(isClerkUser ? '/login' : '/admin-login');
+      window.location.assign('/login');
     }
   };
 
