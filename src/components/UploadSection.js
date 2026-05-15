@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
+import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
+import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
@@ -14,33 +16,32 @@ export default function UploadSection() {
     const [uploadResult, setUploadResult] = useState(null);
     const [todayShipments, setTodayShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
-    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const [isClearing, setIsClearing] = useState(false);
     const [deletingBatchId, setDeletingBatchId] = useState(null);
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, removeSelectedIds, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
+    const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
 
     const fileInputRef = useRef(null);
     const { batches, reloadBatches, setCurrentBatchId } = useBatch();
 
     // Fetch today's shipments
-    const fetchTodayShipments = async () => {
+    const fetchTodayShipments = useCallback(async () => {
         try {
             const data = await api('/shipments?period=today');
             setTodayShipments(Array.isArray(data) ? data : []);
-            setSelectedShipmentIds([]);
+            clearSelection();
         } catch (err) {
             console.error("Failed to load shipments:", err);
         }
-    };
+    }, [clearSelection]);
 
     useEffect(() => {
         fetchTodayShipments();
-    }, []);
+    }, [fetchTodayShipments]);
 
     const handleDragOver = (e) => {
         e.preventDefault();
@@ -105,7 +106,7 @@ export default function UploadSection() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setTodayShipments(prev => prev.filter(s => s.id !== id));
-            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
+            removeSelectedIds(id);
             toast('Envío eliminado', 'success');
         } catch (err) {
             toast('Error al eliminar', 'error');
@@ -114,16 +115,8 @@ export default function UploadSection() {
         }
     };
 
-    const toggleShipmentSelection = (id) => {
-        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
-    };
-
     const toggleSelectAll = () => {
-        if (selectedShipmentIds.length === todayShipments.length) {
-            setSelectedShipmentIds([]);
-            return;
-        }
-        setSelectedShipmentIds(todayShipments.map((shipment) => shipment.id));
+        toggleItemsSelection(todayShipments);
     };
 
     const handleBulkDelete = async () => {
@@ -137,7 +130,7 @@ export default function UploadSection() {
                 body: JSON.stringify({ ids: selectedShipmentIds }),
             });
             setTodayShipments((prev) => prev.filter((shipment) => !selectedShipmentIds.includes(shipment.id)));
-            setSelectedShipmentIds([]);
+            clearSelection();
             toast(`${result.deleted || 0} envíos eliminados`, 'success');
             await reloadBatches();
         } catch (err) {
@@ -154,6 +147,7 @@ export default function UploadSection() {
             await api('/shipments?period=today', { method: 'DELETE' });
             setTodayShipments([]);
             setUploadResult(null);
+            clearSelection();
             await reloadBatches();
             toast('Todos los envíos de hoy eliminados', 'success');
         } catch (err) {
@@ -178,30 +172,8 @@ export default function UploadSection() {
         }
     };
 
-    const handleDownloadLabel = async (id) => {
-        setDownloadingId(id);
-        try {
-            await downloadLabelZpl(id);
-            toast('Etiqueta descargada', 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiqueta', 'error');
-        } finally {
-            setDownloadingId(null);
-        }
-    };
-
     const handleBulkDownloadLabels = async () => {
-        const ids = todayShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
-        if (!ids.length) return;
-        setIsDownloadingBulk(true);
-        try {
-            await downloadLabelsZpl(ids);
-            toast(`${ids.length} etiquetas descargadas`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
-        } finally {
-            setIsDownloadingBulk(false);
-        }
+        await downloadSelectedLabels(getSelectedIdsFrom(todayShipments));
     };
 
     const today = getArgentinaDateString();
@@ -313,7 +285,7 @@ export default function UploadSection() {
                                  </div>
                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                      <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
-                                         {selectedShipmentIds.length === todayShipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                         {areAllSelected(todayShipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
                                      </button>
                                       <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                                           Descargar seleccionadas
@@ -352,7 +324,7 @@ export default function UploadSection() {
                                     <thead>
                                         <tr>
                                             <th style={{ width: '42px' }}>
-                                                <input type="checkbox" checked={todayShipments.length > 0 && selectedShipmentIds.length === todayShipments.length} onChange={toggleSelectAll} />
+                                                <input type="checkbox" checked={areAllSelected(todayShipments)} onChange={toggleSelectAll} />
                                             </th>
                                             <th>Producto</th>
                                             <th>Destinatario</th>

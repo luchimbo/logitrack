@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
+import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
+import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
@@ -14,10 +16,9 @@ export default function CarrierView() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
+    const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -32,7 +33,7 @@ export default function CarrierView() {
                 ]);
                 const nextShipments = Array.isArray(shipmentsData) ? shipmentsData : [];
                 setShipments(nextShipments);
-                setSelectedShipmentIds((prev) => prev.filter((id) => nextShipments.some((shipment) => shipment.id === id)));
+                keepOnlyExisting(nextShipments);
                 setCarriers(carriersData);
             } catch (err) {
                 setError(err.message);
@@ -41,7 +42,7 @@ export default function CarrierView() {
             }
         }
         fetchData();
-    }, [getTodayQueryString]);
+    }, [getTodayQueryString, keepOnlyExisting]);
 
     const handleCarrierChange = async (id, newCarrier) => {
         try {
@@ -73,7 +74,7 @@ export default function CarrierView() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setShipments(prev => prev.filter(s => s.id !== id));
-            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
+            removeSelectedIds(id);
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
@@ -82,42 +83,12 @@ export default function CarrierView() {
         }
     };
 
-    const toggleShipmentSelection = (id) => {
-        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
-    };
-
     const toggleSelectAll = () => {
-        if (shipments.length > 0 && shipments.every((shipment) => selectedShipmentIds.includes(shipment.id))) {
-            setSelectedShipmentIds([]);
-            return;
-        }
-        setSelectedShipmentIds(shipments.map((shipment) => shipment.id));
+        toggleItemsSelection(shipments);
     };
 
     const handleBulkDownloadLabels = async () => {
-        const ids = shipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
-        if (!ids.length) return;
-        setIsDownloadingBulk(true);
-        try {
-            await downloadLabelsZpl(ids);
-            toast(`${ids.length} etiquetas descargadas`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
-        } finally {
-            setIsDownloadingBulk(false);
-        }
-    };
-
-    const handleDownloadLabel = async (id) => {
-        setDownloadingId(id);
-        try {
-            await downloadLabelZpl(id);
-            toast('Etiqueta descargada', 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiqueta', 'error');
-        } finally {
-            setDownloadingId(null);
-        }
+        await downloadSelectedLabels(getSelectedIdsFrom(shipments));
     };
 
     if (loading && !shipments.length) {
@@ -191,7 +162,7 @@ export default function CarrierView() {
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
-                            {shipments.length > 0 && shipments.every((shipment) => selectedShipmentIds.includes(shipment.id)) ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                            {areAllSelected(shipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
                         </button>
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas

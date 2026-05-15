@@ -3,95 +3,24 @@
 import { useEffect, useState } from "react";
 import { useClerk, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import UploadSection from "@/components/UploadSection";
-import ZoneConfig from "@/components/ZoneConfig";
-import FlexSection from "@/components/FlexSection";
-import ColectaSection from "@/components/ColectaSection";
-import PickingList from "@/components/PickingList";
-import Dashboard from "@/components/Dashboard";
-import MapSection from "@/components/MapSection";
-import UserManagementSection from "@/components/UserManagementSection";
-import AdminOverviewSection from "@/components/AdminOverviewSection";
-import ZipnovaSection from "@/components/ZipnovaSection";
-import TiendanubeSection from "@/components/TiendanubeSection";
-import IntegrationsSection from "@/components/IntegrationsSection";
-import ShopifySection from "@/components/ShopifySection";
-import MercadoLibreSection from "@/components/MercadoLibreSection";
-import GeoModiLogo from "@/components/GeoModiLogo";
+import { useConnectedProviders } from "@/hooks/useConnectedProviders";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { buildAppNavigation } from "@/lib/appNavigation";
+import AppSectionRenderer from "@/components/AppSectionRenderer";
+import AppShell from "@/components/AppShell";
 import OnboardingTour from "@/components/OnboardingTour";
 
 export default function AppHome() {
   const { signOut } = useClerk();
   const { isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("upload");
-  const [currentUser, setCurrentUser] = useState(null);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "upload";
+    return new URLSearchParams(window.location.search).get("tab") || "upload";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [connectedProviders, setConnectedProviders] = useState([]);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          setCurrentUser(null);
-          setAuthChecked(true);
-          setAuthError(errorData.errorDetail || errorData.error || `Error ${res.status}`);
-          if (!isSignedIn) {
-            router.replace("/login");
-          }
-          return;
-        }
-        const data = await res.json();
-        setCurrentUser(data.user || null);
-        setShowOnboarding(Boolean(data.user && data.user.authType === 'clerk' && !data.user.isGlobalAdmin && !data.user.onboardingCompleted));
-        setAuthChecked(true);
-        setAuthError(null);
-      } catch (err) {
-        setCurrentUser(null);
-        setAuthChecked(true);
-        setAuthError(err.message || "Error de autenticación");
-        if (!isSignedIn) {
-          router.replace("/login");
-        }
-      }
-    };
-
-    if (isLoaded) {
-      loadUser();
-    }
-  }, [router, isSignedIn, isLoaded]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const loadIntegrations = async () => {
-      try {
-        const res = await fetch('/api/admin/integrations');
-        const data = await res.json();
-        if (res.ok) {
-          setConnectedProviders(Array.isArray(data.connectedProviders) ? data.connectedProviders : []);
-        }
-      } catch (err) {
-        console.error('Integrations nav load error', err);
-      }
-    };
-
-    loadIntegrations();
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const tabFromUrl = new URLSearchParams(window.location.search).get("tab");
-      if (tabFromUrl) {
-        setActiveTab(tabFromUrl);
-      }
-    }
-  }, []);
+  const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
+  const connectedProviders = useConnectedProviders(currentUser);
 
   useEffect(() => {
     const handleEscape = (e) => {
@@ -131,88 +60,9 @@ export default function AppHome() {
     setSidebarOpen(false);
   };
 
-  const handleOnboardingClose = async (completed) => {
-    try {
-      await fetch('/api/onboarding', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed }),
-      });
-      setCurrentUser((prev) => prev ? { ...prev, onboardingCompleted: true } : prev);
-    } catch (err) {
-      console.error('Onboarding update error', err);
-    } finally {
-      setShowOnboarding(false);
-    }
-  };
+  const handleOnboardingClose = markOnboardingClosed;
 
-  const renderSection = () => {
-    switch (activeTab) {
-      case "upload": return <UploadSection />;
-      case "pickingList": return <PickingList />;
-      case "flex": return <FlexSection />;
-      case "colecta": return <ColectaSection />;
-      case "zoneConfig": return <ZoneConfig />;
-      case "dashboard": return <Dashboard />;
-      case "map": return <MapSection />;
-      case "integrations": return currentUser ? <IntegrationsSection onNavigate={handleNavClick} /> : <div>No autorizado</div>;
-      case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
-      case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} /> : <div>No autorizado</div>;
-      case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
-      default: return <div>Página no encontrada</div>;
-    }
-  };
-
-  const navGroups = [
-    {
-      title: "Operación",
-      items: [
-        { id: "upload", icon: "📦", label: "Subir Etiquetas" },
-        { id: "pickingList", icon: "📋", label: "Lista de Picking" },
-        { id: "flex", icon: "🚀", label: "Logística Flex" },
-        { id: "colecta", icon: "📦", label: "Colecta" },
-        { id: "map", icon: "📍", label: "Mapa" },
-        { id: "dashboard", icon: "📊", label: "Dashboard" },
-      ],
-    },
-    {
-      title: "Configuración",
-      items: [
-        { id: "zoneConfig", icon: "⚙️", label: "Config. Zonas" },
-      ],
-    },
-    {
-      title: "Integraciones",
-      items: [
-        { id: "integrations", icon: "🔌", label: "Conectar" },
-      ],
-    },
-  ];
-
-  const activeIntegrationItems = [
-    connectedProviders.includes('shopify') ? { id: "shopify", icon: "🟢", label: "Shopify" } : null,
-    connectedProviders.includes('zipnova') ? { id: "zipnova", icon: "📮", label: "Zipnova" } : null,
-    connectedProviders.includes('tiendanube') ? { id: "tiendanube", icon: "🛒", label: "Tiendanube" } : null,
-    connectedProviders.includes('mercadolibre') ? { id: "mercadolibre", icon: "🟡", label: "Mercado Libre" } : null,
-  ].filter(Boolean);
-
-  if (activeIntegrationItems.length) {
-    navGroups.push({ title: "Conectadas", items: activeIntegrationItems });
-  }
-
-  if (currentUser?.isGlobalAdmin || canManageUsers) {
-    const adminItems = [];
-    if (currentUser?.isGlobalAdmin) {
-      adminItems.push({ id: "adminOverview", icon: "🛡️", label: "Admin Maestro" });
-    }
-    if (canManageUsers) {
-      adminItems.push({ id: "userManagement", icon: "👤", label: "Usuarios" });
-    }
-    navGroups.push({ title: "Administración", items: adminItems });
-  }
+  const navGroups = buildAppNavigation({ currentUser, canManageUsers, connectedProviders });
 
   const navLinks = navGroups.flatMap((group) => group.items);
   const currentSection = navLinks.find(l => l.id === activeTab);
@@ -268,111 +118,24 @@ export default function AppHome() {
   return (
     <>
       {showOnboarding && <OnboardingTour activeTab={activeTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
-      <div 
-        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-      />
-
-      <nav 
-        className={`sidebar ${sidebarOpen ? 'open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
+      <AppShell
+        activeTab={activeTab}
+        currentUser={currentUser}
+        navGroups={navGroups}
+        onCloseSidebar={() => setSidebarOpen(false)}
+        onLogout={handleLogout}
+        onNavigate={handleNavClick}
+        onOpenSidebar={() => setSidebarOpen(true)}
+        sectionTitle={sectionTitle}
+        sidebarOpen={sidebarOpen}
       >
-        <div className="sidebar-header">
-          <GeoModiLogo size="sm" />
-          <button 
-            className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Cerrar menú"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="nav-links">
-          {navGroups.map((group) => (
-            <div key={group.title} className="nav-group">
-              <div className="nav-group-title">{group.title}</div>
-              <ul className="nav-group-list">
-                {group.items.map((link) => (
-                  <li key={link.id}>
-                    <a
-                      href="#"
-                      className={`nav-link ${activeTab === link.id ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleNavClick(link.id);
-                      }}
-                    >
-                      <span className="nav-icon">{link.icon}</span>
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        {currentUser && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
-            <div className="user-profile" style={{ justifyContent: 'flex-start', marginBottom: '16px' }}>
-              <div className="avatar">{currentUser.username?.[0]?.toUpperCase()}</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{currentUser.email || currentUser.username}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {currentUser.role}
-                </div>
-              </div>
-            </div>
-            <button 
-              onClick={handleLogout}
-              className="btn btn-ghost"
-              style={{ 
-                width: '100%', 
-                justifyContent: 'center',
-                padding: '12px',
-                fontSize: '13px'
-              }}
-            >
-              Cerrar sesión
-            </button>
-          </div>
-        )}
-      </nav>
-
-      <main className="main-content">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button 
-              className="mobile-menu-btn"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Abrir menú"
-            >
-              ☰
-            </button>
-            <div>
-              <div className="topbar-title">{sectionTitle}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '2px' }} className="desktop-only">
-                {currentUser?.email || currentUser?.username}
-              </div>
-            </div>
-          </div>
-          <div className="topbar-context desktop-only">
-            <span className="topbar-chip subtle">{currentUser?.role || 'user'}</span>
-          </div>
-          {currentUser && (
-            <button
-              onClick={handleLogout}
-              className="btn btn-ghost btn-sm"
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              Cerrar sesión
-            </button>
-          )}
-        </header>
-
-        <div className="content-area">
-          {renderSection()}
-        </div>
-      </main>
+        <AppSectionRenderer
+          activeTab={activeTab}
+          canManageUsers={canManageUsers}
+          currentUser={currentUser}
+          onNavigate={handleNavClick}
+        />
+      </AppShell>
     </>
   );
 }

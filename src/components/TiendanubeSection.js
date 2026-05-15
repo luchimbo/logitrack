@@ -1,420 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "@/lib/api";
-import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
-
-let tiendanubeSectionCache = {
-  orders: [],
-  search: '',
-  viewMode: 'to_send',
-  connected: false,
-  connectedAt: '',
-  lastSyncedAt: '',
-  connections: [],
-  selectedConnectionId: '',
-  initialized: false,
-};
-
-function formatOrderTotal(total, currency) {
-  const numeric = Number(total);
-  if (Number.isNaN(numeric)) return total ? `${currency || ''} ${total}`.trim() : '-';
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: currency || 'ARS',
-    minimumFractionDigits: 2,
-  }).format(numeric);
-}
-
-function badgeStyle(color) {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '4px 8px',
-    borderRadius: '999px',
-    fontSize: '12px',
-    fontWeight: 700,
-    border: `1px solid ${color}33`,
-    color,
-    background: `${color}12`,
-    lineHeight: 1,
-  };
-}
-
-function formatOrderDate(value) {
-  if (!value) return '-';
-  return formatArgentinaDate(value, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function formatDateTime(value) {
-  if (!value) return '-';
-  return formatArgentinaDateTime(value, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function isSameArgentinaDay(value) {
-  if (!value) return false;
-  const today = getArgentinaDateString();
-  const target = getArgentinaDateString(value);
-  return today === target;
-}
-
-function getOperationalStatus(order) {
-  const shippingStatus = String(order?.shippingStatus || '').toLowerCase();
-
-  if (shippingStatus === 'shipped' || shippingStatus === 'delivered') {
-    return { key: 'dispatched', label: 'Despachado', color: '#22c55e' };
-  }
-
-  return { key: 'to_send', label: 'Por enviar', color: '#f97316' };
-}
-
-function getRowActionConfig(order) {
-  const operational = getOperationalStatus(order);
-
-  if (operational.key === 'to_send') {
-    return {
-      status: 'dispatched',
-      label: 'Despachado',
-      style: {
-        background: 'var(--success-bg, rgba(34,197,94,0.12))',
-        color: 'var(--success, #16a34a)',
-        border: '1px solid var(--success, #16a34a)',
-      },
-    };
-  }
-
-  return {
-    status: 'to_send',
-    label: 'Por enviar',
-    style: {
-      background: 'rgba(249,115,22,0.12)',
-      color: '#f97316',
-      border: '1px solid #f97316',
-    },
-  };
-}
-
-function getShippingProviderLabel(order) {
-  const carrier = String(order?.shippingCarrier || '').trim();
-  const method = String(order?.shippingMethod || '').trim();
-  if (carrier && method) {
-    return carrier.toLowerCase() === method.toLowerCase() ? carrier : `${carrier} · ${method}`;
-  }
-  return carrier || method || 'Envío a domicilio';
-}
-
-function getProductSummary(order) {
-  const products = Array.isArray(order?.products) ? order.products : [];
-  const totalUnits = products.reduce((sum, product) => sum + (Number(product?.quantity || 0) || 1), 0);
-  const distinctNames = [...new Set(
-    products
-      .map((product) => String(product?.name || '').trim() || 'Producto')
-      .filter(Boolean)
-  )];
-
-  if (!products.length) {
-    return { label: 'Sin productos', detail: '-' };
-  }
-
-  if (distinctNames.length === 1) {
-    return {
-      label: `${totalUnits} unid.`,
-      detail: distinctNames[0],
-    };
-  }
-
-  const visibleNames = distinctNames.slice(0, 2).join(' · ');
-
-  return {
-    label: `${totalUnits} unid.`,
-    detail: distinctNames.length > 2 ? `${visibleNames} +${distinctNames.length - 2} más` : visibleNames,
-  };
-}
-
-function OrderDetails({ order }) {
-  const operational = getOperationalStatus(order);
-  const shippingAddress = [
-    order.shippingAddress?.address,
-    order.shippingAddress?.number,
-    order.shippingAddress?.city,
-    order.shippingAddress?.province,
-  ].filter(Boolean).join(', ');
-
-  return (
-    <div style={{ display: 'grid', gap: '10px' }}>
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        <strong style={{ color: 'var(--text)' }}>Estado Tiendanube:</strong> {operational.label}
-        {order.shippingStatus ? ` · ${order.shippingStatus}` : ''}
-      </div>
-      {order.dispatchedAt ? (
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text)' }}>Despachado en Tiendanube:</strong> {formatDateTime(order.dispatchedAt)}
-        </div>
-      ) : null}
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        <strong style={{ color: 'var(--text)' }}>Envío:</strong> {shippingAddress || 'Sin dirección'}
-        {order.shippingAddress?.zipcode ? ` · CP ${order.shippingAddress.zipcode}` : ''}
-      </div>
-      <div style={{ display: 'grid', gap: '6px' }}>
-        {(order.products || []).slice(0, 6).map((product, idx) => (
-          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px' }}>
-            <span style={{ color: 'var(--text)' }}>{product.name || 'Producto'}</span>
-            <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>x{product.quantity || 1}</span>
-          </div>
-        ))}
-        {(order.products || []).length > 6 ? (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            +{(order.products || []).length - 6} productos más
-          </div>
-        ) : null}
-        {(order.products || []).length === 0 ? (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin productos</div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function OrderCard({ order, isExpanded, onToggle, selected, onSelectionToggle, onAction, updating }) {
-  const operational = getOperationalStatus(order);
-  const productSummary = getProductSummary(order);
-  const actionConfig = getRowActionConfig(order);
-
-  return (
-    <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '18px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
-        <div style={{ minWidth: 0, display: 'flex', gap: '12px', alignItems: 'flex-start', flex: 1 }}>
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onSelectionToggle}
-            aria-label={`Seleccionar pedido ${order.number || order.id}`}
-            style={{ marginTop: '4px' }}
-          />
-
-          <div style={{ minWidth: 0 }}>
-          <div className="mobile-card-title" style={{ fontSize: '20px', marginBottom: '4px' }}>
-            Pedido #{order.number || order.id}
-          </div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>{order.contactName || 'Sin nombre'}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{getShippingProviderLabel(order)}</div>
-          </div>
-        </div>
-
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onToggle}>
-          {isExpanded ? 'Ocultar' : 'Ver detalle'}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
-        <span style={badgeStyle(operational.color)}>{operational.label}</span>
-        <button type="button" className="btn btn-sm" onClick={onAction} disabled={updating} style={actionConfig.style}>
-          {updating ? 'Guardando...' : actionConfig.label}
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginTop: '14px' }}>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text)' }}>Total:</strong> {formatOrderTotal(order.total, order.currency)}
-        </div>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text)' }}>Fecha:</strong> {formatOrderDate(order.createdAt)}
-        </div>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)', gridColumn: '1 / -1' }}>
-          <strong style={{ color: 'var(--text)' }}>Productos:</strong> {productSummary.label} · {productSummary.detail}
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
-          <OrderDetails order={order} />
-        </div>
-      )}
-    </div>
-  );
-}
+import TiendanubeOrderCard from "@/components/tiendanube/TiendanubeOrderCard";
+import TiendanubeOrderDetails from "@/components/tiendanube/TiendanubeOrderDetails";
+import { useTiendanubeOrders } from "@/hooks/useTiendanubeOrders";
+import {
+  badgeStyle,
+  formatDateTime,
+  formatOrderDate,
+  formatOrderTotal,
+  getOperationalStatus,
+  getProductSummary,
+  getRowActionConfig,
+  getShippingProviderLabel,
+  isSameArgentinaDay,
+} from "@/lib/tiendanubeOrderUtils";
 
 export default function TiendanubeSection({ currentUser }) {
   const canManageIntegration = ['owner', 'admin'].includes(currentUser?.role);
-  const [orders, setOrders] = useState(() => tiendanubeSectionCache.orders || []);
-  const [search, setSearch] = useState(() => tiendanubeSectionCache.search || '');
-  const [viewMode, setViewMode] = useState(() => tiendanubeSectionCache.viewMode || 'to_send');
+  const {
+    orders,
+    setOrders,
+    search,
+    setSearch,
+    viewMode,
+    setViewMode,
+    loading,
+    syncing,
+    error,
+    setError,
+    warning,
+    setWarning,
+    connected,
+    connectedAt,
+    lastSyncedAt,
+    connections,
+    selectedConnectionId,
+    setSelectedConnectionId,
+    connecting,
+    verifyAfterOauth,
+    pendingStoreId,
+    setPendingStoreId,
+    hasLoadedOrders,
+    load,
+    finishConnection,
+    handleConnect,
+    handleDisconnect,
+  } = useTiendanubeOrders();
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [updatingOrderIds, setUpdatingOrderIds] = useState([]);
-  const [loading, setLoading] = useState(() => !tiendanubeSectionCache.initialized);
-  const [syncing, setSyncing] = useState(false);
   const [updatingDispatchStatus, setUpdatingDispatchStatus] = useState(false);
-  const [error, setError] = useState('');
-  const [warning, setWarning] = useState('');
   const [expandedId, setExpandedId] = useState(null);
-
-  const [connected, setConnected] = useState(() => Boolean(tiendanubeSectionCache.connected));
-  const [connectedAt, setConnectedAt] = useState(() => tiendanubeSectionCache.connectedAt || '');
-  const [lastSyncedAt, setLastSyncedAt] = useState(() => tiendanubeSectionCache.lastSyncedAt || '');
-  const [connections, setConnections] = useState(() => tiendanubeSectionCache.connections || []);
-  const [selectedConnectionId, setSelectedConnectionId] = useState(() => tiendanubeSectionCache.selectedConnectionId || '');
-  const [connecting, setConnecting] = useState(false);
-  const [verifyAfterOauth, setVerifyAfterOauth] = useState(false);
-  const [pendingStoreId, setPendingStoreId] = useState('');
-  const [hasLoadedOrders, setHasLoadedOrders] = useState(() => Boolean(tiendanubeSectionCache.initialized));
-  const searchRef = useRef(search);
-  const refreshInFlightRef = useRef(false);
-
-  useEffect(() => {
-    searchRef.current = search;
-  }, [search]);
-
-  useEffect(() => {
-    tiendanubeSectionCache = {
-      orders,
-      search,
-      viewMode,
-      connected,
-        connectedAt,
-        lastSyncedAt,
-        connections,
-        selectedConnectionId,
-        initialized: hasLoadedOrders,
-      };
-  }, [orders, search, viewMode, connected, connectedAt, lastSyncedAt, connections, selectedConnectionId, hasLoadedOrders]);
-
-  const loadStatus = useCallback(async (retries = 5) => {
-    try {
-      const res = await fetch('/api/admin/tiendanube/status');
-      const data = await res.json();
-      if (res.ok) {
-        setConnected(Boolean(data.connected));
-        setConnectedAt(data.connectedAt || '');
-        const nextConnections = Array.isArray(data.connections) ? data.connections : [];
-        setConnections(nextConnections);
-        setSelectedConnectionId((prev) => (
-          prev && nextConnections.some((connection) => String(connection.id) === String(prev)) ? prev : ''
-        ));
-        if (!data.connected && retries > 0) {
-          setWarning('Verificando conexión con Tiendanube...');
-          setTimeout(() => loadStatus(retries - 1), 2500);
-          return;
-        }
-      } else {
-        if (retries > 0) {
-          setWarning('Verificando conexión con Tiendanube...');
-          setTimeout(() => loadStatus(retries - 1), 2500);
-          return;
-        }
-        setError(data.error || 'Error consultando estado de Tiendanube');
-      }
-    } catch (err) {
-      console.error('Tiendanube status error', err);
-      if (retries > 0) {
-        setWarning('Verificando conexión con Tiendanube...');
-        setTimeout(() => loadStatus(retries - 1), 2500);
-        return;
-      }
-      setError('No se pudo verificar el estado de la conexión con Tiendanube');
-    }
-    setVerifyAfterOauth(false);
-  }, []);
-
-  const load = useCallback(async ({ syncMode = 'auto', q, silent = false } = {}) => {
-    const showSyncing = syncMode === 'force';
-    const showLoading = !showSyncing && !silent;
-
-    if (refreshInFlightRef.current) return;
-    refreshInFlightRef.current = true;
-
-    if (showSyncing) {
-      setSyncing(true);
-    }
-    if (showLoading) {
-      setLoading(true);
-    }
-    setError('');
-    setWarning('');
-    try {
-      const params = new URLSearchParams();
-      const query = typeof q === 'string' ? q : searchRef.current;
-      if (query) params.set('q', query);
-      if (selectedConnectionId) params.set('connection_id', selectedConnectionId);
-      params.set('sync', syncMode);
-      const res = await fetch(`/api/admin/tiendanube?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo cargar Tiendanube');
-      setOrders(data.orders || []);
-      setWarning(data.warning || '');
-      setLastSyncedAt(data.lastSyncedAt || '');
-      setHasLoadedOrders(true);
-    } catch (err) {
-      setError(err.message || 'Error inesperado');
-    } finally {
-      refreshInFlightRef.current = false;
-      setLoading(false);
-      setSyncing(false);
-    }
-  }, [selectedConnectionId]);
-
-  const finishConnection = useCallback(async (storeId) => {
-    try {
-      const res = await fetch('/api/admin/tiendanube/finish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo finalizar la conexión');
-      setWarning(data.webhookWarning || 'Integración con Tiendanube conectada correctamente. Los cambios nuevos van a entrar por webhook.');
-      setPendingStoreId('');
-      await loadStatus();
-    } catch (err) {
-      setError(err.message || 'Error inesperado');
-      setWarning('');
-      setVerifyAfterOauth(false);
-    }
-  }, [loadStatus]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const storeId = params.get('tiendanube_store_id');
-    const tiendanubeError = params.get('tiendanube_error');
-
-    if (storeId) {
-      setError('');
-      setWarning('Finalizando conexión con Tiendanube...');
-      setVerifyAfterOauth(true);
-      setPendingStoreId(storeId);
-      window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
-      finishConnection(storeId);
-    }
-
-    if (tiendanubeError) {
-      setError(decodeURIComponent(tiendanubeError));
-      window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
-      setVerifyAfterOauth(false);
-      setPendingStoreId('');
-    }
-  }, [finishConnection]);
-
-  useEffect(() => {
-    loadStatus();
-  }, [loadStatus]);
-
-  useEffect(() => {
-    if (connected) {
-      if (!hasLoadedOrders) {
-        load({ syncMode: '0' });
-      }
-    }
-  }, [connected, hasLoadedOrders, load]);
 
   useEffect(() => {
     if (!connected || !hasLoadedOrders) return;
@@ -423,63 +60,8 @@ export default function TiendanubeSection({ currentUser }) {
   }, [selectedConnectionId, connected, hasLoadedOrders, load]);
 
   useEffect(() => {
-    if (!connected || !hasLoadedOrders) return undefined;
-
-    const interval = setInterval(() => {
-      load({ syncMode: '0', silent: true });
-    }, 20000);
-
-    return () => clearInterval(interval);
-  }, [connected, hasLoadedOrders, load]);
-
-  useEffect(() => {
     setSelectedOrderIds((prev) => prev.filter((id) => orders.some((order) => order.id === id)));
   }, [orders]);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/tiendanube/connect', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo iniciar la conexión');
-      if (data.authorizeUrl) {
-        const popup = window.open(data.authorizeUrl, 'tiendanube_oauth', 'width=800,height=600');
-        if (!popup) {
-          window.location.href = data.authorizeUrl;
-          return;
-        }
-        const timer = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(timer);
-            setConnecting(false);
-            loadStatus();
-          }
-        }, 500);
-      } else {
-        throw new Error('No se recibió la URL de autorización');
-      }
-    } catch (err) {
-      setError(err.message || 'Error inesperado');
-      setConnecting(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    if (!confirm('¿Seguro que quieres desconectar la integración con Tiendanube?')) return;
-    setConnecting(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/tiendanube/connect', { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo desconectar');
-      await loadStatus();
-    } catch (err) {
-      setError(err.message || 'Error inesperado');
-    } finally {
-      setConnecting(false);
-    }
-  };
 
   const toggleOrderSelection = (id) => {
     setSelectedOrderIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -895,7 +477,7 @@ export default function TiendanubeSection({ currentUser }) {
                           isExpanded ? (
                             <tr key={`${order.id}-detail`}>
                               <td colSpan={10} style={{ background: 'var(--bg-secondary)', padding: '16px 20px' }}>
-                                <OrderDetails order={order} />
+                                <TiendanubeOrderDetails order={order} />
                               </td>
                             </tr>
                           ) : null,
@@ -907,7 +489,7 @@ export default function TiendanubeSection({ currentUser }) {
 
               <div className="mobile-only" style={{ display: 'grid', gap: '16px' }}>
                 {orderedOrders.map((order) => (
-                  <OrderCard
+                  <TiendanubeOrderCard
                     key={order.id}
                     order={order}
                     isExpanded={expandedId === order.id}

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
+import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
+import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
@@ -14,7 +16,6 @@ export default function Dashboard() {
     const [shipments, setShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
     const [shipmentFilter, setShipmentFilter] = useState('all');
-    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [draftSpecificDate, setDraftSpecificDate] = useState(specificDate);
@@ -24,8 +25,8 @@ export default function Dashboard() {
     const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
     const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
+    const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
     const today = getArgentinaDateString();
 
@@ -198,7 +199,7 @@ export default function Dashboard() {
                 ]);
                 setData(result);
                 setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
-                setSelectedShipmentIds([]);
+                clearSelection();
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -206,7 +207,7 @@ export default function Dashboard() {
             }
         }
         fetchData();
-    }, [getQueryString, isRangeIncomplete]);
+    }, [getQueryString, isRangeIncomplete, clearSelection]);
 
     const periodLabel = () => {
         switch (period) {
@@ -296,46 +297,15 @@ export default function Dashboard() {
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
     const filteredShipments = shipments.filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter);
-    const selectedVisibleCount = filteredShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).length;
-    const allVisibleSelected = filteredShipments.length > 0 && selectedVisibleCount === filteredShipments.length;
-
-    const toggleShipmentSelection = (id) => {
-        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
-    };
+    const selectedVisibleCount = getSelectedCountFrom(filteredShipments);
+    const allVisibleSelected = areAllSelected(filteredShipments);
 
     const toggleSelectVisible = () => {
-        const visibleIds = filteredShipments.map((shipment) => shipment.id);
-        if (allVisibleSelected) {
-            setSelectedShipmentIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
-            return;
-        }
-        setSelectedShipmentIds((prev) => [...new Set([...prev, ...visibleIds])]);
-    };
-
-    const handleDownloadLabel = async (id) => {
-        setDownloadingId(id);
-        try {
-            await downloadLabelZpl(id);
-            toast('Etiqueta descargada', 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiqueta', 'error');
-        } finally {
-            setDownloadingId(null);
-        }
+        toggleItemsSelection(filteredShipments);
     };
 
     const handleBulkDownloadLabels = async () => {
-        const ids = filteredShipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
-        if (!ids.length) return;
-        setIsDownloadingBulk(true);
-        try {
-            await downloadLabelsZpl(ids);
-            toast(`${ids.length} etiquetas descargadas`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
-        } finally {
-            setIsDownloadingBulk(false);
-        }
+        await downloadSelectedLabels(getSelectedIdsFrom(filteredShipments));
     };
 
     return (

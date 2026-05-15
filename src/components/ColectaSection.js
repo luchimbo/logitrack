@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
+import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
+import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
@@ -13,10 +15,9 @@ export default function ColectaSection() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, removeSelectedIds, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
+    const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
 
     useEffect(() => {
@@ -27,7 +28,7 @@ export default function ColectaSection() {
                 const qs = getTodayQueryString('shipping_method=colecta');
                 const data = await api(`/shipments?${qs}`);
                 setShipments(Array.isArray(data) ? data : []);
-                setSelectedShipmentIds([]);
+                clearSelection();
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -35,7 +36,7 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [getTodayQueryString]);
+    }, [getTodayQueryString, clearSelection]);
 
 
     const handleDeleteShipment = async (id) => {
@@ -46,7 +47,7 @@ export default function ColectaSection() {
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             setShipments(prev => prev.filter(s => s.id !== id));
-            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
+            removeSelectedIds(id);
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
@@ -55,42 +56,12 @@ export default function ColectaSection() {
         }
     };
 
-    const toggleShipmentSelection = (id) => {
-        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
-    };
-
     const toggleSelectAll = () => {
-        if (selectedShipmentIds.length === shipments.length) {
-            setSelectedShipmentIds([]);
-            return;
-        }
-        setSelectedShipmentIds(shipments.map((shipment) => shipment.id));
+        toggleItemsSelection(shipments);
     };
 
     const handleBulkDownloadLabels = async () => {
-        const ids = shipments.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
-        if (!ids.length) return;
-        setIsDownloadingBulk(true);
-        try {
-            await downloadLabelsZpl(ids);
-            toast(`${ids.length} etiquetas descargadas`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
-        } finally {
-            setIsDownloadingBulk(false);
-        }
-    };
-
-    const handleDownloadLabel = async (id) => {
-        setDownloadingId(id);
-        try {
-            await downloadLabelZpl(id);
-            toast('Etiqueta descargada', 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiqueta', 'error');
-        } finally {
-            setDownloadingId(null);
-        }
+        await downloadSelectedLabels(getSelectedIdsFrom(shipments));
     };
 
     if (loading && !shipments.length) {
@@ -146,7 +117,7 @@ export default function ColectaSection() {
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
-                            {selectedShipmentIds.length === shipments.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                            {areAllSelected(shipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
                         </button>
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
@@ -162,7 +133,7 @@ export default function ColectaSection() {
                         <thead>
                             <tr>
                                 <th style={{ width: '42px' }}>
-                                    <input type="checkbox" checked={shipments.length > 0 && selectedShipmentIds.length === shipments.length} onChange={toggleSelectAll} aria-label="Seleccionar todas las etiquetas de colecta" />
+                                    <input type="checkbox" checked={areAllSelected(shipments)} onChange={toggleSelectAll} aria-label="Seleccionar todas las etiquetas de colecta" />
                                 </th>
                                 <th>Producto</th>
                                 <th>Destinatario</th>

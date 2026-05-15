@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, toast, downloadLabelZpl, downloadLabelsZpl } from "@/lib/api";
+import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
+import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
@@ -48,10 +50,9 @@ export default function FlexSection() {
     const [selectedZone, setSelectedZone] = useState(null);
     const [activeView, setActiveView] = useState('summary');
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const [selectedShipmentIds, setSelectedShipmentIds] = useState([]);
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
+    const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
 
     const loadData = useCallback(async (opts = {}) => {
@@ -69,7 +70,7 @@ export default function FlexSection() {
             ]);
             const nextShipments = Array.isArray(shipmentsData) ? shipmentsData : [];
             setShipments(nextShipments);
-            setSelectedShipmentIds((prev) => prev.filter((id) => nextShipments.some((shipment) => shipment.id === id)));
+            keepOnlyExisting(nextShipments);
             setCarriers(carriersData);
             setHealth(healthData);
         } catch (err) {
@@ -77,7 +78,7 @@ export default function FlexSection() {
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [getTodayQueryString]);
+    }, [getTodayQueryString, keepOnlyExisting]);
 
     useEffect(() => {
         loadData();
@@ -123,7 +124,7 @@ export default function FlexSection() {
         setDeletingId(id);
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
-            setSelectedShipmentIds(prev => prev.filter((shipmentId) => shipmentId !== id));
+            removeSelectedIds(id);
             await loadData({ silent: true });
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
@@ -133,50 +134,17 @@ export default function FlexSection() {
         }
     };
 
-    const handleDownloadLabel = async (id) => {
-        setDownloadingId(id);
-        try {
-            await downloadLabelZpl(id);
-            toast('Etiqueta descargada', 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiqueta', 'error');
-        } finally {
-            setDownloadingId(null);
-        }
-    };
-
-    const toggleShipmentSelection = (id) => {
-        setSelectedShipmentIds((prev) => prev.includes(id) ? prev.filter((shipmentId) => shipmentId !== id) : [...prev, id]);
-    };
-
     const toggleVisibleSelection = (items) => {
-        const ids = items.map((shipment) => shipment.id);
-        const allSelected = ids.length > 0 && ids.every((id) => selectedShipmentIds.includes(id));
-        setSelectedShipmentIds((prev) => {
-            if (allSelected) {
-                return prev.filter((id) => !ids.includes(id));
-            }
-            return [...new Set([...prev, ...ids])];
-        });
+        toggleItemsSelection(items);
     };
 
     const handleBulkDownloadLabels = async (items) => {
-        const ids = items.filter((shipment) => selectedShipmentIds.includes(shipment.id)).map((shipment) => shipment.id);
-        if (!ids.length) return;
-        setIsDownloadingBulk(true);
-        try {
-            await downloadLabelsZpl(ids);
-            toast(`${ids.length} etiquetas descargadas`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error al descargar etiquetas seleccionadas', 'error');
-        } finally {
-            setIsDownloadingBulk(false);
-        }
+        await downloadSelectedLabels(getSelectedIdsFrom(items));
     };
 
     const renderSelectionToolbar = (items) => {
-        const selectedCount = items.filter((shipment) => selectedShipmentIds.includes(shipment.id)).length;
-        const allSelected = items.length > 0 && selectedCount === items.length;
+        const selectedCount = getSelectedCountFrom(items);
+        const allSelected = areAllSelected(items);
         return (
             <div className="card" style={{ marginBottom: '12px', padding: '12px 14px', background: 'var(--bg-secondary)' }}>
                 <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
@@ -382,7 +350,7 @@ export default function FlexSection() {
                                         <th style={{ width: '42px' }}>
                                             <input
                                                 type="checkbox"
-                                                checked={(shipmentsByZone[selectedZone] || []).length > 0 && (shipmentsByZone[selectedZone] || []).every((shipment) => selectedShipmentIds.includes(shipment.id))}
+                                                checked={areAllSelected(shipmentsByZone[selectedZone] || [])}
                                                 onChange={() => toggleVisibleSelection(shipmentsByZone[selectedZone] || [])}
                                                 aria-label="Seleccionar etiquetas visibles"
                                             />
@@ -543,7 +511,7 @@ export default function FlexSection() {
 
                         <div className="table-container">
                             <table>
-                                <thead><tr><th style={{ width: '42px' }}><input type="checkbox" checked={items.length > 0 && items.every((shipment) => selectedShipmentIds.includes(shipment.id))} onChange={() => toggleVisibleSelection(items)} aria-label={`Seleccionar etiquetas de ${carrierData?.display_name || carrier}`} /></th><th>Producto</th><th>Destino</th><th>Acciones</th></tr></thead>
+                                <thead><tr><th style={{ width: '42px' }}><input type="checkbox" checked={areAllSelected(items)} onChange={() => toggleVisibleSelection(items)} aria-label={`Seleccionar etiquetas de ${carrierData?.display_name || carrier}`} /></th><th>Producto</th><th>Destino</th><th>Acciones</th></tr></thead>
                                 <tbody>
                                     {items.map(s => (
                                         <tr key={s.id}>
@@ -663,7 +631,7 @@ export default function FlexSection() {
                     {/* Desktop Table */}
                     <div className="table-container">
                         <table>
-                            <thead><tr><th style={{ width: '42px' }}><input type="checkbox" checked={unassigned.length > 0 && unassigned.every((shipment) => selectedShipmentIds.includes(shipment.id))} onChange={() => toggleVisibleSelection(unassigned)} aria-label="Seleccionar etiquetas sin asignar" /></th><th>Producto</th><th>Destino</th><th>Partido</th><th>Acciones</th></tr></thead>
+                            <thead><tr><th style={{ width: '42px' }}><input type="checkbox" checked={areAllSelected(unassigned)} onChange={() => toggleVisibleSelection(unassigned)} aria-label="Seleccionar etiquetas sin asignar" /></th><th>Producto</th><th>Destino</th><th>Partido</th><th>Acciones</th></tr></thead>
                             <tbody>
                                 {unassigned.map(s => (
                                     <tr key={s.id}>
