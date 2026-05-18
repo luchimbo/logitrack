@@ -106,9 +106,61 @@ function extractDateOnly(value) {
   return null;
 }
 
+function parseClientDate(value) {
+  const s = stringOrNull(value, 60);
+  if (!s) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(`${s}T12:00:00Z`);
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getArgentinaDateFromClientValue(value) {
+  const parsed = parseClientDate(value);
+  return parsed ? getArgentinaDateString(parsed) : extractDateOnly(value);
+}
+
+function validateClientDate(value, maxDiffHours = 12) {
+  if (!value) return { ok: false, serverDate: getArgentinaDateString() };
+
+  const clientDate = parseClientDate(value);
+  const serverNow = new Date();
+
+  if (!clientDate) {
+    return { ok: false, serverDate: getArgentinaDateString() };
+  }
+
+  const diffMs = Math.abs(serverNow - clientDate);
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  if (diffHours > maxDiffHours) {
+    return {
+      ok: false,
+      diffHours: Math.round(diffHours * 10) / 10,
+      serverDate: getArgentinaDateString(),
+    };
+  }
+
+  return { ok: true, serverDate: getArgentinaDateString() };
+}
+
 async function getOrCreateBatch(workspaceId, sourceFiles, batchDate = null) {
   const filenames = Array.isArray(sourceFiles) ? sourceFiles.filter(Boolean) : [];
-  const dateValue = extractDateOnly(batchDate) || getArgentinaDateString();
+  const extractedDate = getArgentinaDateFromClientValue(batchDate);
+  const dateValidation = batchDate ? validateClientDate(batchDate) : { ok: true };
+
+  let dateValue = extractedDate || getArgentinaDateString();
+
+  if (!dateValidation.ok) {
+    console.warn(
+      `[PRINT-JOBS-INTAKE] Fecha del cliente desfasada: ${extractedDate} difiere ${dateValidation.diffHours}h del servidor. ` +
+      `Usando fecha del servidor: ${dateValidation.serverDate}`
+    );
+    dateValue = dateValidation.serverDate;
+  }
 
   const todayResult = await db.execute({
     sql: "SELECT id, filenames FROM daily_batches WHERE workspace_id = ? AND date = ?",
@@ -480,9 +532,8 @@ async function backfillExistingJobToLegacy(jobId) {
 
   const header = headerResult.rows[0];
   const sourceFiles = parseJsonOrFallback(header.source_files_json, []);
-  const batchDate = extractDateOnly(header.created_at_client);
   const workspaceId = Number(header.workspace_id);
-  const batchId = await getOrCreateBatch(workspaceId, sourceFiles, batchDate);
+  const batchId = await getOrCreateBatch(workspaceId, sourceFiles, header.created_at_client);
 
   const itemsResult = await db.execute({
     sql: `SELECT
@@ -670,8 +721,7 @@ export async function POST(request) {
       : [];
     const skuOrder = sanitizeSkuOrder(payload?.sku_order, normalizedLabels);
 
-    const batchDate = extractDateOnly(payload?.created_at);
-    const batchId = await getOrCreateBatch(workspaceId, sourceFiles, batchDate);
+    const batchId = await getOrCreateBatch(workspaceId, sourceFiles, payload?.created_at);
     const legacyResult = await insertLegacyShipments(workspaceId, batchId, normalizedLabels);
 
     let insertResult;
