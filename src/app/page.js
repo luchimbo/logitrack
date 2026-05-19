@@ -88,9 +88,9 @@ const faqs = [
 ];
 
 const demoScreenshots = [
-  ["Conexión y dashboard Tiendanube", "/demo-tiendanube-dashboard.svg"],
-  ["Picking con pedidos genéricos", "/demo-tiendanube-picking.svg"],
-  ["Despachos anonimizados", "/demo-tiendanube-despachos.svg"],
+  ["Dashboard operativo", "/demo-tiendanube-dashboard.svg"],
+  ["Lista de picking", "/demo-tiendanube-picking.svg"],
+  ["Gestión de despachos", "/demo-tiendanube-despachos.svg"],
 ];
 
 const heroBadges = ["Self-service", "Tiendanube", "Mercado Libre", "Picking", "Despacho", "Sin papel"];
@@ -414,9 +414,9 @@ export default function LandingPage() {
 
       <section className={styles.demoSection}>
         <div className={styles.sectionHeading}>
-          <span className={styles.sectionLabel}>Demo y capturas</span>
-          <h2>Evidencia visual de la operación Tiendanube</h2>
-          <p>Capturas demostrativas con datos genéricos para mostrar el flujo sin exponer información de clientes, pedidos ni envíos reales.</p>
+          <span className={styles.sectionLabel}>Producto</span>
+          <h2>Una vista clara para preparar y despachar</h2>
+          <p>Capturas demostrativas con datos genéricos para mostrar dashboard, picking y despacho sin exponer información real.</p>
         </div>
         <div className={styles.demoGrid}>
           {demoScreenshots.map(([title, src], index) => (
