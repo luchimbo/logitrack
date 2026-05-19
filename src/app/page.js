@@ -39,8 +39,8 @@ const modules = [
 ];
 
 const integrations = [
+  ["Tiendanube", "Pedidos por enviar o despachados, productos y datos de envío.", true],
   ["Mercado Libre", "Carga de etiquetas ZPL/TXT, Flex, Colecta y operación diaria de despachos."],
-  ["Tiendanube", "Pedidos por enviar o despachados, productos y datos de envío."],
   ["Zipnova", "Envíos, recolecciones, etiquetas disponibles y estados de preparación."],
   ["Correo Argentino", "Próximamente: creación de envíos, consulta de agencias, tracking y etiquetas."],
   ["Más integraciones", "Estamos sumando nuevos canales y operadores logísticos para centralizar más partes de tu operación."],
@@ -56,13 +56,6 @@ const integrationLogos = [
 
 const tiendanubeAppId = process.env.NEXT_PUBLIC_TIENDANUBE_APP_ID || process.env.TIENDANUBE_APP_ID || "{APP_ID}";
 const tiendanubeInstallUrl = `https://www.tiendanube.com/apps/${tiendanubeAppId}/authorize`;
-
-const tiendanubeSteps = [
-  "Instalás GeoModi desde Tiendanube.",
-  "Iniciás sesión o creás tu cuenta.",
-  "GeoModi recibe pedidos por webhook.",
-  "Preparás picking y gestionás despachos desde la app.",
-];
 
 const faqs = [
   [
@@ -366,7 +359,7 @@ export default function LandingPage() {
       <section id="integraciones" className={styles.integrationsSection}>
         <div className={styles.integrationVisual}>
           {integrationLogos.map(([name, src], index) => {
-            const LogoCard = index === 1 ? "strong" : "span";
+            const LogoCard = index === 0 ? "strong" : "span";
             return (
               <LogoCard key={name} className={styles.integrationLogoCard}>
                 <Image src={src} alt={name} width={170} height={58} />
@@ -379,38 +372,17 @@ export default function LandingPage() {
           <span className={styles.sectionLabel}>Integraciones</span>
           <h2>Conectado con tus canales operativos</h2>
           <div className={styles.integrationList}>
-            {integrations.map(([title, text]) => (
+            {integrations.map(([title, text, hasCta]) => (
               <div key={title}>
                 <h3>{title}</h3>
                 <p>{text}</p>
+                {hasCta && (
+                  <a className={styles.integrationCta} href={tiendanubeInstallUrl}>
+                    Instalar en Tiendanube
+                  </a>
+                )}
               </div>
             ))}
-          </div>
-        </div>
-        <div className={styles.tiendanubeSection}>
-          <div className={styles.tiendanubeCopy}>
-            <span className={styles.sectionLabel}>GeoModi para Tiendanube</span>
-            <h2>Preparación y despacho para merchants de Tiendanube</h2>
-            <p>
-              GeoModi se conecta con tu tienda Tiendanube para recibir pedidos, ordenar la preparación,
-              controlar despachos y marcar pedidos como despachados cuando corresponde.
-            </p>
-            <p>
-              GeoModi usa los datos únicamente para gestión logística, picking y despacho. Podés desconectar
-              la integración en cualquier momento.
-            </p>
-            <div className={styles.heroActions}>
-              <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
-              <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
-            </div>
-            <div className={styles.tiendanubeMiniSteps}>
-              {tiendanubeSteps.map((step, index) => <span key={step}>{index + 1}. {step}</span>)}
-            </div>
-          </div>
-          <div className={styles.tiendanubePanel} aria-label="Resumen de integración Tiendanube">
-            <Image src="/LogoTiendaNube.png" alt="Tiendanube" width={180} height={64} />
-            <strong>Pedidos por webhook</strong>
-            <span>Picking, despacho y estados operativos en GeoModi.</span>
           </div>
         </div>
       </section>
