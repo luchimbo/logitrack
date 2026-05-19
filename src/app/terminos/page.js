@@ -36,9 +36,29 @@ export default function TermsPage() {
       </p>
 
       <section style={cardStyle}>
+        <h2>Índice</h2>
+        <p>1. Términos y condiciones del servicio</p>
+        <p>2. Integraciones, permisos y uso de datos</p>
+        <p>3. Política de uso aceptable</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Titular del servicio</h2>
+        <p>GeoModi es una plataforma SaaS orientada a operaciones de e-commerce, preparación logística, picking y despacho.</p>
+        <p>Para contacto legal o soporte, escribí a soporte@geomodi.com.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Registro y aceptación</h2>
+        <p>El usuario administrador declara tener facultades para conectar integraciones, aceptar estos términos y operar el workspace en nombre propio o de la empresa que representa.</p>
+        <p>El uso de GeoModi implica la aceptación de estos términos por parte del usuario y de los colaboradores habilitados en la plataforma.</p>
+      </section>
+
+      <section style={cardStyle}>
         <h2>Uso del servicio</h2>
         <p>GeoModi centraliza información operativa de canales e integraciones para facilitar la preparación logística.</p>
         <p>El usuario es responsable de revisar la información antes de ejecutar acciones de despacho o actualización de estados.</p>
+        <p>GeoModi no es un WMS, no reemplaza un ERP, no gestiona stock y no presta servicios de transporte. Es una herramienta de apoyo operativo para ordenar pedidos, etiquetas, picking y despacho.</p>
       </section>
 
       <section style={cardStyle}>
@@ -68,6 +88,35 @@ export default function TermsPage() {
       <section style={cardStyle}>
         <h2>Acciones sobre pedidos</h2>
         <p>GeoModi no modifica pedidos automáticamente sin acción del usuario. Las actualizaciones se realizan cuando el usuario las solicita desde la app.</p>
+        <p>La plataforma puede actuar como middleware entre GeoModi y servicios externos para leer información operativa y actualizar determinados estados cuando corresponde.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Integraciones con terceros</h2>
+        <p>El funcionamiento de integraciones depende de servicios externos como Tiendanube, Mercado Libre, operadores logísticos o APIs de terceros.</p>
+        <p>GeoModi no controla ni garantiza la disponibilidad continua de esos servicios externos.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Métricas y trazabilidad</h2>
+        <p>Las métricas y registros generados por GeoModi tienen fines operativos. GeoModi no toma decisiones automáticas sobre personas.</p>
+        <p>El cliente es responsable de informar a sus empleados y colaboradores cómo utiliza internamente la información operativa.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Propiedad intelectual</h2>
+        <p>El software, marca, diseño y documentación de GeoModi pertenecen a sus titulares. El usuario recibe una licencia limitada de uso mientras mantenga acceso a la plataforma.</p>
+        <p>Está prohibida la copia, reventa, sublicencia, ingeniería inversa o uso no autorizado del servicio.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Uso aceptable</h2>
+        <p>GeoModi debe utilizarse de manera responsable y conforme a la ley. Está prohibido vulnerar la seguridad, compartir credenciales indebidamente, manipular datos de forma fraudulenta o usar la plataforma para fines ilícitos.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Limitación de responsabilidad</h2>
+        <p>GeoModi se brinda según disponibilidad. No garantiza eliminación total de errores, continuidad ininterrumpida, resultados económicos ni cumplimiento de plazos de operadores externos.</p>
       </section>
 
       <section style={cardStyle}>

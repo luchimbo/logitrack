@@ -5,39 +5,27 @@ import styles from "./page.module.css";
 const workflow = [
   {
     step: "01",
-    title: "Cargá etiquetas o conectá tus canales",
-    action: "Subís archivos ZPL/TXT o sincronizás envíos desde Mercado Libre, Tiendanube, Shopify, Zipnova y otros canales.",
-    result: "GeoModi reúne las etiquetas y los envíos operativos en un solo workspace.",
+    title: "Conectá tus canales o cargá etiquetas",
+    action: "Instalás Tiendanube, conectás Mercado Libre o subís archivos ZPL/TXT.",
+    result: "Los pedidos y etiquetas entran a un mismo flujo operativo.",
   },
   {
     step: "02",
-    title: "GeoModi ordena los envíos",
-    action: "Cada envío queda visible con su etiqueta, producto, destino, método de entrega y estado operativo.",
-    result: "Detectás duplicados, pendientes y etiquetas disponibles antes de mover el despacho.",
+    title: "Ordená la preparación",
+    action: "GeoModi agrupa productos, cantidades, SKU, método de entrega y estado.",
+    result: "Tu equipo sabe qué preparar sin saltar entre tiendas, planillas y descargas.",
   },
   {
     step: "03",
-    title: "Prepará picking",
-    action: "La app agrupa productos, cantidades, SKU y método de envío.",
-    result: "Tu equipo sabe qué buscar y cuántas unidades preparar sin saltar entre canales.",
+    title: "Separá Flex, Colecta y operadores",
+    action: "Filtrás por método de envío, zona o transportista asignado.",
+    result: "Cada salida queda preparada según la forma real en que vas a despachar.",
   },
   {
     step: "04",
-    title: "Separá Flex, Colecta y operadores",
-    action: "Filtrás los envíos por método y revisás las etiquetas que corresponden a cada salida.",
-    result: "La preparación queda dividida por la forma real en que vas a despachar.",
-  },
-  {
-    step: "05",
-    title: "Asigná transportistas",
-    action: "Configurás zonas por partido y reasignás Flex según los transportistas de tu operación.",
-    result: "Ves qué envíos ya tienen transportista y cuáles siguen sin asignar.",
-  },
-  {
-    step: "06",
-    title: "Controlá antes de despachar",
-    action: "Revisás mapa, métricas, pendientes, etiquetas y distribución diaria.",
-    result: "Llegás al despacho con una vista clara de qué falta y qué ya está listo.",
+    title: "Controlá y despachá",
+    action: "Revisás métricas, mapa, etiquetas disponibles, pendientes y distribución diaria.",
+    result: "Llegás al despacho con visibilidad de qué está listo y qué falta.",
   },
 ];
 
@@ -76,19 +64,6 @@ const tiendanubeSteps = [
   "Preparás picking y gestionás despachos desde la app.",
 ];
 
-const permissions = [
-  ["read_orders", "Leer pedidos para mostrarlos en GeoModi."],
-  ["write_fulfillment_orders", "Actualizar estados de despacho cuando el usuario lo solicita."],
-  ["Webhooks", "Recibir cambios de pedidos sin consultar la API constantemente."],
-];
-
-const securityPoints = [
-  "Los tokens se guardan cifrados.",
-  "Los webhooks se validan con firma.",
-  "El usuario puede desconectar la integración cuando quiera.",
-  "GeoModi responde solicitudes de borrado y exportación de datos.",
-];
-
 const faqs = [
   [
     "¿GeoModi modifica mis pedidos automáticamente?",
@@ -116,6 +91,42 @@ const demoScreenshots = [
   ["Conexión y dashboard Tiendanube", "/demo-tiendanube-dashboard.svg"],
   ["Picking con pedidos genéricos", "/demo-tiendanube-picking.svg"],
   ["Despachos anonimizados", "/demo-tiendanube-despachos.svg"],
+];
+
+const heroBadges = ["Self-service", "Tiendanube", "Mercado Libre", "Picking", "Despacho", "Sin papel"];
+
+const painPoints = [
+  "Las etiquetas se descargan en distintos lugares y nadie sabe cuál falta.",
+  "El picking depende de planillas, chats o controles manuales.",
+  "Flex, Colecta y operadores se mezclan antes de despachar.",
+  "Los errores aparecen cuando el paquete ya está en movimiento.",
+  "No hay una vista clara de qué se preparó, qué falta y qué está listo.",
+];
+
+const solutionPoints = [
+  "Los pedidos y etiquetas entran a un solo workspace operativo.",
+  "El equipo prepara por producto, cantidad, SKU y método de envío.",
+  "Las salidas se separan por Flex, Colecta, zona o transportista.",
+  "Cada lote queda trazado con métricas, mapa y estados claros.",
+  "La operación diaria se trabaja desde un mismo flujo, sin saltar entre canales.",
+];
+
+const audience = [
+  ["E-commerce en crecimiento", "Tiendas que preparan pedidos todos los días y necesitan ordenar etiquetas, picking y despacho."],
+  ["Operaciones multicanal", "Equipos que venden en Tiendanube, Mercado Libre u otros canales y quieren unificar la preparación."],
+  ["Depósitos y equipos operativos", "Personas que necesitan saber qué buscar, qué separar y qué despachar sin depender de controles manuales."],
+  ["Operadores logísticos", "Operaciones que preparan envíos de distintos clientes, zonas o métodos y necesitan separar el trabajo."],
+];
+
+const included = [
+  "Integración con Tiendanube mediante OAuth y webhooks.",
+  "Carga de etiquetas ZPL/TXT para operaciones existentes.",
+  "Lista de picking por producto, SKU, cantidad y método de envío.",
+  "Separación de Flex, Colecta y operadores logísticos.",
+  "Mapa de entregas y distribución territorial.",
+  "Dashboard diario, semanal, mensual y por rango.",
+  "Gestión de transportistas y zonas operativas.",
+  "Páginas legales, soporte y desconexión de integraciones.",
 ];
 
 function ModuleIcon({ type }) {
@@ -243,21 +254,23 @@ export default function LandingPage() {
           <Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority />
         </a>
         <nav className={styles.nav} aria-label="Navegación principal">
-          <a href="#flujo">Flujo</a>
-          <a href="#modulos">Módulos</a>
+          <a href="#funciones">Funciones</a>
           <a href="#integraciones">Integraciones</a>
+          <a href="#faq">FAQ</a>
         </nav>
         <Link className={styles.loginButton} href="/login">Entrar</Link>
       </header>
 
       <section id="inicio" className={styles.hero}>
         <div className={styles.heroCopy}>
-          <span className={styles.kicker}>Etiquetas y envíos bajo control</span>
-          <h1>Ordená tus etiquetas y envíos antes de despachar</h1>
+          <span className={styles.kicker}>Self-service · Multicanal · Logística diaria</span>
+          <h1>Ordená etiquetas, picking y despachos sin caos</h1>
           <p>
-            GeoModi reúne etiquetas, envíos y pedidos operativos para que puedas preparar picking, separar Flex y Colecta,
-            asignar transportistas y controlar el despacho diario desde un solo lugar.
+            GeoModi centraliza pedidos, etiquetas y preparación logística para que tu equipo pueda armar,
+            separar y despachar sin depender de planillas, chats ni descargas sueltas.
           </p>
+          <p className={styles.heroClarifier}>No es un WMS. No reemplaza tu tienda ni tu operador logístico. Ordena el trabajo diario antes del despacho.</p>
+          <div className={styles.badgeRow}>{heroBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
           <div className={styles.heroActions}>
             <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
             <a className={styles.secondaryCta} href="#integraciones">Ver integraciones</a>
@@ -268,7 +281,7 @@ export default function LandingPage() {
 
       <section className={styles.definitionSection}>
         <span className={styles.sectionLabel}>Qué es GeoModi</span>
-        <h2>No reemplaza tu tienda ni tu operador logístico. Ordena tus etiquetas y envíos.</h2>
+        <h2>Una capa operativa para que vender más no desordene tu despacho.</h2>
         <p>
           GeoModi concentra etiquetas, envíos, productos, transportistas, métodos de entrega y métricas en un mismo workspace para que tu equipo tenga visibilidad y control antes de despachar.
         </p>
@@ -276,18 +289,25 @@ export default function LandingPage() {
 
       <section className={styles.problem}>
         <div>
-          <span className={styles.sectionLabel}>El problema</span>
-          <h2>Cuando las etiquetas se acumulan, el despacho se vuelve difícil de controlar</h2>
+          <span className={styles.sectionLabel}>Problemas / solución</span>
+          <h2>Cuando el volumen crece, la preparación empieza a mostrar límites.</h2>
         </div>
-        <p>
-          Etiquetas descargadas, envíos en diferentes canales, picking manual, Flex sin asignar y métricas separadas hacen que el despacho dependa de demasiados controles por fuera de la operación.
-        </p>
+        <div className={styles.problemColumns}>
+          <div>
+            <h3>Lo que pasa todos los días</h3>
+            {painPoints.map((item) => <p key={item}>{item}</p>)}
+          </div>
+          <div>
+            <h3>Cómo lo ordena GeoModi</h3>
+            {solutionPoints.map((item) => <p key={item}>{item}</p>)}
+          </div>
+        </div>
       </section>
 
       <section id="flujo" className={styles.workflowSection}>
         <div className={styles.sectionHeading}>
           <span className={styles.sectionLabel}>Cómo funciona</span>
-          <h2>De etiquetas y envíos dispersos a una operación lista para despachar</h2>
+          <h2>De pedidos dispersos a una operación lista para despachar</h2>
         </div>
         <div className={styles.workflowGrid}>
           {workflow.map((item) => (
@@ -301,50 +321,32 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className={styles.tiendanubeFlowSection}>
+      <section className={styles.operationalSection}>
         <div className={styles.sectionHeading}>
-          <span className={styles.sectionLabel}>Cómo funciona con Tiendanube</span>
-          <h2>Instalación simple, sincronización por webhook y control desde GeoModi</h2>
+          <span className={styles.sectionLabel}>Para quién es</span>
+          <h2>Para operaciones que ya necesitan más control antes de despachar</h2>
         </div>
-        <div className={styles.tiendanubeStepGrid}>
-          {tiendanubeSteps.map((step, index) => (
-            <article className={styles.tiendanubeStep} key={step}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <p>{step}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.complianceSection}>
-        <div className={styles.sectionHeading}>
-          <span className={styles.sectionLabel}>Permisos y uso de datos</span>
-          <h2>Permisos claros para operar pedidos y despachos</h2>
-        </div>
-        <div className={styles.permissionGrid}>
-          {permissions.map(([scope, text]) => (
-            <article className={styles.permissionCard} key={scope}>
-              <code>{scope}</code>
+        <div className={styles.audienceGrid}>
+          {audience.map(([title, text]) => (
+            <article className={styles.audienceCard} key={title}>
+              <h3>{title}</h3>
               <p>{text}</p>
             </article>
           ))}
         </div>
-        <p className={styles.complianceNotice}>GeoModi no modifica pedidos automáticamente sin acción del usuario.</p>
       </section>
 
-      <section className={styles.securitySection}>
-        <div>
-          <span className={styles.sectionLabel}>Seguridad y privacidad</span>
-          <h2>Protegemos la conexión y los datos operativos</h2>
-        </div>
-        <div className={styles.securityList}>
-          {securityPoints.map((point) => <p key={point}>{point}</p>)}
-        </div>
-      </section>
-
-      <section id="modulos" className={styles.modulesSection}>
+      <section className={styles.includedSection}>
         <div className={styles.sectionHeading}>
-          <span className={styles.sectionLabel}>Módulos</span>
+          <span className={styles.sectionLabel}>Desde el día uno</span>
+          <h2>Qué incluye GeoModi para trabajar pedidos de forma operativa</h2>
+        </div>
+        <ul className={styles.includedList}>{included.map((item) => <li key={item}>{item}</li>)}</ul>
+      </section>
+
+      <section id="funciones" className={styles.modulesSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Funciones</span>
           <h2>Cada módulo resuelve una parte concreta del despacho</h2>
         </div>
         <div className={styles.moduleGrid}>
@@ -398,6 +400,9 @@ export default function LandingPage() {
               <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
               <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
             </div>
+            <div className={styles.tiendanubeMiniSteps}>
+              {tiendanubeSteps.map((step, index) => <span key={step}>{index + 1}. {step}</span>)}
+            </div>
           </div>
           <div className={styles.tiendanubePanel} aria-label="Resumen de integración Tiendanube">
             <Image src="/LogoTiendaNube.png" alt="Tiendanube" width={180} height={64} />
@@ -423,7 +428,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className={styles.faqSection}>
+      <section id="faq" className={styles.faqSection}>
         <div className={styles.sectionHeading}>
           <span className={styles.sectionLabel}>FAQ</span>
           <h2>Preguntas frecuentes para merchants de Tiendanube</h2>
@@ -439,9 +444,9 @@ export default function LandingPage() {
       </section>
 
       <section className={styles.finalCta}>
-        <span className={styles.sectionLabel}>Prepará el próximo lote</span>
-        <h2>Unificá etiquetas, envíos y preparación diaria</h2>
-        <p>Concentrá la operación diaria en un solo lugar: etiquetas, envíos, picking, métodos de entrega, transportistas y métricas.</p>
+        <span className={styles.sectionLabel}>Operación sin fricción</span>
+        <h2>Vender más no debería complicar tu operación.</h2>
+        <p>GeoModi pone orden en el flujo previo al despacho para que puedas crecer sin perder control.</p>
         <div className={styles.heroActionsCentered}>
           <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
           <a className={styles.secondaryCta} href="#integraciones">Ver integraciones</a>

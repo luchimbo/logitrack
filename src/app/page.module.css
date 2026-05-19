@@ -157,6 +157,32 @@
   line-height: 1.75;
 }
 
+.heroCopy > .heroClarifier {
+  margin-top: 16px;
+  color: var(--landing-ink);
+  font-weight: 800;
+}
+
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 24px;
+}
+
+.badgeRow span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--landing-blue-dark);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .heroActions {
   display: flex;
   flex-wrap: wrap;
@@ -518,6 +544,8 @@
 .workflowSection,
 .modulesSection,
 .integrationsSection,
+.operationalSection,
+.includedSection,
 .tiendanubeFlowSection,
 .complianceSection,
 .securitySection,
@@ -589,6 +617,8 @@
 }
 
 .tiendanubeCopy h2,
+.operationalSection h2,
+.includedSection h2,
 .tiendanubeFlowSection h2,
 .complianceSection h2,
 .securitySection h2,
@@ -685,10 +715,39 @@
   line-height: 1.75;
 }
 
+.problemColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+.problemColumns div {
+  display: grid;
+  gap: 10px;
+}
+
+.problemColumns h3 {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.problemColumns p {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .workflowSection,
 .modulesSection,
 .integrationsSection,
 .finalCta,
+.operationalSection,
+.includedSection,
 .tiendanubeFlowSection,
 .complianceSection,
 .securitySection,
@@ -758,6 +817,88 @@
 .workflowCard strong {
   color: var(--landing-ink);
   font-weight: 900;
+}
+
+.audienceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.audienceCard {
+  min-height: 210px;
+  padding: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 26px;
+  background: var(--landing-card);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.audienceCard h3 {
+  margin: 0 0 12px;
+  color: var(--landing-ink);
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.audienceCard p {
+  margin: 0;
+  color: var(--landing-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.includedSection {
+  margin-top: 96px;
+  padding: 54px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 34px;
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
+
+.includedSection h2 {
+  color: #ffffff;
+}
+
+.includedSection .sectionLabel {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #bfdbfe;
+}
+
+.includedList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.includedList li {
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.tiendanubeMiniSteps {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.tiendanubeMiniSteps span {
+  color: var(--landing-muted);
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .tiendanubeStepGrid,
@@ -1105,6 +1246,7 @@
   .integrationsSection,
   .tiendanubeSection,
   .securitySection,
+  .problemColumns,
   .problem {
     grid-template-columns: 1fr;
   }
@@ -1126,6 +1268,11 @@
   }
 
   .moduleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .audienceGrid,
+  .includedList {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1161,6 +1308,8 @@
   .workflowSection,
   .modulesSection,
   .integrationsSection,
+  .operationalSection,
+  .includedSection,
   .tiendanubeFlowSection,
   .complianceSection,
   .securitySection,
@@ -1237,6 +1386,7 @@
   }
 
   .tiendanubeCopy,
+  .includedSection,
   .complianceSection,
   .securitySection,
   .demoSection,
@@ -1254,6 +1404,7 @@
   .workflowSection,
   .modulesSection,
   .integrationsSection,
+  .operationalSection,
   .tiendanubeFlowSection {
     padding-top: 68px;
   }
@@ -1266,6 +1417,8 @@
   }
 
   .tiendanubeStepGrid,
+  .audienceGrid,
+  .includedList,
   .permissionGrid,
   .demoGrid,
   .faqGrid {

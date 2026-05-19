@@ -31,21 +31,46 @@ export default function PrivacyPage() {
       </p>
 
       <section style={cardStyle}>
+        <h2>Responsable y alcance</h2>
+        <p>GeoModi trata datos de operaciones B2B de e-commerce, pedidos, etiquetas, picking y despacho.</p>
+        <p>Cuando una empresa habilita usuarios internos, esos usuarios acceden bajo responsabilidad del workspace correspondiente.</p>
+      </section>
+
+      <section style={cardStyle}>
         <h2>Datos que usamos</h2>
-        <p>Podemos procesar pedidos, productos, datos de envío, estados operativos, transportistas y eventos de webhook necesarios para operar la preparación y el despacho.</p>
+        <p>Podemos procesar datos de empresa, usuarios, pedidos, productos, datos de envío, estados operativos, transportistas, zonas, métricas, eventos de webhook, logs técnicos y archivos necesarios para operar la preparación y el despacho.</p>
+        <p>Cuando GeoModi procesa datos de clientes finales de un e-commerce, lo hace por cuenta del cliente que conectó la integración.</p>
         <p>No vendemos datos de merchants ni los usamos para fines publicitarios.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Finalidad del tratamiento</h2>
+        <p>Usamos la información para prestar y mantener GeoModi, permitir la gestión operativa, brindar soporte, mejorar seguridad, generar métricas operativas y ordenar picking y despacho.</p>
+        <p>GeoModi usa los datos únicamente para gestión logística, picking y despacho.</p>
       </section>
 
       <section style={cardStyle}>
         <h2>Tiendanube</h2>
         <p>GeoModi usa webhooks de Tiendanube para recibir actualizaciones de pedidos. La sincronización manual existe solo como respaldo operativo.</p>
         <p>GeoModi no modifica pedidos automáticamente sin acción del usuario.</p>
+        <p>Podés desconectar la integración en cualquier momento.</p>
       </section>
 
       <section style={cardStyle}>
         <h2>Seguridad</h2>
         <p>Los tokens se guardan cifrados y los webhooks se validan con firma cuando corresponde.</p>
         <p>El usuario puede desconectar la integración cuando quiera.</p>
+        <p>Aplicamos medidas técnicas y organizativas razonables para proteger la información, aunque ningún sistema conectado a Internet puede considerarse infalible.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Cesión y acceso a datos</h2>
+        <p>GeoModi puede compartir información únicamente con proveedores tecnológicos necesarios para prestar el servicio, autoridades cuando exista obligación legal o terceros autorizados por el cliente mediante integraciones.</p>
+      </section>
+
+      <section style={cardStyle}>
+        <h2>Conservación</h2>
+        <p>Los datos se conservan mientras dure la relación de uso del servicio y durante el tiempo necesario para cumplir obligaciones legales, resolver incidentes o permitir exportación y eliminación.</p>
       </section>
 
       <section style={cardStyle}>
