@@ -15,6 +15,12 @@ const cardStyle = {
   background: "#111827",
 };
 
+const permissions = [
+  ["read_orders", "Leer pedidos para mostrarlos en GeoModi."],
+  ["write_fulfillment_orders", "Actualizar estados de despacho cuando el usuario lo solicita."],
+  ["Webhooks", "Recibir cambios de pedidos sin consultar la API constantemente."],
+];
+
 export const metadata = {
   title: "Términos y condiciones | GeoModi",
   description: "Términos de uso de GeoModi.",
@@ -39,6 +45,24 @@ export default function TermsPage() {
         <h2>Integraciones</h2>
         <p>Las integraciones, incluida Tiendanube, requieren autorización del usuario o administrador del workspace.</p>
         <p>Podés desconectar la integración en cualquier momento.</p>
+      </section>
+
+      <section style={{ ...cardStyle, background: "#f8fafc", color: "#111827" }}>
+        <span style={{ display: "inline-flex", marginBottom: "14px", padding: "7px 11px", border: "1px solid rgba(37, 99, 235, 0.18)", borderRadius: "999px", background: "rgba(37, 99, 235, 0.07)", color: "#1d4ed8", fontSize: "11px", fontWeight: 900, letterSpacing: "0.11em", textTransform: "uppercase" }}>
+          Permisos y uso de datos
+        </span>
+        <h2 style={{ margin: "0 0 22px", fontSize: "34px", lineHeight: 1.05 }}>Permisos claros para operar pedidos y despachos</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "16px" }}>
+          {permissions.map(([scope, text]) => (
+            <article key={scope} style={{ padding: "22px", border: "1px solid rgba(15, 23, 42, 0.08)", borderRadius: "18px", background: "#ffffff" }}>
+              <code style={{ display: "inline-flex", marginBottom: "16px", padding: "7px 10px", borderRadius: "999px", background: "rgba(37, 99, 235, 0.09)", color: "#1d4ed8", fontSize: "12px", fontWeight: 900 }}>{scope}</code>
+              <p style={{ margin: 0, color: "#64748b", lineHeight: 1.65 }}>{text}</p>
+            </article>
+          ))}
+        </div>
+        <p style={{ margin: "22px 0 0", padding: "16px 18px", border: "1px solid rgba(22, 163, 74, 0.18)", borderRadius: "18px", background: "rgba(22, 163, 74, 0.08)", color: "#166534", fontWeight: 850 }}>
+          GeoModi no modifica pedidos automáticamente sin acción del usuario.
+        </p>
       </section>
 
       <section style={cardStyle}>
