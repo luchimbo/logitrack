@@ -245,7 +245,6 @@ export default function LandingPage() {
         <nav className={styles.nav} aria-label="Navegación principal">
           <a href="#flujo">Flujo</a>
           <a href="#modulos">Módulos</a>
-          <a href="#tiendanube">Tiendanube</a>
           <a href="#integraciones">Integraciones</a>
         </nav>
         <a className={styles.loginButton} href={tiendanubeInstallUrl}>Instalar</a>
@@ -265,30 +264,6 @@ export default function LandingPage() {
           </div>
         </div>
         <HeroMockup />
-      </section>
-
-      <section id="tiendanube" className={styles.tiendanubeSection}>
-        <div className={styles.tiendanubeCopy}>
-          <span className={styles.sectionLabel}>GeoModi para Tiendanube</span>
-          <h2>Preparación y despacho para merchants de Tiendanube</h2>
-          <p>
-            GeoModi se conecta con tu tienda Tiendanube para recibir pedidos, ordenar la preparación,
-            controlar despachos y marcar pedidos como despachados cuando corresponde.
-          </p>
-          <p>
-            GeoModi usa los datos únicamente para gestión logística, picking y despacho. Podés desconectar
-            la integración en cualquier momento.
-          </p>
-          <div className={styles.heroActions}>
-            <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
-            <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
-          </div>
-        </div>
-        <div className={styles.tiendanubePanel} aria-label="Resumen de integración Tiendanube">
-          <Image src="/LogoTiendaNube.png" alt="Tiendanube" width={180} height={64} />
-          <strong>Pedidos por webhook</strong>
-          <span>Picking, despacho y estados operativos en GeoModi.</span>
-        </div>
       </section>
 
       <section className={styles.definitionSection}>
@@ -405,6 +380,29 @@ export default function LandingPage() {
                 <p>{text}</p>
               </div>
             ))}
+          </div>
+        </div>
+        <div className={styles.tiendanubeSection}>
+          <div className={styles.tiendanubeCopy}>
+            <span className={styles.sectionLabel}>GeoModi para Tiendanube</span>
+            <h2>Preparación y despacho para merchants de Tiendanube</h2>
+            <p>
+              GeoModi se conecta con tu tienda Tiendanube para recibir pedidos, ordenar la preparación,
+              controlar despachos y marcar pedidos como despachados cuando corresponde.
+            </p>
+            <p>
+              GeoModi usa los datos únicamente para gestión logística, picking y despacho. Podés desconectar
+              la integración en cualquier momento.
+            </p>
+            <div className={styles.heroActions}>
+              <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
+              <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
+            </div>
+          </div>
+          <div className={styles.tiendanubePanel} aria-label="Resumen de integración Tiendanube">
+            <Image src="/LogoTiendaNube.png" alt="Tiendanube" width={180} height={64} />
+            <strong>Pedidos por webhook</strong>
+            <span>Picking, despacho y estados operativos en GeoModi.</span>
           </div>
         </div>
       </section>

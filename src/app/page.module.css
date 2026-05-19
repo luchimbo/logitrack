@@ -566,6 +566,12 @@
   align-items: stretch;
 }
 
+.integrationsSection .tiendanubeSection {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 34px 0 0;
+}
+
 .tiendanubeCopy,
 .tiendanubePanel,
 .complianceSection,
