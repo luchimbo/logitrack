@@ -1,82 +1,93 @@
+import Image from "next/image";
 import Link from "next/link";
-
-const sectionStyle = {
-  width: "min(880px, calc(100% - 32px))",
-  margin: "0 auto",
-  padding: "56px 0",
-  color: "#f1f5f9",
-};
-
-const cardStyle = {
-  marginTop: "24px",
-  padding: "28px",
-  border: "1px solid rgba(148, 163, 184, 0.16)",
-  borderRadius: "18px",
-  background: "#111827",
-};
+import styles from "../legal.module.css";
 
 export const metadata = {
   title: "Política de privacidad | GeoModi",
-  description: "Política de privacidad de GeoModi para integraciones logísticas y Tiendanube.",
+  description: "Política de privacidad de GeoModi para integraciones logísticas, Tiendanube, picking y despacho.",
 };
 
 export default function PrivacyPage() {
   return (
-    <main style={sectionStyle}>
-      <Link href="/" style={{ color: "#93c5fd", fontWeight: 700 }}>Volver a GeoModi</Link>
-      <h1 style={{ margin: "22px 0 12px", fontSize: "42px", lineHeight: 1 }}>Política de privacidad</h1>
-      <p style={{ color: "#94a3b8", fontSize: "17px", lineHeight: 1.7 }}>
-        GeoModi usa los datos únicamente para gestión logística, picking y despacho. Esta política describe
-        cómo tratamos la información recibida desde Tiendanube y otros canales operativos.
-      </p>
+    <main className={styles.page}>
+      <div className={styles.shell}>
+        <header className={styles.topbar}>
+          <Link className={styles.brand} href="/">
+            <Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority />
+          </Link>
+          <nav className={styles.nav} aria-label="Navegación principal">
+            <Link href="/#funciones">Funciones</Link>
+            <Link href="/#integraciones">Integraciones</Link>
+            <Link href="/#faq">FAQ</Link>
+            <Link href="/privacidad">Privacidad</Link>
+            <Link href="/terminos">Términos</Link>
+            <Link href="/soporte">Soporte</Link>
+          </nav>
+          <Link className={styles.topLink} href="/login">Entrar</Link>
+        </header>
 
-      <section style={cardStyle}>
-        <h2>Responsable y alcance</h2>
-        <p>GeoModi trata datos de operaciones B2B de e-commerce, pedidos, etiquetas, picking y despacho.</p>
-        <p>Cuando una empresa habilita usuarios internos, esos usuarios acceden bajo responsabilidad del workspace correspondiente.</p>
-      </section>
+        <section className={styles.hero}>
+          <span className={styles.label}>Privacidad</span>
+          <h1>Política de privacidad</h1>
+          <p>
+            GeoModi usa los datos únicamente para gestión logística, picking y despacho. Esta política explica qué información tratamos, con qué finalidad y cómo podés solicitar exportación o borrado.
+          </p>
+        </section>
 
-      <section style={cardStyle}>
-        <h2>Datos que usamos</h2>
-        <p>Podemos procesar datos de empresa, usuarios, pedidos, productos, datos de envío, estados operativos, transportistas, zonas, métricas, eventos de webhook, logs técnicos y archivos necesarios para operar la preparación y el despacho.</p>
-        <p>Cuando GeoModi procesa datos de clientes finales de un e-commerce, lo hace por cuenta del cliente que conectó la integración.</p>
-        <p>No vendemos datos de merchants ni los usamos para fines publicitarios.</p>
-      </section>
+        <section className={styles.grid}>
+          <article className={styles.card}>
+            <h2>Responsable y alcance</h2>
+            <p>GeoModi trata datos de operaciones B2B de e-commerce, pedidos, etiquetas, picking y despacho.</p>
+            <p>Los usuarios internos acceden bajo responsabilidad del workspace que los habilita.</p>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Finalidad del tratamiento</h2>
-        <p>Usamos la información para prestar y mantener GeoModi, permitir la gestión operativa, brindar soporte, mejorar seguridad, generar métricas operativas y ordenar picking y despacho.</p>
-        <p>GeoModi usa los datos únicamente para gestión logística, picking y despacho.</p>
-      </section>
+          <article className={styles.card}>
+            <h2>Datos que usamos</h2>
+            <p>Podemos procesar datos de empresa, usuarios, pedidos, productos, envío, estados operativos, transportistas, zonas, métricas, webhooks, logs técnicos y archivos necesarios para la operación.</p>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Tiendanube</h2>
-        <p>GeoModi usa webhooks de Tiendanube para recibir actualizaciones de pedidos. La sincronización manual existe solo como respaldo operativo.</p>
-        <p>GeoModi no modifica pedidos automáticamente sin acción del usuario.</p>
-        <p>Podés desconectar la integración en cualquier momento.</p>
-      </section>
+          <article className={styles.wideCard}>
+            <h2>Finalidad del tratamiento</h2>
+            <ul className={styles.list}>
+              <li>Prestar y mantener GeoModi.</li>
+              <li>Ordenar preparación logística, picking y despacho.</li>
+              <li>Mostrar pedidos, productos, etiquetas, métricas y estados operativos.</li>
+              <li>Brindar soporte, mejorar seguridad y prevenir usos indebidos.</li>
+            </ul>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Seguridad</h2>
-        <p>Los tokens se guardan cifrados y los webhooks se validan con firma cuando corresponde.</p>
-        <p>El usuario puede desconectar la integración cuando quiera.</p>
-        <p>Aplicamos medidas técnicas y organizativas razonables para proteger la información, aunque ningún sistema conectado a Internet puede considerarse infalible.</p>
-      </section>
+          <article className={styles.card}>
+            <h2>Tiendanube y webhooks</h2>
+            <p>GeoModi usa webhooks de Tiendanube para recibir actualizaciones de pedidos. La sincronización manual existe solo como respaldo operativo.</p>
+            <p>GeoModi no modifica pedidos automáticamente sin acción del usuario.</p>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Cesión y acceso a datos</h2>
-        <p>GeoModi puede compartir información únicamente con proveedores tecnológicos necesarios para prestar el servicio, autoridades cuando exista obligación legal o terceros autorizados por el cliente mediante integraciones.</p>
-      </section>
+          <article className={styles.card}>
+            <h2>Seguridad</h2>
+            <p>Los tokens se guardan cifrados y los webhooks se validan con firma cuando corresponde.</p>
+            <p>Aplicamos medidas técnicas y organizativas razonables para proteger la información.</p>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Conservación</h2>
-        <p>Los datos se conservan mientras dure la relación de uso del servicio y durante el tiempo necesario para cumplir obligaciones legales, resolver incidentes o permitir exportación y eliminación.</p>
-      </section>
+          <article className={styles.card}>
+            <h2>Cesión y acceso</h2>
+            <p>No vendemos datos. La información puede compartirse solo con proveedores necesarios, autoridades por obligación legal o terceros autorizados mediante integraciones.</p>
+          </article>
 
-      <section style={cardStyle}>
-        <h2>Borrado y exportación</h2>
-        <p>GeoModi responde solicitudes de borrado y exportación de datos. Para solicitarlo, escribí a soporte@geomodi.com.</p>
-      </section>
+          <article className={styles.card}>
+            <h2>Conservación</h2>
+            <p>Conservamos datos mientras dure la relación de uso y el tiempo necesario para cumplir obligaciones legales, resolver incidentes o permitir exportación y eliminación.</p>
+          </article>
+
+          <article className={styles.highlightCard}>
+            <h2>Borrado y exportación</h2>
+            <p>GeoModi responde solicitudes de borrado y exportación de datos. Para solicitarlo, escribí a soporte@geomodi.com.</p>
+            <div className={styles.contactBox}>
+              <a className={styles.primaryButton} href="mailto:soporte@geomodi.com?subject=Solicitud%20de%20datos%20-%20GeoModi">Solicitar por email</a>
+              <Link className={styles.secondaryButton} href="/soporte">Ir a soporte</Link>
+            </div>
+          </article>
+        </section>
+      </div>
     </main>
   );
 }

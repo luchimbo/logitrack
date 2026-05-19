@@ -257,6 +257,9 @@ export default function LandingPage() {
           <a href="#funciones">Funciones</a>
           <a href="#integraciones">Integraciones</a>
           <a href="#faq">FAQ</a>
+          <Link href="/privacidad">Privacidad</Link>
+          <Link href="/terminos">Términos</Link>
+          <Link href="/soporte">Soporte</Link>
         </nav>
         <Link className={styles.loginButton} href="/login">Entrar</Link>
       </header>
