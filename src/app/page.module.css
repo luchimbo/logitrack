@@ -1075,13 +1075,14 @@
   box-shadow: var(--landing-shadow);
 }
 
-.integrationVisual strong,
 .integrationVisual span {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 66px;
   border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
   font-weight: 950;
 }
 
@@ -1091,19 +1092,6 @@
   height: auto;
   max-height: 58px;
   object-fit: contain;
-}
-
-.integrationVisual strong {
-  background: #fff159;
-  color: #1f2937;
-  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.22);
-}
-
-.integrationVisual span {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #f8fafc;
-  color: #334155;
-  font-size: 14px;
 }
 
 .integrationList {

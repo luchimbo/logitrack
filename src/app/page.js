@@ -358,14 +358,11 @@ export default function LandingPage() {
 
       <section id="integraciones" className={styles.integrationsSection}>
         <div className={styles.integrationVisual}>
-          {integrationLogos.map(([name, src], index) => {
-            const LogoCard = index === 0 ? "strong" : "span";
-            return (
-              <LogoCard key={name} className={styles.integrationLogoCard}>
-                <Image src={src} alt={name} width={170} height={58} />
-              </LogoCard>
-            );
-          })}
+          {integrationLogos.map(([name, src]) => (
+            <span key={name} className={styles.integrationLogoCard}>
+              <Image src={src} alt={name} width={170} height={58} />
+            </span>
+          ))}
           <span>Más integraciones próximamente</span>
         </div>
         <div className={styles.integrationCopy}>
