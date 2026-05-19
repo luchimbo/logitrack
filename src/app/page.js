@@ -247,7 +247,7 @@ export default function LandingPage() {
           <a href="#modulos">Módulos</a>
           <a href="#integraciones">Integraciones</a>
         </nav>
-        <a className={styles.loginButton} href={tiendanubeInstallUrl}>Instalar</a>
+        <Link className={styles.loginButton} href="/login">Entrar</Link>
       </header>
 
       <section id="inicio" className={styles.hero}>
@@ -259,8 +259,8 @@ export default function LandingPage() {
             asignar transportistas y controlar el despacho diario desde un solo lugar.
           </p>
           <div className={styles.heroActions}>
-            <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
-            <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
+            <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
+            <a className={styles.secondaryCta} href="#integraciones">Ver integraciones</a>
           </div>
         </div>
         <HeroMockup />
@@ -443,8 +443,8 @@ export default function LandingPage() {
         <h2>Unificá etiquetas, envíos y preparación diaria</h2>
         <p>Concentrá la operación diaria en un solo lugar: etiquetas, envíos, picking, métodos de entrega, transportistas y métricas.</p>
         <div className={styles.heroActionsCentered}>
-          <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
-          <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
+          <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
+          <a className={styles.secondaryCta} href="#integraciones">Ver integraciones</a>
         </div>
       </section>
 
