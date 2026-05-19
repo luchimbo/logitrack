@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/privacidad(.*)",
+  "/terminos(.*)",
+  "/soporte(.*)",
+  "/privacy(.*)",
+  "/terms(.*)",
+  "/support(.*)",
   "/login(.*)",
   "/sign-up(.*)",
   "/api/integrations/shopify/callback(.*)",
