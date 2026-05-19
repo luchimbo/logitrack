@@ -86,8 +86,6 @@ const demoScreenshots = [
   ["Gestión de despachos", "/demo-tiendanube-despachos.svg"],
 ];
 
-const heroBadges = ["Self-service", "Tiendanube", "Mercado Libre", "Picking", "Despacho", "Sin papel"];
-
 const painPoints = [
   "Las etiquetas se descargan en distintos lugares y nadie sabe cuál falta.",
   "El picking depende de planillas, chats o controles manuales.",
@@ -265,8 +263,6 @@ export default function LandingPage() {
             GeoModi centraliza pedidos, etiquetas y preparación logística para que tu equipo pueda armar,
             separar y despachar sin depender de planillas, chats ni descargas sueltas.
           </p>
-          <p className={styles.heroClarifier}>No es un WMS. No reemplaza tu tienda ni tu operador logístico. Ordena el trabajo diario antes del despacho.</p>
-          <div className={styles.badgeRow}>{heroBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
           <div className={styles.heroActions}>
             <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
             <a className={styles.secondaryCta} href="#integraciones">Ver integraciones</a>
@@ -358,11 +354,14 @@ export default function LandingPage() {
 
       <section id="integraciones" className={styles.integrationsSection}>
         <div className={styles.integrationVisual}>
-          {integrationLogos.map(([name, src]) => (
-            <span key={name} className={styles.integrationLogoCard}>
-              <Image src={src} alt={name} width={170} height={58} />
-            </span>
-          ))}
+          {integrationLogos.map(([name, src], index) => {
+            const LogoCard = index === 0 ? "strong" : "span";
+            return (
+              <LogoCard key={name} className={styles.integrationLogoCard}>
+                <Image src={src} alt={name} width={170} height={58} />
+              </LogoCard>
+            );
+          })}
           <span>Más integraciones próximamente</span>
         </div>
         <div className={styles.integrationCopy}>
