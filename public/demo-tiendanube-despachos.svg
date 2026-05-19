@@ -1,0 +1,29 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="760" fill="#080d18"/>
+  <rect width="156" height="760" fill="#111827"/>
+  <text x="28" y="34" fill="#e5e7eb" font-family="Arial" font-size="18" font-weight="700">GEOMODI</text>
+  <rect x="8" y="176" width="140" height="34" rx="6" fill="#252b46" stroke="#9ca3af"/>
+  <text x="22" y="198" fill="#9aa7ff" font-family="Arial" font-size="11" font-weight="700">Despachos</text>
+  <rect x="156" width="1124" height="58" fill="#161b29"/>
+  <text x="190" y="28" fill="#f8fafc" font-family="Arial" font-size="16" font-weight="700">Colecta Tiendanube</text>
+  <text x="190" y="100" fill="#f8fafc" font-family="Arial" font-size="26" font-weight="800">Gestion de despachos</text>
+  <text x="190" y="126" fill="#64748b" font-family="Arial" font-size="13">Pedidos listos para descargar etiqueta, seleccionar y marcar como despachados.</text>
+  <rect x="190" y="160" width="1040" height="76" rx="10" fill="#1a2030" stroke="#293347"/>
+  <text x="620" y="194" fill="#7c83ff" font-family="Arial" font-size="34" font-weight="800">42</text>
+  <text x="600" y="214" fill="#64748b" font-family="Arial" font-size="10" font-weight="800">TOTAL COLECTA</text>
+  <rect x="190" y="260" width="1040" height="410" rx="10" fill="#1a2030" stroke="#293347"/>
+  <rect x="204" y="284" width="1012" height="40" fill="#121a2a"/>
+  <text x="250" y="308" fill="#64748b" font-family="Arial" font-size="10" font-weight="800">PRODUCTO</text>
+  <text x="680" y="308" fill="#64748b" font-family="Arial" font-size="10" font-weight="800">DESTINATARIO</text>
+  <text x="850" y="308" fill="#64748b" font-family="Arial" font-size="10" font-weight="800">CIUDAD</text>
+  <text x="1040" y="308" fill="#64748b" font-family="Arial" font-size="10" font-weight="800">ACCIONES</text>
+  <g font-family="Arial" font-size="12" font-weight="700">
+    <text x="250" y="360" fill="#94a3b8">Producto demo A - Tiendanube</text><text x="680" y="360" fill="#94a3b8">Cliente Demo 001</text><text x="850" y="360" fill="#94a3b8">Cordoba</text><rect x="1040" y="338" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="357" fill="#9aa7ff">Ver etiqueta</text>
+    <text x="250" y="414" fill="#94a3b8">Producto demo B - Tiendanube</text><text x="680" y="414" fill="#94a3b8">Cliente Demo 002</text><text x="850" y="414" fill="#94a3b8">Rosario</text><rect x="1040" y="392" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="411" fill="#9aa7ff">Ver etiqueta</text>
+    <text x="250" y="468" fill="#94a3b8">Producto demo C - Tiendanube</text><text x="680" y="468" fill="#94a3b8">Cliente Demo 003</text><text x="850" y="468" fill="#94a3b8">Mendoza</text><rect x="1040" y="446" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="465" fill="#9aa7ff">Ver etiqueta</text>
+    <text x="250" y="522" fill="#94a3b8">Producto demo D - Tiendanube</text><text x="680" y="522" fill="#94a3b8">Cliente Demo 004</text><text x="850" y="522" fill="#94a3b8">Buenos Aires</text><rect x="1040" y="500" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="519" fill="#9aa7ff">Ver etiqueta</text>
+    <text x="250" y="576" fill="#94a3b8">Producto demo E - Tiendanube</text><text x="680" y="576" fill="#94a3b8">Cliente Demo 005</text><text x="850" y="576" fill="#94a3b8">Santa Fe</text><rect x="1040" y="554" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="573" fill="#9aa7ff">Ver etiqueta</text>
+    <text x="250" y="630" fill="#94a3b8">Producto demo F - Tiendanube</text><text x="680" y="630" fill="#94a3b8">Cliente Demo 006</text><text x="850" y="630" fill="#94a3b8">Tucuman</text><rect x="1040" y="608" width="82" height="28" rx="5" fill="#252b46" stroke="#8b91ff"/><text x="1057" y="627" fill="#9aa7ff">Ver etiqueta</text>
+  </g>
+  <line x1="204" y1="378" x2="1216" y2="378" stroke="#263247"/><line x1="204" y1="432" x2="1216" y2="432" stroke="#263247"/><line x1="204" y1="486" x2="1216" y2="486" stroke="#263247"/><line x1="204" y1="540" x2="1216" y2="540" stroke="#263247"/><line x1="204" y1="594" x2="1216" y2="594" stroke="#263247"/>
+</svg>

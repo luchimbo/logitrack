@@ -66,6 +66,58 @@ const integrationLogos = [
   ["Correo Argentino", "/LogoCorreoArgentino.jpg"],
 ];
 
+const tiendanubeAppId = process.env.NEXT_PUBLIC_TIENDANUBE_APP_ID || process.env.TIENDANUBE_APP_ID || "{APP_ID}";
+const tiendanubeInstallUrl = `https://www.tiendanube.com/apps/${tiendanubeAppId}/authorize`;
+
+const tiendanubeSteps = [
+  "Instalás GeoModi desde Tiendanube.",
+  "Iniciás sesión o creás tu cuenta.",
+  "GeoModi recibe pedidos por webhook.",
+  "Preparás picking y gestionás despachos desde la app.",
+];
+
+const permissions = [
+  ["read_orders", "Leer pedidos para mostrarlos en GeoModi."],
+  ["write_fulfillment_orders", "Actualizar estados de despacho cuando el usuario lo solicita."],
+  ["Webhooks", "Recibir cambios de pedidos sin consultar la API constantemente."],
+];
+
+const securityPoints = [
+  "Los tokens se guardan cifrados.",
+  "Los webhooks se validan con firma.",
+  "El usuario puede desconectar la integración cuando quiera.",
+  "GeoModi responde solicitudes de borrado y exportación de datos.",
+];
+
+const faqs = [
+  [
+    "¿GeoModi modifica mis pedidos automáticamente?",
+    "No. GeoModi no modifica pedidos automáticamente sin acción del usuario. Las actualizaciones de despacho se ejecutan cuando el usuario lo solicita desde la app.",
+  ],
+  [
+    "¿Qué datos guarda GeoModi?",
+    "Guardamos los datos necesarios para gestión logística, picking y despacho: pedidos, productos, estados operativos, datos de envío y credenciales cifradas de integración.",
+  ],
+  [
+    "¿Puedo desconectar la app?",
+    "Sí. Podés desconectar la integración en cualquier momento desde GeoModi o desde tu cuenta de Tiendanube.",
+  ],
+  [
+    "¿Cómo se sincronizan los pedidos?",
+    "GeoModi usa webhooks de Tiendanube para recibir actualizaciones de pedidos. La sincronización manual existe solo como respaldo operativo.",
+  ],
+  [
+    "¿Qué pasa si desinstalo la app?",
+    "Dejamos de recibir actualizaciones de Tiendanube y podés solicitar exportación o borrado de datos escribiendo a soporte.",
+  ],
+];
+
+const demoScreenshots = [
+  ["Conexión y dashboard Tiendanube", "/demo-tiendanube-dashboard.svg"],
+  ["Picking con pedidos genéricos", "/demo-tiendanube-picking.svg"],
+  ["Despachos anonimizados", "/demo-tiendanube-despachos.svg"],
+];
+
 function ModuleIcon({ type }) {
   const common = {
     width: "28",
@@ -193,9 +245,10 @@ export default function LandingPage() {
         <nav className={styles.nav} aria-label="Navegación principal">
           <a href="#flujo">Flujo</a>
           <a href="#modulos">Módulos</a>
+          <a href="#tiendanube">Tiendanube</a>
           <a href="#integraciones">Integraciones</a>
         </nav>
-        <Link className={styles.loginButton} href="/login">Entrar</Link>
+        <a className={styles.loginButton} href={tiendanubeInstallUrl}>Instalar</a>
       </header>
 
       <section id="inicio" className={styles.hero}>
@@ -207,11 +260,35 @@ export default function LandingPage() {
             asignar transportistas y controlar el despacho diario desde un solo lugar.
           </p>
           <div className={styles.heroActions}>
-            <Link className={styles.primaryCta} href="/login">Entrar a GeoModi</Link>
-            <a className={styles.secondaryCta} href="#flujo">Ver cómo funciona</a>
+            <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
+            <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
           </div>
         </div>
         <HeroMockup />
+      </section>
+
+      <section id="tiendanube" className={styles.tiendanubeSection}>
+        <div className={styles.tiendanubeCopy}>
+          <span className={styles.sectionLabel}>GeoModi para Tiendanube</span>
+          <h2>Preparación y despacho para merchants de Tiendanube</h2>
+          <p>
+            GeoModi se conecta con tu tienda Tiendanube para recibir pedidos, ordenar la preparación,
+            controlar despachos y marcar pedidos como despachados cuando corresponde.
+          </p>
+          <p>
+            GeoModi usa los datos únicamente para gestión logística, picking y despacho. Podés desconectar
+            la integración en cualquier momento.
+          </p>
+          <div className={styles.heroActions}>
+            <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
+            <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
+          </div>
+        </div>
+        <div className={styles.tiendanubePanel} aria-label="Resumen de integración Tiendanube">
+          <Image src="/LogoTiendaNube.png" alt="Tiendanube" width={180} height={64} />
+          <strong>Pedidos por webhook</strong>
+          <span>Picking, despacho y estados operativos en GeoModi.</span>
+        </div>
       </section>
 
       <section className={styles.definitionSection}>
@@ -246,6 +323,47 @@ export default function LandingPage() {
               <p><strong>Qué obtenés:</strong> {item.result}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className={styles.tiendanubeFlowSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Cómo funciona con Tiendanube</span>
+          <h2>Instalación simple, sincronización por webhook y control desde GeoModi</h2>
+        </div>
+        <div className={styles.tiendanubeStepGrid}>
+          {tiendanubeSteps.map((step, index) => (
+            <article className={styles.tiendanubeStep} key={step}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <p>{step}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.complianceSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Permisos y uso de datos</span>
+          <h2>Permisos claros para operar pedidos y despachos</h2>
+        </div>
+        <div className={styles.permissionGrid}>
+          {permissions.map(([scope, text]) => (
+            <article className={styles.permissionCard} key={scope}>
+              <code>{scope}</code>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+        <p className={styles.complianceNotice}>GeoModi no modifica pedidos automáticamente sin acción del usuario.</p>
+      </section>
+
+      <section className={styles.securitySection}>
+        <div>
+          <span className={styles.sectionLabel}>Seguridad y privacidad</span>
+          <h2>Protegemos la conexión y los datos operativos</h2>
+        </div>
+        <div className={styles.securityList}>
+          {securityPoints.map((point) => <p key={point}>{point}</p>)}
         </div>
       </section>
 
@@ -291,12 +409,59 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className={styles.demoSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>Demo y capturas</span>
+          <h2>Evidencia visual de la operación Tiendanube</h2>
+          <p>Capturas demostrativas con datos genéricos para mostrar el flujo sin exponer información de clientes, pedidos ni envíos reales.</p>
+        </div>
+        <div className={styles.demoGrid}>
+          {demoScreenshots.map(([title, src], index) => (
+            <figure key={title}>
+              <Image src={src} alt={title} width={1280} height={760} />
+              <figcaption><span>{String(index + 1).padStart(2, "0")}</span><strong>{title}</strong></figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.faqSection}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.sectionLabel}>FAQ</span>
+          <h2>Preguntas frecuentes para merchants de Tiendanube</h2>
+        </div>
+        <div className={styles.faqGrid}>
+          {faqs.map(([question, answer]) => (
+            <article className={styles.faqCard} key={question}>
+              <h3>{question}</h3>
+              <p>{answer}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className={styles.finalCta}>
         <span className={styles.sectionLabel}>Prepará el próximo lote</span>
         <h2>Unificá etiquetas, envíos y preparación diaria</h2>
         <p>Concentrá la operación diaria en un solo lugar: etiquetas, envíos, picking, métodos de entrega, transportistas y métricas.</p>
-        <Link className={styles.primaryCta} href="/login">Entrar a la plataforma</Link>
+        <div className={styles.heroActionsCentered}>
+          <a className={styles.primaryCta} href={tiendanubeInstallUrl}>Instalar en Tiendanube</a>
+          <Link className={styles.secondaryCta} href="/login">Entrar a GeoModi</Link>
+        </div>
       </section>
+
+      <footer className={styles.footer}>
+        <div>
+          <strong>GeoModi</strong>
+          <p>Soporte: <a href="mailto:soporte@geomodi.com">soporte@geomodi.com</a></p>
+          <p>Respondemos dentro de las 24-48 horas hábiles.</p>
+        </div>
+        <nav aria-label="Links legales">
+          <Link href="/privacidad">Política de privacidad</Link>
+          <Link href="/terminos">Términos y condiciones</Link>
+          <Link href="/soporte">Soporte/contacto</Link>
+        </nav>
+      </footer>
     </main>
   );
 }

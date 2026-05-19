@@ -164,6 +164,13 @@
   margin-top: 34px;
 }
 
+.heroActionsCentered {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
 .primaryCta,
 .secondaryCta {
   display: inline-flex;
@@ -511,6 +518,11 @@
 .workflowSection,
 .modulesSection,
 .integrationsSection,
+.tiendanubeFlowSection,
+.complianceSection,
+.securitySection,
+.demoSection,
+.faqSection,
 .finalCta {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
@@ -543,6 +555,89 @@
   color: var(--landing-muted);
   font-size: 18px;
   line-height: 1.75;
+}
+
+.tiendanubeSection {
+  width: min(1180px, calc(100% - 32px));
+  margin: 18px auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.tiendanubeCopy,
+.tiendanubePanel,
+.complianceSection,
+.demoSection,
+.faqSection {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: var(--landing-card);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.tiendanubeCopy {
+  padding: 44px;
+  border-radius: 34px;
+}
+
+.tiendanubeCopy h2,
+.tiendanubeFlowSection h2,
+.complianceSection h2,
+.securitySection h2,
+.demoSection h2,
+.faqSection h2 {
+  margin: 0;
+  color: var(--landing-ink);
+  font-size: clamp(32px, 4vw, 54px);
+  font-weight: 950;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.tiendanubeCopy p,
+.demoSection .sectionHeading p {
+  max-width: 720px;
+  margin: 18px 0 0;
+  color: var(--landing-muted);
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.tiendanubePanel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 16px;
+  min-height: 330px;
+  padding: 32px;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(0, 177, 232, 0.16), transparent 18rem),
+    radial-gradient(circle at 85% 0%, rgba(37, 99, 235, 0.12), transparent 20rem),
+    #ffffff;
+}
+
+.tiendanubePanel img {
+  width: min(180px, 72%);
+  height: auto;
+  object-fit: contain;
+}
+
+.tiendanubePanel strong {
+  color: var(--landing-ink);
+  font-size: 30px;
+  font-weight: 950;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.tiendanubePanel span {
+  color: var(--landing-muted);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .problem {
@@ -587,7 +682,12 @@
 .workflowSection,
 .modulesSection,
 .integrationsSection,
-.finalCta {
+.finalCta,
+.tiendanubeFlowSection,
+.complianceSection,
+.securitySection,
+.demoSection,
+.faqSection {
   padding: 96px 0 0;
 }
 
@@ -652,6 +752,134 @@
 .workflowCard strong {
   color: var(--landing-ink);
   font-weight: 900;
+}
+
+.tiendanubeStepGrid,
+.permissionGrid,
+.demoGrid,
+.faqGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tiendanubeStep,
+.permissionCard,
+.faqCard {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.tiendanubeStep {
+  min-height: 190px;
+  padding: 24px;
+}
+
+.tiendanubeStep span,
+.demoGrid span {
+  display: inline-flex;
+  margin-bottom: 34px;
+  color: var(--landing-blue);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.tiendanubeStep p {
+  margin: 0;
+  color: var(--landing-ink);
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.complianceSection,
+.demoSection,
+.faqSection {
+  margin-top: 96px;
+  padding: 54px;
+  border-radius: 34px;
+}
+
+.permissionGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.permissionCard {
+  min-height: 160px;
+  padding: 24px;
+}
+
+.permissionCard code {
+  display: inline-flex;
+  margin-bottom: 18px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.09);
+  color: var(--landing-blue-dark);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.permissionCard p,
+.faqCard p {
+  margin: 0;
+  color: var(--landing-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.complianceNotice {
+  margin: 22px 0 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(22, 163, 74, 0.18);
+  border-radius: 18px;
+  background: rgba(22, 163, 74, 0.08);
+  color: #166534;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.securitySection {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 32px;
+  align-items: start;
+  margin-top: 96px;
+  padding: 52px;
+  border-radius: 34px;
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
+
+.securitySection h2 {
+  color: #ffffff;
+}
+
+.securitySection .sectionLabel {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #bfdbfe;
+}
+
+.securityList {
+  display: grid;
+  gap: 12px;
+}
+
+.securityList p {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .moduleGrid {
@@ -742,6 +970,61 @@
   border-left: 3px solid rgba(37, 99, 235, 0.28);
 }
 
+.demoGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.demoGrid figure {
+  overflow: hidden;
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed rgba(37, 99, 235, 0.28);
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(22, 163, 74, 0.06)),
+    rgba(255, 255, 255, 0.78);
+}
+
+.demoGrid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.12);
+}
+
+.demoGrid figcaption {
+  display: block;
+  margin-top: 18px;
+}
+
+.demoGrid strong {
+  display: block;
+  color: var(--landing-ink);
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.faqGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.faqCard {
+  padding: 24px;
+}
+
+.faqCard h3 {
+  margin: 0 0 10px;
+  color: var(--landing-ink);
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
 .finalCta {
   margin-top: 96px;
   margin-bottom: 42px;
@@ -768,9 +1051,54 @@
   line-height: 1.7;
 }
 
+.finalCta .secondaryCta {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.footer {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto 34px;
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 28px 0 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  color: var(--landing-muted);
+}
+
+.footer strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--landing-ink);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.footer p {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.footer a {
+  color: var(--landing-blue-dark);
+  font-size: 14px;
+  font-weight: 800;
+}
+
 @media (max-width: 1080px) {
   .hero,
   .integrationsSection,
+  .tiendanubeSection,
+  .securitySection,
   .problem {
     grid-template-columns: 1fr;
   }
@@ -794,6 +1122,15 @@
   .moduleGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .tiendanubeStepGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .permissionGrid,
+  .demoGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -814,9 +1151,15 @@
   .hero,
   .problem,
   .definitionSection,
+  .tiendanubeSection,
   .workflowSection,
   .modulesSection,
   .integrationsSection,
+  .tiendanubeFlowSection,
+  .complianceSection,
+  .securitySection,
+  .demoSection,
+  .faqSection,
   .finalCta {
     width: calc(100% - 20px);
   }
@@ -831,6 +1174,7 @@
   }
 
   .heroCopy > p,
+  .tiendanubeCopy p,
   .problem p,
   .definitionSection p,
   .finalCta p {
@@ -886,10 +1230,40 @@
     border-radius: 26px;
   }
 
+  .tiendanubeCopy,
+  .complianceSection,
+  .securitySection,
+  .demoSection,
+  .faqSection {
+    padding: 28px;
+    border-radius: 26px;
+  }
+
+  .tiendanubePanel {
+    min-height: 260px;
+    padding: 28px;
+    border-radius: 26px;
+  }
+
   .workflowSection,
   .modulesSection,
-  .integrationsSection {
+  .integrationsSection,
+  .tiendanubeFlowSection {
     padding-top: 68px;
+  }
+
+  .complianceSection,
+  .securitySection,
+  .demoSection,
+  .faqSection {
+    margin-top: 68px;
+  }
+
+  .tiendanubeStepGrid,
+  .permissionGrid,
+  .demoGrid,
+  .faqGrid {
+    grid-template-columns: 1fr;
   }
 
   .workflowCard {
@@ -909,5 +1283,14 @@
     margin-top: 68px;
     padding: 48px 24px;
     border-radius: 28px;
+  }
+
+  .footer {
+    width: calc(100% - 20px);
+    flex-direction: column;
+  }
+
+  .footer nav {
+    justify-content: flex-start;
   }
 }
