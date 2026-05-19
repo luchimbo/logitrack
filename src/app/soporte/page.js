@@ -7,7 +7,7 @@ export const metadata = { title: "Soporte | GeoModi", description: "Contacto y s
 export default function SupportPage() {
   return (
     <main className={styles.page}><div className={styles.shell}>
-      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={132} height={40} priority /></Link><Link className={styles.topLink} href="/">Volver al inicio</Link></header>
+      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority /></Link><nav className={styles.nav} aria-label="Navegación principal"><Link href="/#funciones">Funciones</Link><Link href="/#integraciones">Integraciones</Link><Link href="/#faq">FAQ</Link><Link href="/privacidad">Privacidad</Link><Link href="/terminos">Términos</Link><Link href="/soporte">Soporte</Link></nav><Link className={styles.topLink} href="/login">Entrar</Link></header>
       <section className={styles.hero}><span className={styles.label}>Soporte</span><h1>Soporte y contacto</h1><p>Si necesitás ayuda con GeoModi, instalación de Tiendanube, integraciones, etiquetas, picking o solicitudes de datos, escribinos por email.</p></section>
       <section className={styles.grid}>
         <article className={styles.highlightCard}><h2>Canal principal</h2><p>Email: soporte@geomodi.com</p><p>Respondemos dentro de las 24-48 horas hábiles.</p><div className={styles.contactBox}><a className={styles.primaryButton} href="mailto:soporte@geomodi.com?subject=Soporte%20GeoModi">Escribir a soporte</a><Link className={styles.secondaryButton} href="/terminos">Ver términos</Link></div></article>

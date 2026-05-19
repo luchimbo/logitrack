@@ -7,7 +7,7 @@ export const metadata = { title: "Política de privacidad | GeoModi", descriptio
 export default function PrivacyPage() {
   return (
     <main className={styles.page}><div className={styles.shell}>
-      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={132} height={40} priority /></Link><Link className={styles.topLink} href="/">Volver al inicio</Link></header>
+      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority /></Link><nav className={styles.nav} aria-label="Navegación principal"><Link href="/#funciones">Funciones</Link><Link href="/#integraciones">Integraciones</Link><Link href="/#faq">FAQ</Link><Link href="/privacidad">Privacidad</Link><Link href="/terminos">Términos</Link><Link href="/soporte">Soporte</Link></nav><Link className={styles.topLink} href="/login">Entrar</Link></header>
       <section className={styles.hero}><span className={styles.label}>Privacidad</span><h1>Política de privacidad</h1><p>GeoModi usa los datos únicamente para gestión logística, picking y despacho. Esta política explica qué información tratamos, con qué finalidad y cómo podés solicitar exportación o borrado.</p></section>
       <section className={styles.grid}>
         <article className={styles.card}><h2>Responsable y alcance</h2><p>GeoModi trata datos de operaciones B2B de e-commerce, pedidos, etiquetas, picking y despacho.</p><p>Los usuarios internos acceden bajo responsabilidad del workspace que los habilita.</p></article>
