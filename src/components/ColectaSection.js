@@ -12,6 +12,8 @@ import LoadingButton from "./LoadingButton";
 export default function ColectaSection() {
     const { getTodayQueryString } = useBatch();
     const [shipments, setShipments] = useState([]);
+    const [connections, setConnections] = useState([]);
+    const [selectedConnectionId, setSelectedConnectionId] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
@@ -21,11 +23,24 @@ export default function ColectaSection() {
     const isMobile = useIsMobile();
 
     useEffect(() => {
+        async function fetchConnections() {
+            try {
+                const data = await api('/admin/mercadolibre/status');
+                setConnections(Array.isArray(data?.connections) ? data.connections : []);
+            } catch {
+                setConnections([]);
+            }
+        }
+        fetchConnections();
+    }, []);
+
+    useEffect(() => {
         async function fetchData() {
             setLoading(true);
             setError(null);
             try {
-                const qs = getTodayQueryString('shipping_method=colecta');
+                let qs = getTodayQueryString('shipping_method=colecta');
+                if (selectedConnectionId) qs += `&connection_id=${selectedConnectionId}`;
                 const data = await api(`/shipments?${qs}`);
                 setShipments(Array.isArray(data) ? data : []);
                 clearSelection();
@@ -36,7 +51,13 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [getTodayQueryString, clearSelection]);
+    }, [getTodayQueryString, clearSelection, selectedConnectionId]);
+
+    const connectionName = (id) => {
+        const match = connections.find((c) => String(c.id) === String(id));
+        return match?.displayName || match?.externalStoreId || '—';
+    };
+    const showAccountColumn = connections.length > 1;
 
 
     const handleDeleteShipment = async (id) => {
@@ -64,6 +85,20 @@ export default function ColectaSection() {
         await downloadSelectedLabels(getSelectedIdsFrom(shipments));
     };
 
+    const accountSelector = showAccountColumn ? (
+        <select
+            className="btn btn-ghost btn-sm"
+            value={selectedConnectionId}
+            onChange={(e) => setSelectedConnectionId(e.target.value)}
+            aria-label="Filtrar colecta por cuenta"
+        >
+            <option value="">Todas las cuentas</option>
+            {connections.map((c) => (
+                <option key={c.id} value={c.id}>{c.displayName || c.externalStoreId}</option>
+            ))}
+        </select>
+    ) : null;
+
     if (loading && !shipments.length) {
         return (
             <div className="section active">
@@ -85,9 +120,12 @@ export default function ColectaSection() {
     if (!shipments.length) {
         return (
             <div className="section active">
-                <div className="section-header">
-                    <h1 className="section-title">📦 Colecta</h1>
-                    <p className="section-subtitle">Envíos para colecta tradicional</p>
+                <div className="section-header flex-between">
+                    <div>
+                        <h1 className="section-title">📦 Colecta</h1>
+                        <p className="section-subtitle">Envíos para colecta tradicional</p>
+                    </div>
+                    {accountSelector}
                 </div>
                 <div className="empty-state">
                     <div className="empty-state-icon">📦</div>
@@ -104,6 +142,7 @@ export default function ColectaSection() {
                     <h1 className="section-title">📦 Colecta</h1>
                     <p className="section-subtitle">{shipments.length} envíos de colecta</p>
                 </div>
+                {accountSelector}
             </div>
 
             <div className="stats-grid">
@@ -136,6 +175,7 @@ export default function ColectaSection() {
                                     <input type="checkbox" checked={areAllSelected(shipments)} onChange={toggleSelectAll} aria-label="Seleccionar todas las etiquetas de colecta" />
                                 </th>
                                 <th>Producto</th>
+                                {showAccountColumn && <th>Cuenta</th>}
                                 <th>Destinatario</th>
                                 <th>Ciudad</th>
                                 <th>Acciones</th>
@@ -148,6 +188,7 @@ export default function ColectaSection() {
                                         <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                     </td>
                                     <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                    {showAccountColumn && <td>{connectionName(s.integration_connection_id)}</td>}
                                     <td>{s.recipient_name || 'N/A'}</td>
                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                     <td>
@@ -192,6 +233,12 @@ export default function ColectaSection() {
                                 <div className="mobile-card-title">{s.product_name}</div>
                             </div>
                             <div className="mobile-card-body">
+                                {showAccountColumn && (
+                                    <div className="mobile-card-row">
+                                        <span className="mobile-card-label">Cuenta</span>
+                                        <span className="mobile-card-value">{connectionName(s.integration_connection_id)}</span>
+                                    </div>
+                                )}
                                 <div className="mobile-card-row">
                                     <span className="mobile-card-label">Destinatario</span>
                                     <span className="mobile-card-value">{s.recipient_name || 'N/A'}</span>
