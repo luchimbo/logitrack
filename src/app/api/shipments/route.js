@@ -19,6 +19,7 @@ export async function GET(request) {
         const status = searchParams.get('status');
         const shipping_method = searchParams.get('shipping_method');
         const carrier = searchParams.get('carrier');
+        const connection_id = searchParams.get('connection_id');
 
         let sql, args = [];
         let orderBy = "id";
@@ -51,6 +52,10 @@ export async function GET(request) {
         if (carrier) {
             sql += ` AND ${columnPrefix}assigned_carrier = ?`;
             args.push(carrier);
+        }
+        if (connection_id && /^\d+$/.test(connection_id)) {
+            sql += ` AND ${columnPrefix}integration_connection_id = ?`;
+            args.push(Number(connection_id));
         }
 
         sql += ` ORDER BY ${orderBy} DESC`;
