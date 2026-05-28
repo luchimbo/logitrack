@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
 import { useShipmentSelection } from "@/hooks/useShipmentSelection";
+import { resolveAtoRemitentes, accountForShipment } from "@/lib/accountDetection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
 export default function ColectaSection() {
     const { getTodayQueryString } = useBatch();
-    const [shipments, setShipments] = useState([]);
-    const [connections, setConnections] = useState([]);
-    const [selectedConnectionId, setSelectedConnectionId] = useState('');
+    const [allShipments, setAllShipments] = useState([]);
+    const [selectedAccount, setSelectedAccount] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
@@ -23,26 +23,13 @@ export default function ColectaSection() {
     const isMobile = useIsMobile();
 
     useEffect(() => {
-        async function fetchConnections() {
-            try {
-                const data = await api('/admin/mercadolibre/status');
-                setConnections(Array.isArray(data?.connections) ? data.connections : []);
-            } catch {
-                setConnections([]);
-            }
-        }
-        fetchConnections();
-    }, []);
-
-    useEffect(() => {
         async function fetchData() {
             setLoading(true);
             setError(null);
             try {
-                let qs = getTodayQueryString('shipping_method=colecta');
-                if (selectedConnectionId) qs += `&connection_id=${selectedConnectionId}`;
+                const qs = getTodayQueryString('shipping_method=colecta');
                 const data = await api(`/shipments?${qs}`);
-                setShipments(Array.isArray(data) ? data : []);
+                setAllShipments(Array.isArray(data) ? data : []);
                 clearSelection();
             } catch (err) {
                 setError(err.message);
@@ -51,13 +38,25 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [getTodayQueryString, clearSelection, selectedConnectionId]);
+    }, [getTodayQueryString, clearSelection]);
 
-    const connectionName = (id) => {
-        const match = connections.find((c) => String(c.id) === String(id));
-        return match?.displayName || match?.externalStoreId || '—';
-    };
-    const showAccountColumn = connections.length > 1;
+    // Deduce which sender (remitente) belongs to ATO (the account that ships
+    // Arturia products); every other sender is PCM. See lib/accountDetection.js.
+    const atoRemitentes = useMemo(() => resolveAtoRemitentes(allShipments), [allShipments]);
+    const accountOf = (shipment) => accountForShipment(shipment, atoRemitentes);
+
+    // Accounts actually present in the current dataset, used for the selector.
+    const availableAccounts = useMemo(() => {
+        const set = new Set(allShipments.map((s) => accountForShipment(s, atoRemitentes)));
+        return [...set];
+    }, [allShipments, atoRemitentes]);
+    const showAccountColumn = availableAccounts.length > 1;
+
+    const shipments = useMemo(() => (
+        selectedAccount
+            ? allShipments.filter((s) => accountForShipment(s, atoRemitentes) === selectedAccount)
+            : allShipments
+    ), [allShipments, atoRemitentes, selectedAccount]);
 
 
     const handleDeleteShipment = async (id) => {
@@ -88,13 +87,13 @@ export default function ColectaSection() {
     const accountSelector = showAccountColumn ? (
         <select
             className="btn btn-ghost btn-sm"
-            value={selectedConnectionId}
-            onChange={(e) => setSelectedConnectionId(e.target.value)}
+            value={selectedAccount}
+            onChange={(e) => setSelectedAccount(e.target.value)}
             aria-label="Filtrar colecta por cuenta"
         >
             <option value="">Todas las cuentas</option>
-            {connections.map((c) => (
-                <option key={c.id} value={c.id}>{c.displayName || c.externalStoreId}</option>
+            {availableAccounts.map((account) => (
+                <option key={account} value={account}>{account}</option>
             ))}
         </select>
     ) : null;
@@ -188,7 +187,7 @@ export default function ColectaSection() {
                                         <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                     </td>
                                     <td style={{ fontWeight: 600 }}>{s.product_name}</td>
-                                    {showAccountColumn && <td>{connectionName(s.integration_connection_id)}</td>}
+                                    {showAccountColumn && <td>{accountOf(s)}</td>}
                                     <td>{s.recipient_name || 'N/A'}</td>
                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                     <td>
@@ -236,7 +235,7 @@ export default function ColectaSection() {
                                 {showAccountColumn && (
                                     <div className="mobile-card-row">
                                         <span className="mobile-card-label">Cuenta</span>
-                                        <span className="mobile-card-value">{connectionName(s.integration_connection_id)}</span>
+                                        <span className="mobile-card-value">{accountOf(s)}</span>
                                     </div>
                                 )}
                                 <div className="mobile-card-row">
