@@ -187,9 +187,9 @@ async function bootstrapClerkUser() {
           FROM workspace_members wm
           JOIN workspaces w ON w.id = wm.workspace_id
           WHERE wm.app_user_id = ?
-          ORDER BY CASE WHEN ? = 1 AND w.slug = 'legacy' THEN 0 ELSE 1 END, wm.id ASC
+          ORDER BY wm.id ASC
           LIMIT 1`,
-    args: [appUserId, shouldBeGlobalAdmin ? 1 : 0],
+    args: [appUserId],
   });
 
   if (!membershipResult.rows.length) {
