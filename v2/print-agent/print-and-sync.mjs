@@ -360,6 +360,7 @@ function buildJobPayload({
   isDryRun,
   isSyncOnly,
   integrity,
+  config,
 }) {
   const seenInThisJob = new Set();
 
@@ -698,6 +699,7 @@ async function main() {
     isDryRun: config.dryRun,
     isSyncOnly: syncOnlyArg,
     integrity: integritySummary,
+    config,
   });
 
   if (!config.dryRun && !syncOnlyArg && !forceReprintArg) {
@@ -715,6 +717,13 @@ async function main() {
 
   if (!config.dryRun) {
     appendHistory(job);
+  }
+
+  // Registrar localmente las etiquetas impresas apenas se imprimen, sin depender
+  // del sync remoto. Asi el aviso de reimpresion funciona aunque el sync falle.
+  if (!config.dryRun && !syncOnlyArg) {
+    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
+    saveKnownTrackings(knownTrackingIndex);
   }
 
   if (syncOnlyArg) {
@@ -738,13 +747,32 @@ async function main() {
     queueJobForRetry(job, syncResult.reason);
     logLine(`Sync pendiente: ${syncResult.reason}`);
   } else {
-    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
-    saveKnownTrackings(knownTrackingIndex);
+    if (syncOnlyArg) {
+      // En sync-only no se imprimio, pero el server confirmo: registrar igual.
+      updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
+      saveKnownTrackings(knownTrackingIndex);
+    }
 
     const metrics = syncResult.body
       ? `inserted=${syncResult.body.shipments_inserted ?? "?"}, skipped=${syncResult.body.shipments_skipped ?? "?"}, recovered=${syncResult.body.shipments_recovered_from_reprint ?? "?"}, duplicate=${syncResult.body.duplicate === true ? "yes" : "no"}`
       : "sin metrics";
     logLine(`Sync OK (${syncResult.url}) ${metrics}`);
+  }
+
+  // Si el lote tenia reimpresiones, no cerrar de una: dar tiempo a leer el resumen.
+  if (!config.dryRun && !syncOnlyArg && job.totals.reprints_total > 0) {
+    await pauseBeforeClosing(job.totals.reprints_total, job.totals.labels_total);
+  }
+}
+
+async function pauseBeforeClosing(reprints, total) {
+  logLine("");
+  logLine(`ATENCION: se imprimieron ${reprints} de ${total} etiquetas que ya estaban impresas antes.`);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    await rl.question("Presiona Enter para cerrar... ");
+  } finally {
+    rl.close();
   }
 }
 
