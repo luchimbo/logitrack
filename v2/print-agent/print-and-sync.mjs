@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 import { createHash } from "crypto";
+import { createInterface } from "readline/promises";
 import { parseZplFile } from "../../src/lib/zplParser.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -431,6 +432,41 @@ function buildJobPayload({
   };
 }
 
+function getReprintSummary(job) {
+  const reprints = job.labels.filter((label) => label.is_reprint);
+  const trackingExamples = reprints
+    .map((label) => label.tracking_number)
+    .filter(Boolean)
+    .slice(0, 10);
+
+  return {
+    count: reprints.length,
+    total: job.labels.length,
+    trackingExamples,
+  };
+}
+
+async function confirmReprintIfNeeded(job) {
+  const summary = getReprintSummary(job);
+  if (summary.count === 0) return true;
+
+  logLine("");
+  logLine("ATENCION: este lote contiene etiquetas que ya fueron impresas antes.");
+  logLine(`Reimpresiones detectadas: ${summary.count} de ${summary.total}`);
+  if (summary.trackingExamples.length) {
+    logLine(`Trackings repetidos (muestra): ${summary.trackingExamples.join(", ")}`);
+  }
+  logLine('Para imprimir de todas formas, escribi "SI" y presiona Enter.');
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await rl.question("Confirmar reimpresion: ");
+    return answer.trim().toUpperCase() === "SI";
+  } finally {
+    rl.close();
+  }
+}
+
 async function syncJob(job, config) {
   const urls = getSyncUrlCandidates(config);
   if (!urls.length) {
@@ -550,6 +586,7 @@ async function main() {
   const dryRunArg = process.argv.includes("--dry-run");
   const retryOnlyArg = process.argv.includes("--retry-only");
   const syncOnlyArg = process.argv.includes("--sync-only");
+  const forceReprintArg = process.argv.includes("--force-reprint") || process.argv.includes("--yes");
   if (dryRunArg) config.dryRun = true;
   if (syncOnlyArg) config.dryRun = false;
 
@@ -649,10 +686,6 @@ async function main() {
     logLine(`Orden SKU (top): ${top}`);
   }
 
-  if (!config.dryRun && !syncOnlyArg) {
-    printFileToSharedPrinter(printFilePath, config.printerPath);
-  }
-
   const knownTrackingIndex = loadKnownTrackings();
   const job = buildJobPayload({
     jobId,
@@ -666,6 +699,19 @@ async function main() {
     isSyncOnly: syncOnlyArg,
     integrity: integritySummary,
   });
+
+  if (!config.dryRun && !syncOnlyArg && !forceReprintArg) {
+    const confirmed = await confirmReprintIfNeeded(job);
+    if (!confirmed) {
+      const cancelError = new Error("Impresion cancelada por posible reimpresion");
+      cancelError.code = "REPRINT_CONFIRMATION_CANCELLED";
+      throw cancelError;
+    }
+  }
+
+  if (!config.dryRun && !syncOnlyArg) {
+    printFileToSharedPrinter(printFilePath, config.printerPath);
+  }
 
   if (!config.dryRun) {
     appendHistory(job);
@@ -706,6 +752,9 @@ main().catch((error) => {
   logLine(`V2 print agent error: ${error.message || error}`);
   if (error?.code === "INTEGRITY_CHECK_FAILED") {
     process.exit(2);
+  }
+  if (error?.code === "REPRINT_CONFIRMATION_CANCELLED") {
+    process.exit(3);
   }
   process.exit(1);
 });
