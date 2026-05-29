@@ -28,6 +28,14 @@ if "%EXIT_CODE%"=="2" (
   exit /b 2
 )
 
+if "%EXIT_CODE%"=="3" (
+  echo.
+  echo IMPRESION CANCELADA: se detectaron etiquetas ya impresas.
+  echo Por seguridad NO se imprime fallback legacy.
+  pause
+  exit /b 3
+)
+
 echo.
 echo V2 termino con errores. Ejecutando fallback legacy con COPY /B...
 echo Ruta impresora fallback: %PRINTER_PATH%

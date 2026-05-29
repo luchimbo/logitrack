@@ -3,7 +3,8 @@
 Este agente local mantiene drag-and-drop sobre `imprimir-v2.bat` y agrega:
 
 - Orden de impresion por SKU (cantidad descendente, empate alfabetico)
-- Deteccion local de reprint por `tracking_number`
+- Deteccion local de reprint por `tracking_number` y `label_fingerprint`
+- Aviso antes de imprimir si el lote contiene etiquetas ya impresas
 - Cola de sincronizacion pendiente (imprime aunque falle la API)
 
 ## Uso
@@ -31,6 +32,13 @@ Si necesitas reingestar a la app sin volver a imprimir:
 - Antes de imprimir se valida que entrada y salida tengan el mismo set de etiquetas (hash/fingerprint).
 - Si hay mismatch, se bloquea la impresion y se genera un reporte `data/*.integrity.json`.
 - En ese caso no debe usarse fallback de impresion para evitar salir con paquetes incompletos.
+
+## Aviso de reimpresion
+
+- Antes de enviar a la impresora, el agente compara las etiquetas contra `data/known_trackings.json`.
+- Si encuentra trackings o fingerprints ya impresos, muestra una advertencia y solo continua si escribis `SI`.
+- Si cancelas, `imprimir-v2.bat` tampoco ejecuta el fallback legacy.
+- Para automatizaciones donde la reimpresion ya esta confirmada, se puede usar `--force-reprint` o `--yes`.
 
 Si no configuras `syncUrl`, el agente intenta automaticamente:
 
