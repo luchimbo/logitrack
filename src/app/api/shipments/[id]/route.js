@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
 
 export async function DELETE(request, { params }) {
     try {
@@ -11,29 +11,17 @@ export async function DELETE(request, { params }) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
         const workspaceId = authResult.actor.workspaceId;
-        const { id } = await params;
+        const resolvedParams = await params;
+        const id = Number(resolvedParams?.id);
 
-        const shipmentResult = await db.execute({
-            sql: "SELECT id, batch_id FROM shipments WHERE id = ? AND workspace_id = ?",
-            args: [id, workspaceId]
-        });
-
-        if (shipmentResult.rows.length === 0) {
-            return NextResponse.json({ error: "Shipment not found" }, { status: 404 });
+        if (!Number.isInteger(id) || id <= 0) {
+            return NextResponse.json({ error: "Invalid shipment id" }, { status: 400 });
         }
 
-        const batchId = shipmentResult.rows[0].batch_id;
+        const result = await deleteShipmentsByIds({ workspaceId, ids: [id] });
 
-        await db.execute({
-            sql: "DELETE FROM shipments WHERE id = ? AND workspace_id = ?",
-            args: [id, workspaceId]
-        });
-
-        if (batchId !== null && batchId !== undefined) {
-            await db.execute({
-                sql: "UPDATE daily_batches SET total_packages = (SELECT COUNT(*) FROM shipments WHERE workspace_id = ? AND batch_id = ?) WHERE id = ? AND workspace_id = ?",
-                args: [workspaceId, batchId, batchId, workspaceId]
-            });
+        if (!result.deleted) {
+            return NextResponse.json({ error: "Shipment not found" }, { status: 404 });
         }
 
         return NextResponse.json({ success: true, deleted: id });

@@ -11,13 +11,14 @@ import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 
 export default function ColectaSection() {
-    const { getTodayQueryString } = useBatch();
+    const { getTodayQueryString, reloadBatches } = useBatch();
     const [allShipments, setAllShipments] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
+    const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, removeSelectedIds, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
@@ -66,8 +67,9 @@ export default function ColectaSection() {
         setDeletingId(id);
         try {
             await api(`/shipments/${id}`, { method: 'DELETE' });
-            setShipments(prev => prev.filter(s => s.id !== id));
+            setAllShipments(prev => prev.filter(s => s.id !== id));
             removeSelectedIds(id);
+            await reloadBatches();
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
@@ -83,6 +85,31 @@ export default function ColectaSection() {
     const handleBulkDownloadLabels = async () => {
         await downloadSelectedLabels(getSelectedIdsFrom(shipments));
     };
+
+    const handleBulkDelete = async () => {
+        const selectedIds = getSelectedIdsFrom(shipments);
+        if (!selectedIds.length) return;
+        if (!confirm(`Eliminar ${selectedIds.length} envios seleccionados? Esta accion no se puede deshacer.`)) return;
+
+        setIsDeletingBulk(true);
+        try {
+            const result = await api('/shipments/bulk', {
+                method: 'DELETE',
+                body: JSON.stringify({ ids: selectedIds }),
+            });
+            setAllShipments((prev) => prev.filter((shipment) => !selectedIds.includes(shipment.id)));
+            removeSelectedIds(selectedIds);
+            await reloadBatches();
+            toast(`${result.deleted || 0} envios eliminados`, 'success');
+        } catch (err) {
+            toast('Error eliminando envios seleccionados', 'error');
+        } finally {
+            setIsDeletingBulk(false);
+        }
+    };
+
+    const selectedVisibleIds = getSelectedIdsFrom(shipments);
+    const selectedVisibleCount = selectedVisibleIds.length;
 
     const accountSelector = showAccountColumn ? (
         <select
@@ -151,14 +178,17 @@ export default function ColectaSection() {
             <div className="card" style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
                 <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {selectedShipmentIds.length > 0 ? `${selectedShipmentIds.length} envíos seleccionados` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
+                        {selectedVisibleCount > 0 ? `${selectedVisibleCount} envíos seleccionados` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
                             {areAllSelected(shipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
                         </button>
-                        <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedShipmentIds.length} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                        <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
+                        </LoadingButton>
+                        <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                            Eliminar seleccionadas
                         </LoadingButton>
                     </div>
                 </div>

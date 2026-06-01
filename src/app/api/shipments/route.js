@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
 
 export async function GET(request) {
     try {
@@ -15,6 +16,8 @@ export async function GET(request) {
         const { searchParams } = new URL(request.url);
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
+        const fromDate = searchParams.get('from');
+        const toDate = searchParams.get('to');
         const batch_id = searchParams.get('batch_id');
         const status = searchParams.get('status');
         const shipping_method = searchParams.get('shipping_method');
@@ -25,20 +28,27 @@ export async function GET(request) {
         let orderBy = "id";
         let columnPrefix = "";
 
+        // ML join helper — agrega estado MELI a shipments de origen mercadolibre
+        const mlJoin = `LEFT JOIN mercadolibre_orders mo ON mo.workspace_id = s.workspace_id AND mo.external_shipment_id = s.external_shipment_id AND s.external_provider = 'mercadolibre'`;
+        const mlCols = `, mo.shipment_status AS ml_shipment_status, mo.shipment_substatus AS ml_shipment_substatus`;
+
         if (batch_id) {
-            sql = "SELECT * FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+            sql = `SELECT s.*${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ? AND s.batch_id = ?`;
             args.push(workspaceId, batch_id);
+            columnPrefix = "s.";
         } else if (period) {
-            const range = getDateRange(period, specificDate);
-            sql = `SELECT s.* FROM shipments s
+            const range = getDateRange(period, specificDate, fromDate, toDate);
+            sql = `SELECT s.*${mlCols} FROM shipments s
+             ${mlJoin}
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
             args.push(workspaceId, workspaceId, range.from, range.to);
             orderBy = "s.id";
             columnPrefix = "s.";
         } else {
-            sql = "SELECT * FROM shipments WHERE workspace_id = ?";
+            sql = `SELECT s.*${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ?`;
             args.push(workspaceId);
+            columnPrefix = "s.";
         }
 
         if (status) {
@@ -122,22 +132,36 @@ export async function DELETE(request) {
         const batch_id = searchParams.get('batch_id');
         const period = searchParams.get('period');
         const specificDate = searchParams.get('date');
+        const fromDate = searchParams.get('from');
+        const toDate = searchParams.get('to');
 
+        let selected;
         if (batch_id) {
-            await db.execute({ sql: "DELETE FROM shipments WHERE workspace_id = ? AND batch_id = ?", args: [workspaceId, batch_id] });
+            selected = await db.execute({
+                sql: "SELECT id FROM shipments WHERE workspace_id = ? AND batch_id = ?",
+                args: [workspaceId, batch_id],
+            });
         } else if (period) {
-            const range = getDateRange(period, specificDate);
-            await db.execute({
-                sql: `DELETE FROM shipments WHERE batch_id IN (
+            const range = getDateRange(period, specificDate, fromDate, toDate);
+            selected = await db.execute({
+                sql: `SELECT id FROM shipments WHERE workspace_id = ? AND batch_id IN (
                     SELECT id FROM daily_batches WHERE workspace_id = ? AND date >= ? AND date <= ?
                 )`,
-                args: [workspaceId, range.from, range.to]
+                args: [workspaceId, workspaceId, range.from, range.to]
             });
         } else {
-            await db.execute({ sql: "DELETE FROM shipments WHERE workspace_id = ?", args: [workspaceId] });
+            selected = await db.execute({
+                sql: "SELECT id FROM shipments WHERE workspace_id = ?",
+                args: [workspaceId],
+            });
         }
 
-        return NextResponse.json({ success: true });
+        const result = await deleteShipmentsByIds({
+            workspaceId,
+            ids: (selected?.rows || []).map((row) => row.id),
+        });
+
+        return NextResponse.json({ success: true, deleted: result.deleted });
     } catch (error) {
         console.error("Error clearing shipments:", error);
         return NextResponse.json({ error: "Failed to clear shipments" }, { status: 500 });

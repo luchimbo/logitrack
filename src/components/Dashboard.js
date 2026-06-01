@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { getArgentinaDateString } from "@/lib/dateUtils";
@@ -25,8 +25,11 @@ export default function Dashboard() {
     const [appliedRangeFrom, setAppliedRangeFrom] = useState(rangeFrom);
     const [appliedRangeTo, setAppliedRangeTo] = useState(rangeTo);
     const [viewingLabelId, setViewingLabelId] = useState(null);
-    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
+    const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, removeSelectedIds, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
+    const [printingQueueIds, setPrintingQueueIds] = useState(new Set());
+    const [deletingId, setDeletingId] = useState(null);
+    const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const isMobile = useIsMobile();
     const today = getArgentinaDateString();
 
@@ -180,34 +183,35 @@ export default function Dashboard() {
         </div>
     );
 
-    useEffect(() => {
-        async function fetchData() {
-            if (isRangeIncomplete) {
-                setLoading(false);
-                setError(null);
-                setData(null);
-                return;
-            }
-
-            setLoading(true);
+    const loadData = useCallback(async ({ resetSelection = true } = {}) => {
+        if (isRangeIncomplete) {
+            setLoading(false);
             setError(null);
-            try {
-                const qs = getQueryString();
-                const [result, shipmentsData] = await Promise.all([
-                    api(`/dashboard?${qs}`),
-                    api(`/shipments?${qs}`)
-                ]);
-                setData(result);
-                setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
-                clearSelection();
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
+            setData(null);
+            return;
         }
-        fetchData();
+
+        setLoading(true);
+        setError(null);
+        try {
+            const qs = getQueryString();
+            const [result, shipmentsData] = await Promise.all([
+                api(`/dashboard?${qs}`),
+                api(`/shipments?${qs}`)
+            ]);
+            setData(result);
+            setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
+            if (resetSelection) clearSelection();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
     }, [getQueryString, isRangeIncomplete, clearSelection]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const periodLabel = () => {
         switch (period) {
@@ -297,7 +301,8 @@ export default function Dashboard() {
     const maxCarrier = carrierEntries.length > 0 ? carrierEntries[0][1] : 1;
     const maxProv = provinceEntries.length > 0 ? provinceEntries[0][1] : 1;
     const filteredShipments = shipments.filter(s => shipmentFilter === 'all' || s.shipping_method === shipmentFilter);
-    const selectedVisibleCount = getSelectedCountFrom(filteredShipments);
+    const selectedVisibleIds = getSelectedIdsFrom(filteredShipments);
+    const selectedVisibleCount = selectedVisibleIds.length;
     const allVisibleSelected = areAllSelected(filteredShipments);
 
     const toggleSelectVisible = () => {
@@ -305,8 +310,75 @@ export default function Dashboard() {
     };
 
     const handleBulkDownloadLabels = async () => {
-        await downloadSelectedLabels(getSelectedIdsFrom(filteredShipments));
+        await downloadSelectedLabels(selectedVisibleIds);
     };
+
+    const handleDeleteShipment = async (id) => {
+        const ok = window.confirm(`Eliminar el envio #${id}? Esta accion no se puede deshacer.`);
+        if (!ok) return;
+
+        setDeletingId(id);
+        try {
+            await api(`/shipments/${id}`, { method: 'DELETE' });
+            removeSelectedIds(id);
+            await loadData({ resetSelection: false });
+            toast(`Envio #${id} eliminado`, 'success');
+        } catch (err) {
+            toast('Error eliminando envio', 'error');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedVisibleIds.length) return;
+        if (!window.confirm(`Eliminar ${selectedVisibleIds.length} envios seleccionados? Esta accion no se puede deshacer.`)) return;
+
+        setIsDeletingBulk(true);
+        try {
+            const result = await api('/shipments/bulk', {
+                method: 'DELETE',
+                body: JSON.stringify({ ids: selectedVisibleIds }),
+            });
+            removeSelectedIds(selectedVisibleIds);
+            await loadData({ resetSelection: false });
+            toast(`${result.deleted || 0} envios eliminados`, 'success');
+        } catch (err) {
+            toast('Error eliminando envios seleccionados', 'error');
+        } finally {
+            setIsDeletingBulk(false);
+        }
+    };
+
+    const handlePrintQueue = async (shipmentId) => {
+        setPrintingQueueIds((prev) => new Set([...prev, shipmentId]));
+        try {
+            const res = await fetch('/api/print-queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: [shipmentId] }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al encolar impresion');
+            // Toast simple via alert para no importar dependencias extra aqui
+            console.info(`Etiqueta encolada: ${data.queue_job_id}`);
+        } catch (err) {
+            console.error('Print queue error:', err.message);
+        } finally {
+            setPrintingQueueIds((prev) => { const n = new Set(prev); n.delete(shipmentId); return n; });
+        }
+    };
+
+    function mlDispatchBadge(s) {
+        const status = String(s.ml_shipment_status || '').toLowerCase();
+        const sub = String(s.ml_shipment_substatus || '').toLowerCase();
+        const scannedStatuses = new Set(['shipped', 'delivered', 'in_transit']);
+        const scannedSubs = new Set(['picked_up', 'in_hub', 'in_transit', 'out_for_delivery', 'deliver_attempt', 'me2_in_transit', 'me2_picked_up']);
+        if (scannedStatuses.has(status) || scannedSubs.has(sub)) return { label: 'Escaneado', color: '#22c55e' };
+        if (status === 'ready_to_ship') return { label: 'Sin escanear', color: '#f97316' };
+        if (status) return { label: 'Pendiente ML', color: '#64748b' };
+        return null;
+    }
 
     return (
         <div className="section active">
@@ -502,6 +574,9 @@ export default function Dashboard() {
                                 <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                                     Descargar seleccionadas
                                 </LoadingButton>
+                                <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                                    Eliminar seleccionadas
+                                </LoadingButton>
                             </div>
 
                             {/* Desktop Table */}
@@ -517,6 +592,7 @@ export default function Dashboard() {
                                             <th>Destino</th>
                                             <th>Método</th>
                                             <th>Estado</th>
+                                            <th>ML</th>
                                             <th>Acciones</th>
                                         </tr>
                                     </thead>
@@ -539,6 +615,9 @@ export default function Dashboard() {
                                                     </td>
                                                     <td>{s.status || '—'}</td>
                                                     <td>
+                                                        {(() => { const b = mlDispatchBadge(s); return b ? <span className="badge" style={{ background: `${b.color}14`, color: b.color, border: `1px solid ${b.color}33`, fontSize: '11px' }}>{b.label}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>; })()}
+                                                    </td>
+                                                    <td>
                                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                             <button
                                                                 className="btn btn-sm"
@@ -554,6 +633,24 @@ export default function Dashboard() {
                                                                 style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                             >
                                                                 Descargar
+                                                            </LoadingButton>
+                                                            {s.raw_zpl ? (
+                                                                <LoadingButton
+                                                                    isLoading={printingQueueIds.has(s.id)}
+                                                                    className="btn btn-sm"
+                                                                    onClick={() => handlePrintQueue(s.id)}
+                                                                    style={{ background: 'var(--success-bg, #dcfce7)', color: 'var(--success, #16a34a)', border: '1px solid var(--success, #16a34a)' }}
+                                                                >
+                                                                    Imprimir
+                                                                </LoadingButton>
+                                                            ) : null}
+                                                            <LoadingButton
+                                                                isLoading={deletingId === s.id}
+                                                                className="btn btn-sm"
+                                                                onClick={() => handleDeleteShipment(s.id)}
+                                                                style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                            >
+                                                                Eliminar
                                                             </LoadingButton>
                                                         </div>
                                                     </td>
@@ -595,6 +692,12 @@ export default function Dashboard() {
                                                     <span className="mobile-card-label">Estado</span>
                                                     <span className="mobile-card-value">{s.status || '—'}</span>
                                                 </div>
+                                                {(() => { const b = mlDispatchBadge(s); return b ? (
+                                                    <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">ML</span>
+                                                        <span className="mobile-card-value"><span className="badge" style={{ background: `${b.color}14`, color: b.color, border: `1px solid ${b.color}33`, fontSize: '11px' }}>{b.label}</span></span>
+                                                    </div>
+                                                ) : null; })()}
                                             </div>
                                             <div className="mobile-card-actions">
                                                 <button
@@ -611,6 +714,24 @@ export default function Dashboard() {
                                                     style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}
                                                 >
                                                     Descargar
+                                                </LoadingButton>
+                                                {s.raw_zpl ? (
+                                                    <LoadingButton
+                                                        isLoading={printingQueueIds.has(s.id)}
+                                                        className="btn btn-sm"
+                                                        onClick={() => handlePrintQueue(s.id)}
+                                                        style={{ background: 'var(--success-bg, #dcfce7)', color: 'var(--success, #16a34a)', border: '1px solid var(--success, #16a34a)' }}
+                                                    >
+                                                        Imprimir
+                                                    </LoadingButton>
+                                                ) : null}
+                                                <LoadingButton
+                                                    isLoading={deletingId === s.id}
+                                                    className="btn btn-sm"
+                                                    onClick={() => handleDeleteShipment(s.id)}
+                                                    style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
+                                                >
+                                                    Eliminar
                                                 </LoadingButton>
                                             </div>
                                         </div>

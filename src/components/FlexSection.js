@@ -41,7 +41,7 @@ function normalizePartidoKey(value) {
 }
 
 export default function FlexSection() {
-    const { getTodayQueryString } = useBatch();
+    const { getTodayQueryString, reloadBatches } = useBatch();
     const [shipments, setShipments] = useState([]);
     const [carriers, setCarriers] = useState([]);
     const [health, setHealth] = useState(null);
@@ -51,6 +51,7 @@ export default function FlexSection() {
     const [activeView, setActiveView] = useState('summary');
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
+    const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
     const isMobile = useIsMobile();
@@ -126,6 +127,7 @@ export default function FlexSection() {
             await api(`/shipments/${id}`, { method: 'DELETE' });
             removeSelectedIds(id);
             await loadData({ silent: true });
+            await reloadBatches();
             toast(`Envío #${id} eliminado`, 'success');
         } catch (err) {
             toast('Error eliminando envío', 'error');
@@ -140,6 +142,28 @@ export default function FlexSection() {
 
     const handleBulkDownloadLabels = async (items) => {
         await downloadSelectedLabels(getSelectedIdsFrom(items));
+    };
+
+    const handleBulkDelete = async (items) => {
+        const selectedIds = getSelectedIdsFrom(items);
+        if (!selectedIds.length) return;
+        if (!window.confirm(`Eliminar ${selectedIds.length} envios seleccionados? Esta accion no se puede deshacer.`)) return;
+
+        setIsDeletingBulk(true);
+        try {
+            const result = await api('/shipments/bulk', {
+                method: 'DELETE',
+                body: JSON.stringify({ ids: selectedIds }),
+            });
+            removeSelectedIds(selectedIds);
+            await loadData({ silent: true });
+            await reloadBatches();
+            toast(`${result.deleted || 0} envios eliminados`, 'success');
+        } catch (err) {
+            toast('Error eliminando envios seleccionados', 'error');
+        } finally {
+            setIsDeletingBulk(false);
+        }
     };
 
     const renderSelectionToolbar = (items) => {
@@ -157,6 +181,9 @@ export default function FlexSection() {
                         </button>
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDownloadLabels(items)} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
+                        </LoadingButton>
+                        <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDelete(items)} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                            Eliminar seleccionadas
                         </LoadingButton>
                     </div>
                 </div>
