@@ -29,7 +29,7 @@ export async function GET(request) {
         let columnPrefix = "";
 
         // ML join helper — agrega estado MELI a shipments de origen mercadolibre
-        const mlJoin = `LEFT JOIN mercadolibre_orders mo ON mo.workspace_id = s.workspace_id AND mo.external_shipment_id = s.external_shipment_id AND s.external_provider = 'mercadolibre'`;
+        const mlJoin = `LEFT JOIN mercadolibre_orders mo ON mo.workspace_id = s.workspace_id AND mo.shipment_id = s.external_shipment_id AND s.external_provider = 'mercadolibre'`;
         const mlCols = `, mo.shipment_status AS ml_shipment_status, mo.shipment_substatus AS ml_shipment_substatus`;
 
         if (batch_id) {
