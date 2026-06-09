@@ -3,6 +3,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { parseZplFile } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
+import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 
 function json(value, fallback) {
   try {
@@ -33,6 +34,27 @@ function normalizeProduct(item = {}) {
 }
 
 function mapOrderRow(row) {
+  const leadTime = parseJson(row.lead_time_json, {});
+  const carrier = parseJson(row.carrier_json, null);
+  const history = parseJson(row.history_json, []);
+  const logisticType = row.logistic_type || '';
+  const shipmentStatus = row.shipment_status || '';
+  const shipmentSubstatus = row.shipment_substatus || '';
+  const logistics = deriveMercadoLibreLogistics({
+    shipmentId: row.shipment_id || '',
+    shipmentStatus,
+    shipmentSubstatus,
+    logisticType,
+    shippingMethod: row.shipping_method || '',
+    leadTime,
+    delays: parseJson(row.delays_json, null),
+    carrier,
+    history,
+    labelImportedAt: row.label_imported_at || '',
+    shipmentRowId: row.shipment_row_id ? Number(row.shipment_row_id) : null,
+    labelDispatchDate: row.imported_dispatch_date || '',
+  });
+
   return {
     id: row.order_id,
     connectionId: row.integration_connection_id ? Number(row.integration_connection_id) : null,
@@ -51,21 +73,27 @@ function mapOrderRow(row) {
     recipientPhone: row.recipient_phone || '',
     address: parseJson(row.address_json, {}),
     products: parseJson(row.products_json, []),
-    shipmentStatus: row.shipment_status || '',
-    shipmentSubstatus: row.shipment_substatus || '',
+    shipmentStatus,
+    shipmentSubstatus,
     logisticMode: row.logistic_mode || '',
-    logisticType: row.logistic_type || '',
+    logisticType,
     shippingMethod: row.shipping_method || '',
     trackingNumber: row.tracking_number || '',
-    leadTime: parseJson(row.lead_time_json, {}),
+    leadTime,
     delays: parseJson(row.delays_json, null),
-    carrier: parseJson(row.carrier_json, null),
-    history: parseJson(row.history_json, []),
+    carrier,
+    history,
     labelImportedAt: row.label_imported_at || '',
     shipmentRowId: row.shipment_row_id ? Number(row.shipment_row_id) : null,
     createdAt: row.created_at_external || '',
     updatedAt: row.updated_at_external || '',
     syncedAt: row.synced_at || '',
+    cutoff: logistics.cutoff?.value || '',
+    cutoffDetail: logistics.cutoff,
+    packageState: logistics.packageState,
+    printability: logistics.printability,
+    timeline: logistics.timeline,
+    dispatchState: logistics.dispatchState,
   };
 }
 
@@ -188,7 +216,16 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
   });
 }
 
-async function fetchFullOrder(client, orderSummary, siteId) {
+async function getFlexConfigCached(client, { siteId, userId, cache }) {
+  if (!client.getFlexConfigurationForUser || !siteId || !userId) return null;
+  const key = `${siteId}:${userId}`;
+  if (cache?.has(key)) return cache.get(key);
+  const config = await client.getFlexConfigurationForUser({ siteId, userId }).catch(() => null);
+  if (cache) cache.set(key, config);
+  return config;
+}
+
+async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = new Map() } = {}) {
   const order = orderSummary?.id ? await client.getOrder(orderSummary.id) : orderSummary;
   const shipmentId = order?.shipping?.id;
   let shipment = null;
@@ -206,7 +243,12 @@ async function fetchFullOrder(client, orderSummary, siteId) {
     history = await client.getShipmentHistory(shipmentId);
     if (shipment?.logistic?.type === 'self_service') {
       const assignment = await client.getFlexAssignment({ siteId: shipment?.source?.site_id || siteId, shipmentId });
-      if (assignment) carrier = { ...(carrier || {}), flex_assignment: assignment };
+      const flexConfig = await getFlexConfigCached(client, {
+        siteId: shipment?.source?.site_id || siteId,
+        userId: order?.seller?.id || shipment?.sender_id,
+        cache: flexConfigCache,
+      });
+      if (assignment || flexConfig) carrier = { ...(carrier || {}), flex_assignment: assignment, flex_config: flexConfig };
     }
   }
   return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
@@ -220,11 +262,12 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   const limit = 50;
   let totalSynced = 0;
   let pages = 0;
+  const flexConfigCache = new Map();
   while (pages < 5) {
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
     for (const orderSummary of orders) {
-      const full = await fetchFullOrder(client, orderSummary, siteId);
+      const full = await fetchFullOrder(client, orderSummary, siteId, { flexConfigCache });
       await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
       totalSynced++;
     }
@@ -237,24 +280,34 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
 
 export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', limit = 500 } = {}) {
   await ensureDb();
-  const conditions = ['workspace_id = ?'];
+  const conditions = ['mo.workspace_id = ?'];
   const args = [workspaceId];
   if (connectionId) {
-    conditions.push('integration_connection_id = ?');
+    conditions.push('mo.integration_connection_id = ?');
     args.push(Number(connectionId));
   }
   if (q) {
-    conditions.push('(order_id LIKE ? OR shipment_id LIKE ? OR recipient_name LIKE ? OR tracking_number LIKE ?)');
+    conditions.push('(mo.order_id LIKE ? OR mo.shipment_id LIKE ? OR mo.recipient_name LIKE ? OR mo.tracking_number LIKE ?)');
     args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
-  if (view === 'ready') conditions.push(`LOWER(COALESCE(shipment_status, '')) = 'ready_to_ship'`);
-  if (view === 'flex') conditions.push(`LOWER(COALESCE(logistic_type, '')) = 'self_service'`);
-  if (view === 'colecta') conditions.push(`LOWER(COALESCE(logistic_type, '')) != 'self_service'`);
-  if (view === 'delayed') conditions.push(`(LOWER(COALESCE(shipment_substatus, '')) LIKE '%delayed%' OR COALESCE(delays_json, 'null') NOT IN ('', 'null'))`);
-  if (view === 'imported') conditions.push(`label_imported_at IS NOT NULL`);
+  if (view === 'ready') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship'`);
+  if (view === 'printable') conditions.push(`(mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print', 'printed')))`);
+  if (view === 'no_label') conditions.push(`mo.label_imported_at IS NULL AND NOT (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print', 'printed'))`);
+  if (view === 'flex') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) = 'self_service'`);
+  if (view === 'colecta') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) != 'self_service'`);
+  if (view === 'delayed') conditions.push(`(LOWER(COALESCE(mo.shipment_substatus, '')) LIKE '%delayed%' OR COALESCE(mo.delays_json, 'null') NOT IN ('', 'null'))`);
+  if (view === 'imported') conditions.push(`mo.label_imported_at IS NOT NULL`);
+  if (view === 'in_transit') conditions.push(`(LOWER(COALESCE(mo.shipment_status, '')) IN ('shipped','in_transit') OR LOWER(COALESCE(mo.shipment_substatus, '')) IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier'))`);
+  if (view === 'delivered') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'delivered'`);
+  if (view === 'scanned') conditions.push(`(LOWER(COALESCE(mo.shipment_status, '')) IN ('shipped','delivered','in_transit') OR LOWER(COALESCE(mo.shipment_substatus, '')) IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier'))`);
+  if (view === 'not_scanned') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) NOT IN ('shipped','delivered','in_transit') AND LOWER(COALESCE(mo.shipment_substatus, '')) NOT IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier')`);
 
   const result = await db.execute({
-    sql: `SELECT * FROM mercadolibre_orders WHERE ${conditions.join(' AND ')} ORDER BY created_at_external DESC LIMIT ?`,
+    sql: `SELECT mo.*, s.dispatch_date AS imported_dispatch_date, s.delivery_date AS imported_delivery_date
+          FROM mercadolibre_orders mo
+          LEFT JOIN shipments s ON s.workspace_id = mo.workspace_id AND s.id = mo.shipment_row_id
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY mo.created_at_external DESC LIMIT ?`,
     args: [...args, limit],
   });
   return (result.rows || []).map(mapOrderRow);
@@ -287,22 +340,7 @@ async function extractZplLabelsFromZip(arrayBuffer) {
   return labels;
 }
 
-export async function importMercadoLibreLabel({ workspaceId, client, orderId, connectionId } = {}) {
-  await ensureDb();
-  const result = await db.execute({
-    sql: `SELECT * FROM mercadolibre_orders WHERE workspace_id = ? AND integration_connection_id = ? AND order_id = ? LIMIT 1`,
-    args: [workspaceId, Number(connectionId), String(orderId)],
-  });
-  if (!result.rows.length) throw new Error('Orden Mercado Libre no encontrada');
-  const order = mapOrderRow(result.rows[0]);
-  if (!order.shipmentId) throw new Error('La orden no tiene shipment_id');
-
-  const buffer = await client.downloadShipmentLabelsZpl([order.shipmentId]);
-  const zplFiles = await extractZplLabelsFromZip(buffer);
-  const parsed = zplFiles.flatMap((content) => parseZplFile(content));
-  const shipment = parsed.find((item) => String(item.tracking_number || '') === String(order.trackingNumber || '')) || parsed[0];
-  if (!shipment?.raw_zpl) throw new Error('No se pudo extraer ZPL de la etiqueta Mercado Libre');
-
+async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, connectionId }) {
   const today = getArgentinaDateString();
   let batchId;
   const batchResult = await db.execute({
@@ -398,7 +436,98 @@ export async function importMercadoLibreLabel({ workspaceId, client, orderId, co
   });
   await db.execute({
     sql: 'UPDATE mercadolibre_orders SET label_imported_at = CURRENT_TIMESTAMP, shipment_row_id = ? WHERE workspace_id = ? AND integration_connection_id = ? AND order_id = ?',
-    args: [shipmentRowId, workspaceId, Number(connectionId), String(orderId)],
+    args: [shipmentRowId, workspaceId, Number(connectionId), String(order.id)],
   });
   return { shipmentRowId, batchId };
+}
+
+function findParsedShipmentForOrder(parsed, order, { allowSingleFallback = true } = {}) {
+  return parsed.find((item) => String(item.tracking_number || '') === String(order.trackingNumber || ''))
+    || parsed.find((item) => String(item.sale_id || '') === String(order.id || ''))
+    || (allowSingleFallback && parsed.length === 1 ? parsed[0] : null);
+}
+
+async function importOrderWithParsedLabels({ workspaceId, order, parsed, connectionId, allowSingleFallback = true }) {
+  if (!order.shipmentId) throw new Error('La orden no tiene shipment_id');
+  const shipment = findParsedShipmentForOrder(parsed, order, { allowSingleFallback });
+  if (!shipment?.raw_zpl) throw new Error('No se pudo extraer ZPL de la etiqueta Mercado Libre');
+  return saveImportedMercadoLibreShipment({ workspaceId, order, shipment, connectionId });
+}
+
+async function getStoredMercadoLibreOrder({ workspaceId, connectionId, orderId }) {
+  const result = await db.execute({
+    sql: `SELECT mo.*, s.dispatch_date AS imported_dispatch_date, s.delivery_date AS imported_delivery_date
+          FROM mercadolibre_orders mo
+          LEFT JOIN shipments s ON s.workspace_id = mo.workspace_id AND s.id = mo.shipment_row_id
+          WHERE mo.workspace_id = ? AND mo.integration_connection_id = ? AND mo.order_id = ? LIMIT 1`,
+    args: [workspaceId, Number(connectionId), String(orderId)],
+  });
+  if (!result.rows.length) throw new Error('Orden Mercado Libre no encontrada');
+  return mapOrderRow(result.rows[0]);
+}
+
+export async function importMercadoLibreLabel({ workspaceId, client, orderId, connectionId } = {}) {
+  await ensureDb();
+  const order = await getStoredMercadoLibreOrder({ workspaceId, connectionId, orderId });
+  if (!order.shipmentId) throw new Error('La orden no tiene shipment_id');
+
+  const buffer = await client.downloadShipmentLabelsZpl([order.shipmentId]);
+  const zplFiles = await extractZplLabelsFromZip(buffer);
+  const parsed = zplFiles.flatMap((content) => parseZplFile(content));
+  return importOrderWithParsedLabels({ workspaceId, order, parsed, connectionId });
+}
+
+function skippedOrder(order, reason) {
+  return {
+    orderId: order?.id || '',
+    shipmentId: order?.shipmentId || '',
+    reason,
+    status: order?.shipmentStatus || '',
+    substatus: order?.shipmentSubstatus || '',
+  };
+}
+
+export async function importMercadoLibreLabels({ workspaceId, client, orders = [], connectionId } = {}) {
+  await ensureDb();
+  const pendingOrders = (Array.isArray(orders) ? orders : [])
+    .filter((order) => order?.shipmentId)
+    .filter((order) => !order.shipmentRowId);
+  const skipped = (Array.isArray(orders) ? orders : [])
+    .filter((order) => !order?.shipmentId)
+    .map((order) => skippedOrder(order, 'La orden no tiene shipment_id'));
+  const imported = [];
+
+  for (let i = 0; i < pendingOrders.length; i += 50) {
+    const chunk = pendingOrders.slice(i, i + 50);
+    const shipmentIds = chunk.map((order) => order.shipmentId);
+    try {
+      const buffer = await client.downloadShipmentLabelsZpl(shipmentIds);
+      const zplFiles = await extractZplLabelsFromZip(buffer);
+      const parsed = zplFiles.flatMap((content) => parseZplFile(content));
+      for (const order of chunk) {
+        try {
+          const result = await importOrderWithParsedLabels({ workspaceId, order, parsed, connectionId, allowSingleFallback: false });
+          imported.push({ orderId: order.id, ...result });
+        } catch (error) {
+          try {
+            const result = await importMercadoLibreLabel({ workspaceId, client, orderId: order.id, connectionId });
+            imported.push({ orderId: order.id, ...result });
+          } catch (individualError) {
+            skipped.push(skippedOrder(order, individualError.message || error.message || 'No se pudo importar la etiqueta'));
+          }
+        }
+      }
+    } catch (chunkError) {
+      for (const order of chunk) {
+        try {
+          const result = await importMercadoLibreLabel({ workspaceId, client, orderId: order.id, connectionId });
+          imported.push({ orderId: order.id, ...result });
+        } catch (error) {
+          skipped.push(skippedOrder(order, error.message || chunkError.message || 'No se pudo importar la etiqueta'));
+        }
+      }
+    }
+  }
+
+  return { imported, skipped };
 }

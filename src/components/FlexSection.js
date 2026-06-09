@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
 import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
+import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 // Reverse lookup: partido_id -> zone group name
 const PARTIDO_ZONES = {
@@ -52,9 +52,9 @@ export default function FlexSection() {
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+    const [isPrintingBulk, setIsPrintingBulk] = useState(false);
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
-    const isMobile = useIsMobile();
 
     const loadData = useCallback(async (opts = {}) => {
         const { silent = false } = opts;
@@ -144,6 +144,24 @@ export default function FlexSection() {
         await downloadSelectedLabels(getSelectedIdsFrom(items));
     };
 
+    const handleBulkPrintLabels = async (items) => {
+        const selectedIds = getSelectedIdsFrom(items);
+        if (!selectedIds.length) return;
+
+        setIsPrintingBulk(true);
+        try {
+            const result = await api('/print-queue', {
+                method: 'POST',
+                body: JSON.stringify({ ids: selectedIds }),
+            });
+            toast(`${result.labels_total || selectedIds.length} etiquetas en cola de impresion`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error encolando etiquetas', 'error');
+        } finally {
+            setIsPrintingBulk(false);
+        }
+    };
+
     const handleBulkDelete = async (items) => {
         const selectedIds = getSelectedIdsFrom(items);
         if (!selectedIds.length) return;
@@ -182,6 +200,9 @@ export default function FlexSection() {
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDownloadLabels(items)} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
                         </LoadingButton>
+                        <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkPrintLabels(items)} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
+                            Imprimir seleccionadas
+                        </LoadingButton>
                         <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDelete(items)} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
                             Eliminar seleccionadas
                         </LoadingButton>
@@ -198,6 +219,13 @@ export default function FlexSection() {
         red: { bg: 'var(--danger-bg)', color: 'var(--danger)', label: '🔴 Crítico' },
     };
     const style = healthStyles[healthStatus] || healthStyles.green;
+
+    const renderProductMeta = (shipment) => (
+        <div style={{ display: 'grid', gap: '4px' }}>
+            <span>{shipment.product_name}</span>
+            <MercadoLibreShipmentMeta shipment={shipment} compact />
+        </div>
+    );
 
     if (loading && !shipments.length) {
         return (
@@ -398,7 +426,7 @@ export default function FlexSection() {
                                                 <td>
                                                     <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                                 </td>
-                                                <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                                <td style={{ fontWeight: 600 }}>{renderProductMeta(s)}</td>
                                                 <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                                 <td>
                                                     <span style={{ fontFamily: "monospace", fontSize: "12px", background: "var(--bg-secondary)", padding: "3px 6px", borderRadius: "4px", border: "1px solid var(--border)" }}>
@@ -452,7 +480,10 @@ export default function FlexSection() {
                                             <div key={s.id} className="mobile-card">
                                         <div className="mobile-card-header">
                                             <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
-                                            <div className="mobile-card-title">{s.product_name}</div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div className="mobile-card-title">{s.product_name}</div>
+                                                <MercadoLibreShipmentMeta shipment={s} compact />
+                                            </div>
                                         </div>
                                         <div className="mobile-card-body">
                                             <div className="mobile-card-row">
@@ -545,7 +576,7 @@ export default function FlexSection() {
                                             <td>
                                                 <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                             </td>
-                                            <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                            <td style={{ fontWeight: 600 }}>{renderProductMeta(s)}</td>
                                             <td>{s.city || 'N/A'}, {s.province || ''} · CP {s.postal_code || ''}</td>
                                             <td style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                                                 <button
@@ -594,7 +625,10 @@ export default function FlexSection() {
                                 <div key={s.id} className="mobile-card">
                                     <div className="mobile-card-header">
                                         <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
-                                        <div className="mobile-card-title">{s.product_name}</div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div className="mobile-card-title">{s.product_name}</div>
+                                            <MercadoLibreShipmentMeta shipment={s} compact />
+                                        </div>
                                     </div>
                                     <div className="mobile-card-body">
                                         <div className="mobile-card-row">
@@ -665,7 +699,7 @@ export default function FlexSection() {
                                         <td>
                                             <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                         </td>
-                                        <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                        <td style={{ fontWeight: 600 }}>{renderProductMeta(s)}</td>
                                         <td>{s.city || 'N/A'}, {s.province || ''}</td>
                                         <td>{s.partido || '—'}</td>
                                         <td style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
@@ -715,7 +749,10 @@ export default function FlexSection() {
                             <div key={s.id} className="mobile-card">
                                 <div className="mobile-card-header">
                                     <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
-                                    <div className="mobile-card-title">{s.product_name}</div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div className="mobile-card-title">{s.product_name}</div>
+                                        <MercadoLibreShipmentMeta shipment={s} compact />
+                                    </div>
                                 </div>
                                 <div className="mobile-card-body">
                                     <div className="mobile-card-row">

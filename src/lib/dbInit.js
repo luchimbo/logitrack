@@ -440,7 +440,34 @@ export async function initDb() {
       last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id, address_key)
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_geocode_cache_workspace_key ON geocode_cache(workspace_id, address_key)`
+    `CREATE INDEX IF NOT EXISTS idx_geocode_cache_workspace_key ON geocode_cache(workspace_id, address_key)`,
+    `CREATE TABLE IF NOT EXISTS print_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      queue_job_id TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      shipment_ids_json TEXT NOT NULL,
+      zpl TEXT NOT NULL,
+      labels_total INTEGER DEFAULT 0,
+      requested_by INTEGER,
+      claimed_at DATETIME,
+      printed_at DATETIME,
+      error TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_print_queue_workspace_status ON print_queue(workspace_id, status)`,
+    `CREATE TABLE IF NOT EXISTS mercadolibre_invites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_by INTEGER,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_invites_token ON mercadolibre_invites(token)`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_invites_workspace ON mercadolibre_invites(workspace_id)`
   ];
 
   for (const stmt of statements) {

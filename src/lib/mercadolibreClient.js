@@ -82,12 +82,67 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=zpl2`, { responseType: 'arrayBuffer' });
   }
 
+  async function downloadShipmentLabelsZplBatches(shipmentIds, chunkSize = 50) {
+    const ids = Array.isArray(shipmentIds)
+      ? [...new Set(shipmentIds.map((id) => String(id || '').trim()).filter(Boolean))]
+      : [];
+    const batches = [];
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const buffer = await downloadShipmentLabelsZpl(chunk);
+      batches.push({ shipmentIds: chunk, buffer });
+    }
+    return batches;
+  }
+
   async function getFlexAssignment({ siteId, shipmentId }) {
     try {
       return await request(`/flex/sites/${siteId}/shipments/${shipmentId}/assignment/v1`);
     } catch {
       return null;
     }
+  }
+
+  async function getFlexSubscriptions({ siteId, userId }) {
+    try {
+      return await request(`/shipping/flex/sites/${siteId}/users/${userId}/subscriptions/v1`);
+    } catch {
+      return null;
+    }
+  }
+
+  async function getFlexConfiguration({ siteId, userId, serviceId }) {
+    if (!siteId || !userId || !serviceId) return null;
+    const query = `{
+      configuration (user_id: ${Number(userId)}, service_id: ${Number(serviceId)}) {
+        delivery_window
+        delivery_ranges
+        zones
+        disabled_features
+      }
+    }`;
+    try {
+      return await request(`/shipping/flex/sites/${siteId}/configuration/v3`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async function getFlexConfigurationForUser({ siteId, userId }) {
+    const subscriptions = await getFlexSubscriptions({ siteId, userId });
+    const list = Array.isArray(subscriptions)
+      ? subscriptions
+      : Array.isArray(subscriptions?.subscriptions)
+        ? subscriptions.subscriptions
+        : [];
+    const active = list.find((item) => item?.service_id || item?.serviceId) || list[0];
+    const serviceId = active?.service_id || active?.serviceId;
+    if (!serviceId) return null;
+    return getFlexConfiguration({ siteId, userId, serviceId });
   }
 
   return {
@@ -101,6 +156,10 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     getShipmentCarrier,
     getShipmentHistory,
     downloadShipmentLabelsZpl,
+    downloadShipmentLabelsZplBatches,
     getFlexAssignment,
+    getFlexSubscriptions,
+    getFlexConfiguration,
+    getFlexConfigurationForUser,
   };
 }

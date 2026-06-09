@@ -3,12 +3,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
-import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
 import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import { resolveAtoRemitentes, accountForShipment } from "@/lib/accountDetection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
+import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 export default function ColectaSection() {
     const { getTodayQueryString, reloadBatches } = useBatch();
@@ -19,9 +19,9 @@ export default function ColectaSection() {
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+    const [isPrintingBulk, setIsPrintingBulk] = useState(false);
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, clearSelection, removeSelectedIds, getSelectedIdsFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
-    const isMobile = useIsMobile();
 
     useEffect(() => {
         async function fetchData() {
@@ -86,6 +86,24 @@ export default function ColectaSection() {
         await downloadSelectedLabels(getSelectedIdsFrom(shipments));
     };
 
+    const handleBulkPrintLabels = async () => {
+        const selectedIds = getSelectedIdsFrom(shipments);
+        if (!selectedIds.length) return;
+
+        setIsPrintingBulk(true);
+        try {
+            const result = await api('/print-queue', {
+                method: 'POST',
+                body: JSON.stringify({ ids: selectedIds }),
+            });
+            toast(`${result.labels_total || selectedIds.length} etiquetas en cola de impresion`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error encolando etiquetas', 'error');
+        } finally {
+            setIsPrintingBulk(false);
+        }
+    };
+
     const handleBulkDelete = async () => {
         const selectedIds = getSelectedIdsFrom(shipments);
         if (!selectedIds.length) return;
@@ -110,6 +128,13 @@ export default function ColectaSection() {
 
     const selectedVisibleIds = getSelectedIdsFrom(shipments);
     const selectedVisibleCount = selectedVisibleIds.length;
+
+    const renderProductMeta = (shipment) => (
+        <div style={{ display: 'grid', gap: '4px' }}>
+            <span>{shipment.product_name}</span>
+            <MercadoLibreShipmentMeta shipment={shipment} compact />
+        </div>
+    );
 
     const accountSelector = showAccountColumn ? (
         <select
@@ -187,6 +212,9 @@ export default function ColectaSection() {
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
                             Descargar seleccionadas
                         </LoadingButton>
+                        <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkPrintLabels} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
+                            Imprimir seleccionadas
+                        </LoadingButton>
                         <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
                             Eliminar seleccionadas
                         </LoadingButton>
@@ -216,7 +244,7 @@ export default function ColectaSection() {
                                     <td>
                                         <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
                                     </td>
-                                    <td style={{ fontWeight: 600 }}>{s.product_name}</td>
+                                    <td style={{ fontWeight: 600 }}>{renderProductMeta(s)}</td>
                                     {showAccountColumn && <td>{accountOf(s)}</td>}
                                     <td>{s.recipient_name || 'N/A'}</td>
                                     <td>{s.city || 'N/A'}, {s.province || ''}</td>
@@ -259,7 +287,10 @@ export default function ColectaSection() {
                         <div key={s.id} className="mobile-card">
                             <div className="mobile-card-header">
                                 <input type="checkbox" checked={selectedShipmentIds.includes(s.id)} onChange={() => toggleShipmentSelection(s.id)} aria-label={`Seleccionar etiqueta ${s.id}`} />
-                                <div className="mobile-card-title">{s.product_name}</div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="mobile-card-title">{s.product_name}</div>
+                                    <MercadoLibreShipmentMeta shipment={s} compact />
+                                </div>
                             </div>
                             <div className="mobile-card-body">
                                 {showAccountColumn && (

@@ -8,10 +8,12 @@ export function isMercadoLibreOAuthConfigured() {
   return Boolean(MELI_CLIENT_ID && MELI_CLIENT_SECRET && MELI_CALLBACK_URL);
 }
 
-export function encodeMercadoLibreState({ workspaceId, appUserId }) {
+export function encodeMercadoLibreState({ workspaceId, appUserId, isInvite = false, inviteToken = '' }) {
   return encrypt(JSON.stringify({
     workspaceId,
     appUserId,
+    isInvite,
+    inviteToken,
     expiresAt: Date.now() + 10 * 60 * 1000,
   }));
 }

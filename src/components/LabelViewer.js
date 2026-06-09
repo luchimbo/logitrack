@@ -8,6 +8,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [imageUrl, setImageUrl] = useState(null);
+    const [printing, setPrinting] = useState(false);
 
     const loadLabel = useCallback(async () => {
         if (!shipmentId) return;
@@ -33,12 +34,15 @@ export default function LabelViewer({ shipmentId, onClose }) {
 
     useEffect(() => {
         loadLabel();
+    }, [loadLabel]);
+
+    useEffect(() => {
         return () => {
             if (imageUrl) {
                 URL.revokeObjectURL(imageUrl);
             }
         };
-    }, [loadLabel]);
+    }, [imageUrl]);
 
     useEffect(() => {
         if (!shipmentId) return;
@@ -73,7 +77,23 @@ export default function LabelViewer({ shipmentId, onClose }) {
         }
     };
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
+        if (!shipmentId) return;
+        setPrinting(true);
+        try {
+            const result = await api('/print-queue', {
+                method: 'POST',
+                body: JSON.stringify({ ids: [shipmentId] }),
+            });
+            toast(`Etiqueta en cola de impresion${result.queue_job_id ? ` (${result.queue_job_id})` : ''}`, 'success');
+        } catch (err) {
+            toast(err.message || 'Error encolando etiqueta', 'error');
+        } finally {
+            setPrinting(false);
+        }
+    };
+
+    const handlePreviewPrint = () => {
         if (!imageUrl) return;
         const printWindow = window.open("", "_blank");
         if (!printWindow) {
@@ -123,7 +143,10 @@ export default function LabelViewer({ shipmentId, onClose }) {
                         <button className="btn btn-sm" onClick={handleDownload} disabled={!imageUrl}>
                             Descargar ZPL
                         </button>
-                        <button className="btn btn-primary btn-sm" onClick={handlePrint} disabled={!imageUrl}>
+                        <button className="btn btn-sm" onClick={handlePreviewPrint} disabled={!imageUrl}>
+                            Imprimir vista
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={handlePrint} disabled={printing || !shipmentId}>
                             Imprimir
                         </button>
                     </div>

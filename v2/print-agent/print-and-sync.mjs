@@ -447,9 +447,43 @@ function getReprintSummary(job) {
   };
 }
 
-async function confirmReprintIfNeeded(job) {
+function formatModeLabel({ config, syncOnlyArg }) {
+  if (config.dryRun) return "DRY-RUN (no imprime ni sube)";
+  if (syncOnlyArg) return "SOLO CARGA A GEOMODI (no imprime)";
+  return "IMPRIMIR + CARGAR A GEOMODI";
+}
+
+function logJobSummary(job, { config, syncOnlyArg }) {
+  const reprintSummary = getReprintSummary(job);
+  logLine("");
+  logLine("Resumen del lote");
+  logLine("-----------------");
+  logLine(`Modo: ${formatModeLabel({ config, syncOnlyArg })}`);
+  logLine(`Workspace key: ${job.workspace_key || "NO CONFIGURADO"}`);
+  logLine(`Destino GeoModi: ${config.syncUrl || "NO CONFIGURADO"}`);
+  if (!syncOnlyArg) {
+    logLine(`Impresora: ${job.printer_path || "NO CONFIGURADA"}`);
+  }
+  logLine(`Archivos: ${job.source_files.join(", ") || "-"}`);
+  logLine(`Etiquetas detectadas: ${job.totals.labels_total}`);
+  logLine(`SKUs unicos: ${job.totals.skus_total}`);
+  logLine(`Duplicadas/reimpresiones locales: ${reprintSummary.count}`);
+  if (reprintSummary.trackingExamples.length) {
+    logLine(`Trackings repetidos: ${reprintSummary.trackingExamples.join(", ")}`);
+  }
+  if (job.sku_order.length) {
+    const skuTop = job.sku_order
+      .slice(0, 10)
+      .map((x) => `${x.sku}:${x.count}`)
+      .join(", ");
+    logLine(`Top SKUs: ${skuTop}`);
+  }
+  logLine("-----------------");
+}
+
+function throwIfReprintBlocked(job, actionLabel) {
   const summary = getReprintSummary(job);
-  if (summary.count === 0) return true;
+  if (summary.count === 0) return;
 
   logLine("");
   logLine("ATENCION: este lote contiene etiquetas que ya fueron impresas antes.");
@@ -457,15 +491,12 @@ async function confirmReprintIfNeeded(job) {
   if (summary.trackingExamples.length) {
     logLine(`Trackings repetidos (muestra): ${summary.trackingExamples.join(", ")}`);
   }
-  logLine('Para imprimir de todas formas, escribi "SI" y presiona Enter.');
+  logLine(`${actionLabel} cancelada: no se permiten duplicados desde este .bat.`);
+  logLine('Si realmente necesitas forzar una reimpresion, ejecutar manualmente con --force-reprint.');
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = await rl.question("Confirmar reimpresion: ");
-    return answer.trim().toUpperCase() === "SI";
-  } finally {
-    rl.close();
-  }
+  const cancelError = new Error(`${actionLabel} cancelada por etiquetas duplicadas/reimpresas`);
+  cancelError.code = "REPRINT_CONFIRMATION_CANCELLED";
+  throw cancelError;
 }
 
 async function syncJob(job, config) {
@@ -587,6 +618,7 @@ async function main() {
   const dryRunArg = process.argv.includes("--dry-run");
   const retryOnlyArg = process.argv.includes("--retry-only");
   const syncOnlyArg = process.argv.includes("--sync-only");
+  const blockReprintsArg = process.argv.includes("--block-reprints");
   const forceReprintArg = process.argv.includes("--force-reprint") || process.argv.includes("--yes");
   if (dryRunArg) config.dryRun = true;
   if (syncOnlyArg) config.dryRun = false;
@@ -702,16 +734,18 @@ async function main() {
     config,
   });
 
-  if (!config.dryRun && !syncOnlyArg && !forceReprintArg) {
-    const confirmed = await confirmReprintIfNeeded(job);
-    if (!confirmed) {
-      const cancelError = new Error("Impresion cancelada por posible reimpresion");
-      cancelError.code = "REPRINT_CONFIRMATION_CANCELLED";
-      throw cancelError;
+  logJobSummary(job, { config, syncOnlyArg });
+
+  if (!config.dryRun && !forceReprintArg) {
+    if (syncOnlyArg || blockReprintsArg) {
+      throwIfReprintBlocked(job, syncOnlyArg ? "Carga a GeoModi" : "Impresion");
+    } else {
+      throwIfReprintBlocked(job, "Impresion");
     }
   }
 
   if (!config.dryRun && !syncOnlyArg) {
+    logLine(`Enviando a impresora: ${config.printerPath}`);
     printFileToSharedPrinter(printFilePath, config.printerPath);
   }
 
@@ -757,6 +791,18 @@ async function main() {
       ? `inserted=${syncResult.body.shipments_inserted ?? "?"}, skipped=${syncResult.body.shipments_skipped ?? "?"}, recovered=${syncResult.body.shipments_recovered_from_reprint ?? "?"}, duplicate=${syncResult.body.duplicate === true ? "yes" : "no"}`
       : "sin metrics";
     logLine(`Sync OK (${syncResult.url}) ${metrics}`);
+    if (syncResult.body) {
+      logLine("");
+      logLine("Resultado GeoModi");
+      logLine("-----------------");
+      logLine(`Job ID: ${syncResult.body.job_id || job.job_id}`);
+      logLine(`Batch ID: ${syncResult.body.batch_id ?? "-"}`);
+      logLine(`Etiquetas insertadas: ${syncResult.body.shipments_inserted ?? "?"}`);
+      logLine(`Etiquetas omitidas: ${syncResult.body.shipments_skipped ?? "?"}`);
+      logLine(`Recuperadas de reimpresion: ${syncResult.body.shipments_recovered_from_reprint ?? "?"}`);
+      logLine(`Job duplicado: ${syncResult.body.duplicate === true ? "si" : "no"}`);
+      logLine("-----------------");
+    }
   }
 
   // Si el lote tenia reimpresiones, no cerrar de una: dar tiempo a leer el resumen.
@@ -776,13 +822,192 @@ async function pauseBeforeClosing(reprints, total) {
   }
 }
 
-main().catch((error) => {
-  logLine(`V2 print agent error: ${error.message || error}`);
-  if (error?.code === "INTEGRITY_CHECK_FAILED") {
-    process.exit(2);
+// ─── Modo watch: sondea la cola del servidor e imprime jobs encolados ────────
+
+function getQueueBaseUrl(config) {
+  const candidates = getSyncUrlCandidates(config);
+  // Derivar base URL a partir de la syncUrl (que apunta a /api/v2/print-jobs/intake)
+  for (const url of candidates) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      // skip
+    }
   }
-  if (error?.code === "REPRINT_CONFIRMATION_CANCELLED") {
-    process.exit(3);
+  return "http://localhost:3000";
+}
+
+async function claimQueueJob(baseUrl, config) {
+  const url = `${baseUrl}/api/print-queue/agent?workspace_key=${encodeURIComponent(config.workspaceKey || "")}`;
+  const headers = {};
+  if (config.syncToken) headers["x-print-agent-token"] = config.syncToken;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.job || null;
+  } catch {
+    clearTimeout(timeout);
+    return null;
   }
-  process.exit(1);
-});
+}
+
+async function ackQueueJob(baseUrl, config, queueJobId, ok, errorMsg) {
+  const url = `${baseUrl}/api/print-queue/agent`;
+  const headers = { "Content-Type": "application/json" };
+  if (config.syncToken) headers["x-print-agent-token"] = config.syncToken;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ queue_job_id: queueJobId, ok, error: errorMsg || null }),
+      signal: controller.signal,
+    });
+  } catch {
+    // ignorar fallo de ack
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function processQueueJob(queueJob, config, knownTrackingIndex) {
+  const tmpPath = path.join(DATA_DIR, `queue-${queueJob.queue_job_id}.txt`);
+  fs.writeFileSync(tmpPath, queueJob.zpl, "utf8");
+
+  const text = decodeLabelText(fs.readFileSync(tmpPath));
+  const blocks = extractZplBlocks(text);
+  if (!blocks.length) {
+    fs.unlinkSync(tmpPath);
+    throw new Error("No se detectaron bloques ZPL en el job de cola");
+  }
+
+  let parserMisses = 0;
+  const extracted = blocks.map((rawBlock) => {
+    const { parsed, parserMatched } = buildParsedLabel(rawBlock);
+    if (!parserMatched) parserMisses += 1;
+    return {
+      sourceFile: `queue:${queueJob.queue_job_id}`,
+      rawBlock,
+      fingerprint: computeLabelFingerprint(rawBlock),
+      parsed,
+      skuNorm: normalizeSku(parsed.sku),
+    };
+  });
+
+  const { ordered, sortedGroups } = sortLabelsBySkuFrequency(extracted);
+  const jobId = buildJobId();
+  const printContent = buildPrintFileContent(ordered);
+  const outputBlocks = extractZplBlocks(printContent);
+  const integritySummary = computeIntegritySummary(
+    extracted.map((x) => x.rawBlock),
+    outputBlocks,
+    parserMisses
+  );
+
+  if (!integritySummary.passed) {
+    fs.unlinkSync(tmpPath);
+    throw new Error("Integrity check failed: mismatch entrada/salida");
+  }
+
+  const printFilePath = path.join(DATA_DIR, `${jobId}.txt`);
+  fs.writeFileSync(printFilePath, printContent, "utf8");
+  fs.unlinkSync(tmpPath);
+
+  logLine(
+    `[watch] Job ${queueJob.queue_job_id}: ${ordered.length} etiquetas, integridad OK`
+  );
+
+  const job = buildJobPayload({
+    jobId,
+    fileArgs: [`queue:${queueJob.queue_job_id}`],
+    sortedGroups,
+    orderedLabels: ordered,
+    printerPath: config.printerPath,
+    printFilePath,
+    knownTrackingIndex,
+    isDryRun: config.dryRun,
+    isSyncOnly: false,
+    integrity: integritySummary,
+    config,
+  });
+
+  if (!config.dryRun) {
+    printFileToSharedPrinter(printFilePath, config.printerPath);
+    logLine(`[watch] Impresion enviada a ${config.printerPath}`);
+    appendHistory(job);
+    updateKnownTrackingsAfterPrint(job, knownTrackingIndex);
+    saveKnownTrackings(knownTrackingIndex);
+  } else {
+    logLine(`[watch] Dry-run: impresion omitida`);
+  }
+
+  const syncResult = await syncJob(job, config);
+  if (!syncResult.ok) {
+    queueJobForRetry(job, syncResult.reason);
+    logLine(`[watch] Sync pendiente: ${syncResult.reason}`);
+  } else {
+    logLine(`[watch] Sync OK`);
+  }
+
+  return job;
+}
+
+async function watchLoop(config) {
+  const baseUrl = getQueueBaseUrl(config);
+  logLine(`[watch] Iniciando modo cola. Base URL: ${baseUrl}`);
+  logLine(`[watch] Workspace key: ${config.workspaceKey ? "configurado" : "NO CONFIGURADO"}`);
+  logLine(`[watch] Presionar Ctrl+C para detener.`);
+
+  const knownTrackingIndex = loadKnownTrackings();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const queueJob = await claimQueueJob(baseUrl, config);
+      if (queueJob) {
+        logLine(`[watch] Job recibido: ${queueJob.queue_job_id} (${queueJob.labels_total} etiquetas)`);
+        try {
+          await processQueueJob(queueJob, config, knownTrackingIndex);
+          await ackQueueJob(baseUrl, config, queueJob.queue_job_id, true, null);
+        } catch (err) {
+          logLine(`[watch] Error procesando job: ${err.message}`);
+          await ackQueueJob(baseUrl, config, queueJob.queue_job_id, false, err.message);
+        }
+      }
+    } catch (err) {
+      logLine(`[watch] Error en ciclo: ${err.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+  }
+}
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+const watchMode = process.argv.includes("--watch");
+
+if (watchMode) {
+  ensureDataDir();
+  const config = loadConfig();
+  if (process.argv.includes("--dry-run")) config.dryRun = true;
+  watchLoop(config).catch((error) => {
+    logLine(`[watch] Error fatal: ${error.message || error}`);
+    process.exit(1);
+  });
+} else {
+  main().catch((error) => {
+    logLine(`V2 print agent error: ${error.message || error}`);
+    if (error?.code === "INTEGRITY_CHECK_FAILED") {
+      process.exit(2);
+    }
+    if (error?.code === "REPRINT_CONFIRMATION_CANCELLED") {
+      process.exit(3);
+    }
+    process.exit(1);
+  });
+}

@@ -18,6 +18,17 @@ function shipmentIdFromResource(resource = '') {
   return match?.[1] || '';
 }
 
+async function findStoredOrderIdByShipment({ workspaceId, connectionId, shipmentId }) {
+  if (!shipmentId) return '';
+  const result = await db.execute({
+    sql: `SELECT order_id FROM mercadolibre_orders
+          WHERE workspace_id = ? AND integration_connection_id = ? AND shipment_id = ?
+          ORDER BY id DESC LIMIT 1`,
+    args: [workspaceId, Number(connectionId), String(shipmentId)],
+  });
+  return result.rows?.[0]?.order_id ? String(result.rows[0].order_id) : '';
+}
+
 export async function POST(request) {
   try {
     await ensureDb();
@@ -54,6 +65,10 @@ export async function POST(request) {
       const externalReference = String(shipment?.external_reference || '');
       const possibleOrderId = externalReference && /^\d+$/.test(externalReference) ? externalReference : '';
       if (possibleOrderId) order = await client.getOrder(possibleOrderId).catch(() => null);
+      if (!order) {
+        const storedOrderId = await findStoredOrderIdByShipment({ workspaceId: connection.workspaceId, connectionId: connection.id, shipmentId });
+        if (storedOrderId) order = await client.getOrder(storedOrderId).catch(() => null);
+      }
     }
 
     const shipmentId = order?.shipping?.id || shipment?.id;
@@ -64,6 +79,14 @@ export async function POST(request) {
       delays = await client.getShipmentDelays(shipmentId);
       carrier = await client.getShipmentCarrier(shipmentId);
       history = await client.getShipmentHistory(shipmentId);
+      if (shipment?.logistic?.type === 'self_service') {
+        const siteId = shipment?.source?.site_id || connection.config.siteId || 'MLA';
+        const assignment = await client.getFlexAssignment({ siteId, shipmentId }).catch(() => null);
+        const flexConfig = client.getFlexConfigurationForUser
+          ? await client.getFlexConfigurationForUser({ siteId, userId: order?.seller?.id || connection.externalStoreId }).catch(() => null)
+          : null;
+        if (assignment || flexConfig) carrier = { ...(carrier || {}), flex_assignment: assignment, flex_config: flexConfig };
+      }
     }
 
     if (order) {
