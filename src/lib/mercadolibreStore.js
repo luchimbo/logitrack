@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { assignCarrier } from '@/lib/zoneMapper';
-import { parseZplFile } from '@/lib/zplParser';
+import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 
@@ -360,7 +360,24 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     batchId = Number(inserted.lastInsertRowid);
   }
 
-  if (shipment.shipping_method === 'flex' && shipment.partido) {
+  const isFlex = shipment.shipping_method === 'flex' || order.logisticType === 'self_service' || order.shippingMethod === 'flex';
+  if (isFlex) {
+    shipment.shipping_method = 'flex';
+    if (!shipment.partido) {
+      const addr = order.address || {};
+      const city = addr.city?.name || addr.municipality?.name || '';
+      const province = addr.state?.name || '';
+      if (city || province) {
+        shipment.partido = resolvePartidoFromGeo(city, province);
+      }
+      if (!shipment.partido && addr.zip_code) {
+        shipment.postal_code = shipment.postal_code || addr.zip_code;
+      }
+    }
+    if (!shipment.city) shipment.city = order.address?.city?.name || '';
+    if (!shipment.province) shipment.province = order.address?.state?.name || '';
+  }
+  if (shipment.partido) {
     shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
   }
 

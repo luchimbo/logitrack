@@ -166,8 +166,10 @@ export default function MercadoLibreSection({ currentUser }) {
     return orders.filter((order) => keys.has(orderKey(order)));
   }, [orders, selectedOrderKeys]);
 
+  const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = orders.length > 0 && orders.every((order) => selectedOrderKeys.includes(orderKey(order)));
+  const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
 
   const loadStatus = useCallback(async () => {
     try {
@@ -245,6 +247,14 @@ export default function MercadoLibreSection({ currentUser }) {
     setSelectedOrderKeys((prev) => {
       if (visibleKeys.every((key) => prev.includes(key))) return prev.filter((key) => !visibleKeys.includes(key));
       return [...new Set([...prev, ...visibleKeys])];
+    });
+  };
+
+  const togglePrintableSelection = () => {
+    const printableKeys = printableOrders.map(orderKey);
+    setSelectedOrderKeys((prev) => {
+      if (printableKeys.every((key) => prev.includes(key))) return prev.filter((key) => !printableKeys.includes(key));
+      return [...new Set([...prev, ...printableKeys])];
     });
   };
 
@@ -449,23 +459,38 @@ export default function MercadoLibreSection({ currentUser }) {
           </div>
 
           <div className="card" style={{ marginBottom: "16px", padding: "14px", background: "var(--bg-secondary)" }}>
-            <div className="flex-between" style={{ gap: "12px", flexWrap: "wrap" }}>
-              <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${orders.length} ventas visibles`}
-              </div>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={toggleVisibleSelection} disabled={!orders.length}>
-                  {allVisibleSelected ? "Deseleccionar visibles" : "Seleccionar visibles"}
-                </button>
-                <button type="button" className="btn btn-sm" onClick={() => runBulk("import", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
-                  {bulkAction === "import" ? "Importando..." : "Importar seleccionadas"}
-                </button>
-                <button type="button" className="btn btn-sm" onClick={() => runBulk("print", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
-                  {bulkAction === "print" ? "Encolando..." : "Imprimir seleccionadas"}
-                </button>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => runBulk("import_and_print", orders)} disabled={!orders.length || Boolean(bulkAction)}>
-                  {bulkAction === "import_and_print" ? "Procesando..." : "Importar e imprimir visibles"}
-                </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {printableOrders.length > 0 && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#f97316" }}>
+                    🖨️ {printableOrders.length} lista{printableOrders.length === 1 ? "" : "s"} para imprimir
+                  </span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={togglePrintableSelection} disabled={Boolean(bulkAction)}>
+                    {allPrintableSelected ? "Deseleccionar" : "Seleccionar"}
+                  </button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => runBulk("import_and_print", printableOrders)} disabled={Boolean(bulkAction)}>
+                    {bulkAction === "import_and_print" ? "Imprimiendo..." : "Imprimir"}
+                  </button>
+                </div>
+              )}
+              <div className="flex-between" style={{ gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
+                  {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${orders.length} ventas visibles`}
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={toggleVisibleSelection} disabled={!orders.length}>
+                    {allVisibleSelected ? "Deseleccionar visibles" : "Seleccionar visibles"}
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => runBulk("import", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
+                    {bulkAction === "import" ? "Importando..." : "Importar seleccionadas"}
+                  </button>
+                  <button type="button" className="btn btn-sm" onClick={() => runBulk("print", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
+                    {bulkAction === "print" ? "Encolando..." : "Imprimir seleccionadas"}
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => runBulk("import_and_print", orders)} disabled={!orders.length || Boolean(bulkAction)}>
+                    {bulkAction === "import_and_print" ? "Procesando..." : "Importar e imprimir visibles"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

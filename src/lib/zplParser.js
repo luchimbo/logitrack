@@ -791,6 +791,8 @@ function parseColectaLabel(content) {
     return shipment;
 }
 
+export { resolvePartidoFromGeo };
+
 export function parseZplFile(content) {
     const labels = [];
     // Remove BOM if present and normalize line endings
