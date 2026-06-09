@@ -2,9 +2,18 @@ import { encrypt, decrypt } from '@/lib/cryptoUtils';
 
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
+function toUrlSafe(base64) {
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function fromUrlSafe(token) {
+  const s = token.replace(/-/g, '+').replace(/_/g, '/');
+  return s + '='.repeat((4 - s.length % 4) % 4);
+}
+
 export function createMercadoLibreInvite({ workspaceId }) {
   const expiresAt = Date.now() + INVITE_TTL_MS;
-  const token = encrypt(JSON.stringify({ workspaceId, expiresAt, v: 1 }));
+  const token = toUrlSafe(encrypt(JSON.stringify({ workspaceId, expiresAt, v: 1 })));
   return { token, expiresAt: new Date(expiresAt).toISOString() };
 }
 
@@ -12,7 +21,7 @@ export function validateMercadoLibreInvite(token) {
   if (!token) throw new Error('Token inválido');
   let data;
   try {
-    data = JSON.parse(decrypt(String(token).replace(/ /g, '+')));
+    data = JSON.parse(decrypt(fromUrlSafe(String(token))));
   } catch {
     throw new Error('El link de invitación es inválido o ya expiró');
   }
