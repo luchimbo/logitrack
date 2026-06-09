@@ -19,6 +19,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/shopify(.*)",
   "/api/webhooks/tiendanube(.*)",
   "/api/webhooks/mercadolibre(.*)",
+  "/connect/mercadolibre(.*)",
+  "/api/connect/mercadolibre(.*)",
   "/api/v2/print-jobs/intake(.*)",
   "/api/v2/print-jobs/backfill(.*)",
   "/api/v2/print-jobs/recover(.*)",
