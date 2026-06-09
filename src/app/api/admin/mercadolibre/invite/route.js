@@ -14,9 +14,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'OAuth de Mercado Libre no está configurado en el servidor' }, { status: 500 });
     }
 
-    const { token, expiresAt } = await createMercadoLibreInvite({
+    const { token, expiresAt } = createMercadoLibreInvite({
       workspaceId: authResult.actor.workspaceId,
-      createdBy: authResult.actor.appUserId || null,
     });
 
     return NextResponse.json({

@@ -1,5 +1,7 @@
 import { validateMercadoLibreInvite } from '@/lib/mercadolibreInvite';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = { title: 'Conectar cuenta de Mercado Libre' };
 
 const styles = {
@@ -13,7 +15,7 @@ const styles = {
   error: { background: '#fff1f0', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', color: '#dc2626', fontSize: '14px', marginBottom: '24px' },
 };
 
-export default async function MercadoLibreConnectPage({ params, searchParams }) {
+export default function MercadoLibreConnectPage({ params, searchParams }) {
   const token = params?.token || '';
   const errorParam = searchParams?.error || '';
 
@@ -23,7 +25,7 @@ export default async function MercadoLibreConnectPage({ params, searchParams }) 
 
   if (!errorParam) {
     try {
-      const invite = await validateMercadoLibreInvite(token);
+      const invite = validateMercadoLibreInvite(token);
       valid = true;
       expiresAt = invite.expires_at || '';
     } catch {

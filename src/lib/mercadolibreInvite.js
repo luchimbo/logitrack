@@ -1,35 +1,26 @@
-import crypto from 'crypto';
-import { db } from '@/lib/db';
-import { ensureDb } from '@/lib/ensureDb';
+import { encrypt, decrypt } from '@/lib/cryptoUtils';
 
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
-export async function createMercadoLibreInvite({ workspaceId, createdBy = null }) {
-  await ensureDb();
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
-  await db.execute({
-    sql: `INSERT INTO mercadolibre_invites (workspace_id, token, created_by, expires_at) VALUES (?, ?, ?, ?)`,
-    args: [workspaceId, token, createdBy, expiresAt],
-  });
-  return { token, expiresAt };
+export function createMercadoLibreInvite({ workspaceId }) {
+  const expiresAt = Date.now() + INVITE_TTL_MS;
+  const token = encrypt(JSON.stringify({ workspaceId, expiresAt, v: 1 }));
+  return { token, expiresAt: new Date(expiresAt).toISOString() };
 }
 
-export async function validateMercadoLibreInvite(token) {
-  await ensureDb();
+export function validateMercadoLibreInvite(token) {
   if (!token) throw new Error('Token inválido');
-  const result = await db.execute({
-    sql: `SELECT * FROM mercadolibre_invites WHERE token = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1`,
-    args: [String(token)],
-  });
-  if (!result.rows.length) throw new Error('El link de invitación es inválido o ya expiró');
-  return result.rows[0];
+  let data;
+  try {
+    data = JSON.parse(decrypt(String(token).replace(/ /g, '+')));
+  } catch {
+    throw new Error('El link de invitación es inválido o ya expiró');
+  }
+  if (!data.workspaceId || !data.expiresAt) throw new Error('El link de invitación es inválido');
+  if (Date.now() > data.expiresAt) throw new Error('El link de invitación ya expiró');
+  return { workspace_id: data.workspaceId, expires_at: new Date(data.expiresAt).toISOString() };
 }
 
-export async function markMercadoLibreInviteUsed(token) {
-  await ensureDb();
-  await db.execute({
-    sql: `UPDATE mercadolibre_invites SET used_at = CURRENT_TIMESTAMP WHERE token = ? AND used_at IS NULL`,
-    args: [String(token)],
-  }).catch(() => {});
+export function markMercadoLibreInviteUsed() {
+  // no-op: self-contained tokens don't need DB tracking
 }
