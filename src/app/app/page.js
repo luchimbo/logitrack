@@ -19,6 +19,11 @@ export default function AppHome() {
     return new URLSearchParams(window.location.search).get("tab") || "upload";
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navBadges, setNavBadges] = useState({});
+
+  const handleBadgeUpdate = (key, count) => {
+    setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
+  };
   const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
 
@@ -121,6 +126,7 @@ export default function AppHome() {
       <AppShell
         activeTab={activeTab}
         currentUser={currentUser}
+        navBadges={navBadges}
         navGroups={navGroups}
         onCloseSidebar={() => setSidebarOpen(false)}
         onLogout={handleLogout}
@@ -133,6 +139,7 @@ export default function AppHome() {
           activeTab={activeTab}
           canManageUsers={canManageUsers}
           currentUser={currentUser}
+          onBadgeUpdate={handleBadgeUpdate}
           onNavigate={handleNavClick}
         />
       </AppShell>

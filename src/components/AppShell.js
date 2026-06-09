@@ -6,6 +6,7 @@ export default function AppShell({
   activeTab,
   children,
   currentUser,
+  navBadges = {},
   navGroups,
   onCloseSidebar,
   onLogout,
@@ -51,7 +52,22 @@ export default function AppShell({
                       }}
                     >
                       <span className="nav-icon">{link.icon}</span>
-                      {link.label}
+                      <span style={{ flex: 1 }}>{link.label}</span>
+                      {link.badgeKey && navBadges[link.badgeKey] > 0 && (
+                        <span style={{
+                          background: '#f97316',
+                          color: '#fff',
+                          borderRadius: '999px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          lineHeight: 1.4,
+                          minWidth: '18px',
+                          textAlign: 'center',
+                        }}>
+                          {navBadges[link.badgeKey]}
+                        </span>
+                      )}
                     </a>
                   </li>
                 ))}

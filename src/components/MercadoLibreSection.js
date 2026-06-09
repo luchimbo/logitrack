@@ -70,6 +70,8 @@ function Timeline({ events = [] }) {
 function OrderCard({
   order,
   selected,
+  compact,
+  queued,
   onToggleSelected,
   onImport,
   importing,
@@ -84,9 +86,52 @@ function OrderCard({
   const totalUnits = products.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
   const productNames = products.map((item) => item.name).filter(Boolean).slice(0, 2).join(" · ");
   const isLoading = importing || printing || refreshing;
+  const borderColor = STATE_BORDER[order.packageState?.id] || "#cbd5e1";
+
+  if (compact) {
+    return (
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "20px 1fr auto",
+        gap: "10px",
+        alignItems: "center",
+        padding: "10px 14px",
+        borderRadius: "var(--radius)",
+        border: "1px solid var(--border)",
+        borderLeft: `3px solid ${borderColor}`,
+        background: selected ? "var(--accent-soft)" : "var(--surface)",
+      }}>
+        <input type="checkbox" checked={selected} onChange={onToggleSelected}
+          style={{ width: "16px", height: "16px", accentColor: "var(--accent)" }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 700, fontSize: "13px" }}>#{order.id}</span>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{logisticLabel(order)}</span>
+            <span style={{ fontSize: "13px" }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</span>
+            {queued && <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 700 }}>✓ En cola</span>}
+          </div>
+          <MercadoLibreShipmentMeta shipment={order} compact />
+        </div>
+        <div style={{ display: "flex", gap: "6px" }}>
+          {!order.shipmentRowId && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)}
+              disabled={isLoading || !order.shipmentId || order.printability?.id === "not_ready"} style={{ fontSize: "11px", padding: "4px 8px" }}>
+              {importing ? "..." : "Importar"}
+            </button>
+          )}
+          {order.shipmentRowId && (
+            <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)}
+              disabled={isLoading} style={{ fontSize: "11px", padding: "4px 8px" }}>
+              {printing ? "..." : "Imprimir"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mobile-card" style={{ display: "block", padding: "18px" }}>
+    <div className="mobile-card" style={{ display: "block", padding: "18px", borderLeft: `4px solid ${borderColor}` }}>
       <div className="flex-between" style={{ alignItems: "flex-start", gap: "12px" }}>
         <div style={{ display: "flex", gap: "10px", minWidth: 0 }}>
           <input
@@ -105,6 +150,9 @@ function OrderCard({
             <MercadoLibreShipmentMeta shipment={order} />
           </div>
         </div>
+        {queued && (
+          <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 700, whiteSpace: "nowrap" }}>✓ En cola</span>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
@@ -138,7 +186,40 @@ function OrderCard({
   );
 }
 
-export default function MercadoLibreSection({ currentUser }) {
+const STATE_BORDER = {
+  ready_to_print: "#f97316",
+  ready_to_ship: "#f97316",
+  in_transit: "#22c55e",
+  delivered: "#22c55e",
+  delayed: "#ef4444",
+  canceled: "#94a3b8",
+  problem: "#ef4444",
+  preparing: "#60a5fa",
+  pending: "#cbd5e1",
+};
+
+function sortByUrgency(orders) {
+  const urgency = (o) => {
+    const state = o.packageState?.id;
+    const cutoff = o.cutoffDetail?.value;
+    if (o.printability?.id === "printable") return 0;
+    if (state === "ready_to_ship" || state === "ready_to_print") return cutoff ? 1 : 2;
+    if (state === "delayed") return 3;
+    if (state === "preparing") return 4;
+    if (state === "in_transit") return 5;
+    if (state === "delivered") return 6;
+    return 7;
+  };
+  return [...orders].sort((a, b) => {
+    const ua = urgency(a), ub = urgency(b);
+    if (ua !== ub) return ua - ub;
+    const ca = a.cutoffDetail?.value || "", cb = b.cutoffDetail?.value || "";
+    if (ca && cb) return ca < cb ? -1 : ca > cb ? 1 : 0;
+    return 0;
+  });
+}
+
+export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const canManageIntegration = ["owner", "admin"].includes(currentUser?.role);
   const [connected, setConnected] = useState(false);
   const [connections, setConnections] = useState([]);
@@ -146,8 +227,10 @@ export default function MercadoLibreSection({ currentUser }) {
   const [orders, setOrders] = useState([]);
   const [selectedOrderKeys, setSelectedOrderKeys] = useState([]);
   const [openHistoryKeys, setOpenHistoryKeys] = useState([]);
+  const [queuedOrderKeys, setQueuedOrderKeys] = useState(new Set());
   const [view, setView] = useState("");
   const [search, setSearch] = useState("");
+  const [compact, setCompact] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -166,10 +249,17 @@ export default function MercadoLibreSection({ currentUser }) {
     return orders.filter((order) => keys.has(orderKey(order)));
   }, [orders, selectedOrderKeys]);
 
+  const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
   const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
+  const flexCount = useMemo(() => orders.filter((o) => o.logisticType === "self_service").length, [orders]);
+  const colectaCount = useMemo(() => orders.filter((o) => o.logisticType !== "self_service").length, [orders]);
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = orders.length > 0 && orders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
+
+  useEffect(() => {
+    if (onBadgeUpdate) onBadgeUpdate("mercadolibre", printableOrders.length);
+  }, [printableOrders.length, onBadgeUpdate]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -315,6 +405,10 @@ export default function MercadoLibreSection({ currentUser }) {
       toast("No hay ventas seleccionadas", "error");
       return;
     }
+    const willPrint = action === "print" || action === "import_and_print";
+    if (willPrint && list.length > 5) {
+      if (!confirm(`¿Imprimir etiquetas de ${list.length} ventas?`)) return;
+    }
     setBulkAction(action);
     try {
       const res = await fetch("/api/admin/mercadolibre/bulk-labels", {
@@ -333,6 +427,9 @@ export default function MercadoLibreSection({ currentUser }) {
       if (data.skipped?.length) {
         const sample = data.skipped.slice(0, 3).map((item) => `${item.orderId}: ${item.reason}`).join(" | ");
         setWarning(`${message}. ${sample}`);
+      }
+      if (action === "print" || action === "import_and_print") {
+        setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
       }
       await load({ syncMode: "0" });
     } catch (err) {
@@ -374,6 +471,7 @@ export default function MercadoLibreSection({ currentUser }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo encolar impresion");
       toast(`Etiqueta encolada para imprimir (job ${data.queue_job_id})`, "success");
+      setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
     } catch (err) {
       toast(err.message || "Error al encolar impresion", "error");
     } finally {
@@ -428,6 +526,30 @@ export default function MercadoLibreSection({ currentUser }) {
 
       {connected ? (
         <>
+          {/* Stats rápidas */}
+          {orders.length > 0 && (
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+              {printableOrders.length > 0 && (
+                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "120px" }}>
+                  <span style={{ fontSize: "22px", fontWeight: 800, color: "#ea580c", lineHeight: 1 }}>{printableOrders.length}</span>
+                  <span style={{ fontSize: "11px", color: "#9a3412", fontWeight: 600 }}>Listas para imprimir</span>
+                </div>
+              )}
+              {flexCount > 0 && (
+                <div style={{ background: "var(--accent-light)", border: "1px solid var(--accent-soft)", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                  <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--accent)", lineHeight: 1 }}>{flexCount}</span>
+                  <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600 }}>Flex</span>
+                </div>
+              )}
+              {colectaCount > 0 && (
+                <div style={{ background: "var(--warning-bg)", border: "1px solid #fde68a", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
+                  <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--warning)", lineHeight: 1 }}>{colectaCount}</span>
+                  <span style={{ fontSize: "11px", color: "var(--warning)", fontWeight: 600 }}>Colecta</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
             <div className="form-row">
               <div className="form-group" style={{ minWidth: "230px" }}>
@@ -451,10 +573,15 @@ export default function MercadoLibreSection({ currentUser }) {
               <button type="button" className="btn btn-primary" onClick={() => load({ syncMode: "force" })} disabled={syncing}>{syncing ? "Sincronizando..." : "Sincronizar"}</button>
               {selectedConnectionId ? <button type="button" className="btn btn-ghost" onClick={handleDisconnect}>Desconectar</button> : null}
             </div>
-            <div style={{ marginTop: "10px", color: "var(--text-muted)", fontSize: "12px" }}>
-              {lastSyncedAt ? `Ultima actualizacion ${formatArgentinaDateTime(lastSyncedAt)}` : "Sin ventas sincronizadas todavia"}
-              {" · "}
-              <span>Impresion por cola: <code>imprimir-cola-v2.bat</code>.</span>
+            <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                {lastSyncedAt ? `Ultima actualizacion ${formatArgentinaDateTime(lastSyncedAt)}` : "Sin ventas sincronizadas todavia"}
+                {" · "}
+                <span>Impresion por cola: <code>imprimir-cola-v2.bat</code>.</span>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCompact((v) => !v)} style={{ fontSize: "12px" }}>
+                {compact ? "Vista detallada" : "Vista compacta"}
+              </button>
             </div>
           </div>
 
@@ -496,13 +623,15 @@ export default function MercadoLibreSection({ currentUser }) {
           </div>
 
           {loading ? <div className="spinner"></div> : (
-            <div style={{ display: "grid", gap: "12px" }}>
-              {orders.map((order) => {
+            <div style={{ display: "grid", gap: compact ? "4px" : "12px" }}>
+              {sortedOrders.map((order) => {
                 const key = orderKey(order);
                 return (
                   <OrderCard
                     key={key}
                     order={order}
+                    compact={compact}
+                    queued={queuedOrderKeys.has(key)}
                     selected={selectedOrderKeys.includes(key)}
                     onToggleSelected={() => toggleOrderSelection(order)}
                     onImport={handleImport}

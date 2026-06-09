@@ -29,7 +29,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     connectedProviders.includes('shopify') ? { id: "shopify", icon: "🟢", label: "Shopify" } : null,
     connectedProviders.includes('zipnova') ? { id: "zipnova", icon: "📮", label: "Zipnova" } : null,
     connectedProviders.includes('tiendanube') ? { id: "tiendanube", icon: "🛒", label: "Tiendanube" } : null,
-    connectedProviders.includes('mercadolibre') ? { id: "mercadolibre", icon: "🟡", label: "Mercado Libre" } : null,
+    connectedProviders.includes('mercadolibre') ? { id: "mercadolibre", icon: "🟡", label: "Mercado Libre", badgeKey: "mercadolibre" } : null,
   ].filter(Boolean);
 
   if (activeIntegrationItems.length) {
