@@ -5,7 +5,7 @@ import { buildMercadoLibreAuthorizeUrl, encodeMercadoLibreState, isMercadoLibreO
 const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://geomodi.ai').replace(/\/$/, '');
 
 export async function GET(request, { params }) {
-  const token = params?.token || '';
+  const { token = '' } = await params;
   const errorRedirect = (msg) => NextResponse.redirect(`${BASE_URL}/connect/mercadolibre/${token}?error=${encodeURIComponent(msg)}`);
 
   try {

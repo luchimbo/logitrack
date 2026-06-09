@@ -15,9 +15,9 @@ const styles = {
   error: { background: '#fff1f0', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', color: '#dc2626', fontSize: '14px', marginBottom: '24px' },
 };
 
-export default function MercadoLibreConnectPage({ params, searchParams }) {
-  const token = params?.token || '';
-  const errorParam = searchParams?.error || '';
+export default async function MercadoLibreConnectPage({ params, searchParams }) {
+  const { token = '' } = await params;
+  const { error: errorParam = '' } = (await searchParams) || {};
 
   let valid = false;
   let expired = false;

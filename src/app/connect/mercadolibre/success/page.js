@@ -10,9 +10,8 @@ const styles = {
   error: { background: '#fff1f0', border: '1px solid #fca5a5', borderRadius: '8px', padding: '12px 16px', color: '#dc2626', fontSize: '14px' },
 };
 
-export default function MercadoLibreSuccessPage({ searchParams }) {
-  const nickname = searchParams?.nickname || '';
-  const error = searchParams?.error || '';
+export default async function MercadoLibreSuccessPage({ searchParams }) {
+  const { nickname = '', error = '' } = (await searchParams) || {};
 
   if (error) {
     return (
