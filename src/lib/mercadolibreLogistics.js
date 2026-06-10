@@ -30,11 +30,11 @@ const STATE_META = {
 };
 
 const PRINTABILITY_META = {
-  imported: { id: 'imported', label: 'Etiqueta importada', color: '#22c55e', canImport: false, canPrint: true },
-  printable: { id: 'printable', label: 'Se puede imprimir', color: '#f97316', canImport: true, canPrint: false },
-  not_ready: { id: 'not_ready', label: 'Etiqueta no lista', color: '#64748b', canImport: false, canPrint: false },
-  unavailable: { id: 'unavailable', label: 'Sin etiqueta', color: '#64748b', canImport: false, canPrint: false },
-  error: { id: 'error', label: 'Revisar etiqueta', color: '#ef4444', canImport: false, canPrint: false },
+  imported: { id: 'imported', label: 'Etiqueta descargada', color: '#22c55e', canImport: false, canPrint: true },
+  printable: { id: 'printable', label: 'Lista para imprimir', color: '#f97316', canImport: true, canPrint: false },
+  not_ready: { id: 'not_ready', label: 'ML aún no generó etiqueta', color: '#64748b', canImport: false, canPrint: false },
+  unavailable: { id: 'unavailable', label: 'Sin envío asignado', color: '#64748b', canImport: false, canPrint: false },
+  error: { id: 'error', label: 'Revisar envío', color: '#ef4444', canImport: false, canPrint: false },
 };
 
 const STATUS_LABELS = {
