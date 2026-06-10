@@ -251,6 +251,8 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
   const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
   const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
+  const printableFlexCount = useMemo(() => printableOrders.filter((o) => o.logisticType === "self_service").length, [printableOrders]);
+  const printableColectaCount = useMemo(() => printableOrders.filter((o) => o.logisticType !== "self_service").length, [printableOrders]);
   const flexCount = useMemo(() => orders.filter((o) => o.logisticType === "self_service").length, [orders]);
   const colectaCount = useMemo(() => orders.filter((o) => o.logisticType !== "self_service").length, [orders]);
   const selectedVisibleCount = selectedOrders.length;
@@ -423,12 +425,18 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo procesar etiquetas");
       const message = summarizeBulkResult(action, data);
-      toast(message, data.skipped?.length ? "info" : "success");
+      const willPrintAction = action === "print" || action === "import_and_print";
+      const nothingQueued = willPrintAction && !data.queuedCount;
+      const nothingImported = action === "import" && !data.importedCount;
+      const failed = nothingQueued || nothingImported;
+      toast(message, failed ? "error" : data.skipped?.length ? "info" : "success");
       if (data.skipped?.length) {
-        const sample = data.skipped.slice(0, 3).map((item) => `${item.orderId}: ${item.reason}`).join(" | ");
-        setWarning(`${message}. ${sample}`);
+        const sample = data.skipped.slice(0, 4).map((item) => `Venta ${item.orderId}: ${item.reason}`).join(" · ");
+        setWarning(`${message}. Detalle: ${sample}`);
+      } else if (failed) {
+        setWarning(`${message}. No se pudo ${willPrintAction ? "encolar ninguna etiqueta para imprimir" : "importar ninguna etiqueta"}. Verificá que las ventas tengan etiqueta disponible en Mercado Libre.`);
       }
-      if (action === "print" || action === "import_and_print") {
+      if (willPrintAction && data.queuedCount) {
         setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
       }
       await load({ syncMode: "0" });
@@ -530,9 +538,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           {orders.length > 0 && (
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
               {printableOrders.length > 0 && (
-                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "120px" }}>
+                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px" }}>
                   <span style={{ fontSize: "22px", fontWeight: 800, color: "#ea580c", lineHeight: 1 }}>{printableOrders.length}</span>
                   <span style={{ fontSize: "11px", color: "#9a3412", fontWeight: 600 }}>Listas para imprimir</span>
+                  <span style={{ fontSize: "11px", color: "#c2410c", marginTop: "2px" }}>
+                    {printableColectaCount} colecta · {printableFlexCount} flex
+                  </span>
                 </div>
               )}
               {flexCount > 0 && (
