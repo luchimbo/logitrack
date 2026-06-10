@@ -8,6 +8,7 @@ import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 const VIEW_OPTIONS = [
   { value: "", label: "Todos" },
   { value: "printable", label: "Listas para imprimir" },
+  { value: "to_dispatch", label: "Para despachar" },
   { value: "no_label", label: "Sin etiqueta lista" },
   { value: "ready", label: "Listos para preparar" },
   { value: "flex", label: "Flex" },
@@ -198,6 +199,13 @@ const STATE_BORDER = {
   pending: "#cbd5e1",
 };
 
+function isToDispatch(order) {
+  const hasLabel = Boolean(order.labelImportedAt || order.shipmentRowId);
+  const state = order.packageState?.id;
+  const gone = ["in_transit", "delivered", "canceled", "problem"].includes(state);
+  return hasLabel && !gone;
+}
+
 function sortByUrgency(orders) {
   const urgency = (o) => {
     const state = o.packageState?.id;
@@ -253,6 +261,9 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
   const printableFlexCount = useMemo(() => printableOrders.filter((o) => o.logisticType === "self_service").length, [printableOrders]);
   const printableColectaCount = useMemo(() => printableOrders.filter((o) => o.logisticType !== "self_service").length, [printableOrders]);
+  const toDispatchOrders = useMemo(() => orders.filter(isToDispatch), [orders]);
+  const toDispatchFlexCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType === "self_service").length, [toDispatchOrders]);
+  const toDispatchColectaCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType !== "self_service").length, [toDispatchOrders]);
   const flexCount = useMemo(() => orders.filter((o) => o.logisticType === "self_service").length, [orders]);
   const colectaCount = useMemo(() => orders.filter((o) => o.logisticType !== "self_service").length, [orders]);
   const selectedVisibleCount = selectedOrders.length;
@@ -538,13 +549,30 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           {orders.length > 0 && (
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
               {printableOrders.length > 0 && (
-                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px" }}>
+                <button
+                  type="button"
+                  onClick={() => setView("printable")}
+                  style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px", cursor: "pointer", textAlign: "left" }}
+                >
                   <span style={{ fontSize: "22px", fontWeight: 800, color: "#ea580c", lineHeight: 1 }}>{printableOrders.length}</span>
                   <span style={{ fontSize: "11px", color: "#9a3412", fontWeight: 600 }}>Listas para imprimir</span>
                   <span style={{ fontSize: "11px", color: "#c2410c", marginTop: "2px" }}>
                     {printableColectaCount} colecta · {printableFlexCount} flex
                   </span>
-                </div>
+                </button>
+              )}
+              {toDispatchOrders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setView("to_dispatch")}
+                  style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px", cursor: "pointer", textAlign: "left" }}
+                >
+                  <span style={{ fontSize: "22px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{toDispatchOrders.length}</span>
+                  <span style={{ fontSize: "11px", color: "#065f46", fontWeight: 600 }}>Para despachar</span>
+                  <span style={{ fontSize: "11px", color: "#047857", marginTop: "2px" }}>
+                    {toDispatchColectaCount} colecta · {toDispatchFlexCount} flex
+                  </span>
+                </button>
               )}
               {flexCount > 0 && (
                 <div style={{ background: "var(--accent-light)", border: "1px solid var(--accent-soft)", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
