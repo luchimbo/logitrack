@@ -40,7 +40,7 @@ export default function MercadoLibreShipmentMeta({ shipment, compact = false }) 
   return (
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: compact ? '4px' : '8px' }}>
       {state ? <span style={chipStyle(state.color || '#64748b')}>{state.label || state.id}</span> : null}
-      {printability ? <span style={chipStyle(printability.color || '#64748b')}>{printability.label || printability.id}</span> : null}
+      {printability ? <span style={chipStyle(printability.color || '#64748b')}>{(printability.id === 'not_ready' && printability.reason) || printability.label || printability.id}</span> : null}
       {cutoffLabel ? (
         <span style={chipStyle(cutoff?.exact ? '#f97316' : '#60a5fa')}>
           {cutoffLabel}
