@@ -21,9 +21,11 @@ async function extractZplFromMlZip(arrayBuffer) {
     return labels;
 }
 
-// Renderiza ZPL concatenado a un PDF multipágina 4x6 (tamaño térmico) vía Labelary.
+// Renderiza ZPL concatenado a un PDF multipágina 10x15 cm (= 3.94x5.91 in, tamaño térmico
+// real de las etiquetas ML colecta/flex) vía Labelary. Coincidir el tamaño del PDF con la
+// media evita que la impresora recorte el borde inferior.
 async function zplToPdf4x6(zpl) {
-    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/4x6/';
+    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/3.94x5.91/';
     const attemptHeaders = [
         { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
         { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
