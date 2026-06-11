@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
+import { printPdfFromUrl } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 const VIEW_OPTIONS = [
@@ -424,32 +425,69 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
     setBulkAction(action);
     try {
+      // "print" puro: imprimir directo el PDF de las etiquetas ya importadas, sin pasar por
+      // bulk-labels. Para "import" e "import_and_print" sí importamos primero.
+      if (action === "print") {
+        const shipmentRowIds = list.map((order) => order.shipmentRowId).filter(Boolean);
+        if (!shipmentRowIds.length) {
+          toast("Las ventas seleccionadas no tienen etiqueta importada", "error");
+          return;
+        }
+        const ok = await printPdfFromUrl("/api/labels/pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: shipmentRowIds }),
+        });
+        if (ok) {
+          toast(`Abriendo impresión de ${shipmentRowIds.length} etiqueta(s)`, "success");
+          setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
+        }
+        return;
+      }
+
+      const bulkApiAction = action === "import_and_print" ? "import" : action;
       const res = await fetch("/api/admin/mercadolibre/bulk-labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action,
+          action: bulkApiAction,
           connectionId: selectedConnectionId,
           orderIds: list.map((order) => order.id),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo procesar etiquetas");
-      const message = summarizeBulkResult(action, data);
-      const willPrintAction = action === "print" || action === "import_and_print";
-      const nothingQueued = willPrintAction && !data.queuedCount;
-      const nothingImported = action === "import" && !data.importedCount;
-      const failed = nothingQueued || nothingImported;
-      toast(message, failed ? "error" : data.skipped?.length ? "info" : "success");
+
+      const message = summarizeBulkResult("import", data);
+      const nothingImported = !data.importedCount;
+      toast(message, nothingImported ? "error" : data.skipped?.length ? "info" : "success");
       if (data.skipped?.length) {
         const sample = data.skipped.slice(0, 4).map((item) => `Venta ${item.orderId}: ${item.reason}`).join(" · ");
         setWarning(`${message}. Detalle: ${sample}`);
-      } else if (failed) {
-        setWarning(`${message}. No se pudo ${willPrintAction ? "encolar ninguna etiqueta para imprimir" : "importar ninguna etiqueta"}. Verificá que las ventas tengan etiqueta disponible en Mercado Libre.`);
+      } else if (nothingImported) {
+        setWarning(`${message}. No se pudo importar ninguna etiqueta. Verificá que las ventas tengan etiqueta disponible en Mercado Libre.`);
       }
-      if (willPrintAction && data.queuedCount) {
-        setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
+
+      // import_and_print: tras importar, abrir el PDF de las etiquetas resultantes.
+      if (action === "import_and_print") {
+        // Combinar las etiquetas recién importadas (data.shipmentRowIds) con las que ya
+        // estaban importadas en la selección, evitando duplicados.
+        const importedIds = Array.isArray(data.shipmentRowIds) ? data.shipmentRowIds.filter(Boolean) : [];
+        const existingIds = list.map((order) => order.shipmentRowId).filter(Boolean);
+        const shipmentRowIds = [...new Set([...existingIds, ...importedIds])];
+        if (shipmentRowIds.length) {
+          const ok = await printPdfFromUrl("/api/labels/pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: shipmentRowIds }),
+          });
+          if (ok) {
+            toast(`Abriendo impresión de ${shipmentRowIds.length} etiqueta(s)`, "success");
+            setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
+          }
+        }
       }
+
       await load({ syncMode: "0" });
     } catch (err) {
       toast(err.message || "Error al procesar etiquetas", "error");
@@ -482,17 +520,11 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (!order.shipmentRowId) return;
     setPrintingId(order.id);
     try {
-      const res = await fetch("/api/print-queue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [order.shipmentRowId] }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo encolar impresion");
-      toast(`Etiqueta encolada para imprimir (job ${data.queue_job_id})`, "success");
-      setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
-    } catch (err) {
-      toast(err.message || "Error al encolar impresion", "error");
+      const ok = await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`);
+      if (ok) {
+        toast("Abriendo impresión de etiqueta", "success");
+        setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
+      }
     } finally {
       setPrintingId("");
     }

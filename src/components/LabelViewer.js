@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { api, toast } from "@/lib/api";
+import { toast } from "@/lib/api";
+import { printPdfFromUrl } from "@/lib/printLabel";
 
 export default function LabelViewer({ shipmentId, onClose }) {
     const [loading, setLoading] = useState(true);
@@ -81,13 +82,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
         if (!shipmentId) return;
         setPrinting(true);
         try {
-            const result = await api('/print-queue', {
-                method: 'POST',
-                body: JSON.stringify({ ids: [shipmentId] }),
-            });
-            toast(`Etiqueta en cola de impresion${result.queue_job_id ? ` (${result.queue_job_id})` : ''}`, 'success');
-        } catch (err) {
-            toast(err.message || 'Error encolando etiqueta', 'error');
+            await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`);
         } finally {
             setPrinting(false);
         }
