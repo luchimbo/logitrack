@@ -63,6 +63,13 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Falta connectionId' }, { status: 400 });
         }
 
+        // Reconstruir el cliente de la conexión ML.
+        const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
+        const target = targets[0];
+        if (!target?.client) {
+            return NextResponse.json({ error: 'Conexión de Mercado Libre no disponible' }, { status: 404 });
+        }
+
         // Resolver los shipment_id (ML externo) a partir de los order_id del workspace.
         const placeholders = orderIds.map(() => '?').join(', ');
         const result = await db.execute({
@@ -71,21 +78,29 @@ export async function GET(request) {
             args: [workspaceId, ...orderIds],
         });
 
-        const shipmentIds = [...new Set(
+        const shipmentByOrder = new Map(
             result.rows
-                .map((row) => String(row.shipment_id || '').trim())
-                .filter(Boolean),
-        )];
+                .filter((row) => String(row.shipment_id || '').trim())
+                .map((row) => [String(row.order_id), String(row.shipment_id).trim()]),
+        );
+
+        // Fallback: para los order_id que no estén sincronizados (o sin envío en la base),
+        // pedir el envío directo a ML. Permite imprimir ventas recién creadas.
+        for (const orderId of orderIds) {
+            if (shipmentByOrder.has(orderId)) continue;
+            try {
+                const order = await target.client.getOrder(orderId);
+                const shipId = order?.shipping?.id;
+                if (shipId) shipmentByOrder.set(orderId, String(shipId));
+            } catch (err) {
+                console.error('ML getOrder fallback error for', orderId, ':', err?.message || err);
+            }
+        }
+
+        const shipmentIds = [...new Set([...shipmentByOrder.values()])];
 
         if (!shipmentIds.length) {
             return NextResponse.json({ error: 'Las ventas no tienen envío asignado en Mercado Libre' }, { status: 404 });
-        }
-
-        // Reconstruir el cliente de la conexión ML.
-        const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
-        const target = targets[0];
-        if (!target?.client) {
-            return NextResponse.json({ error: 'Conexión de Mercado Libre no disponible' }, { status: 404 });
         }
 
         // Pedir el ZPL (solo la etiqueta, sin remito) y renderizarlo a PDF 4x6.
