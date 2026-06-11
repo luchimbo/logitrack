@@ -413,6 +413,24 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
+  // Construye la URL de impresión ML-PDF para una lista de órdenes. ML-PDF requiere una sola
+  // conexión por pedido; si la selección abarca varias cuentas, imprime la primera y avisa.
+  const buildMlPdfUrl = (list) => {
+    const byConn = new Map();
+    for (const order of list) {
+      if (!order.connectionId) continue;
+      const key = String(order.connectionId);
+      if (!byConn.has(key)) byConn.set(key, []);
+      byConn.get(key).push(order.id);
+    }
+    if (!byConn.size) return null;
+    if (byConn.size > 1) {
+      toast("La selección tiene varias cuentas; se imprime una por vez", "info");
+    }
+    const [connectionId, ids] = [...byConn.entries()][0];
+    return `/api/labels/ml-pdf?orderIds=${encodeURIComponent(ids.join(","))}&connectionId=${encodeURIComponent(connectionId)}`;
+  };
+
   const runBulk = async (action, sourceOrders) => {
     const list = Array.isArray(sourceOrders) ? sourceOrders : [];
     if (!list.length) {
@@ -429,16 +447,15 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (willPrint && !printWin) return;
     setBulkAction(action);
     try {
-      // "print" puro: imprimir directo el PDF de las etiquetas ya importadas, sin pasar por
-      // bulk-labels. Para "import" e "import_and_print" sí importamos primero.
+      // "print" puro: pedir el PDF directo a Mercado Libre (no requiere importar el ZPL).
       if (action === "print") {
-        const shipmentRowIds = list.map((order) => order.shipmentRowId).filter(Boolean);
-        if (!shipmentRowIds.length) {
+        const url = buildMlPdfUrl(list);
+        if (!url) {
           try { printWin.close(); } catch (e) { /* noop */ }
-          toast("Las ventas seleccionadas no tienen etiqueta importada", "error");
+          toast("Las ventas seleccionadas no tienen conexión de Mercado Libre", "error");
           return;
         }
-        renderPrintWindow(printWin, `/api/labels/pdf?ids=${shipmentRowIds.join(",")}`);
+        renderPrintWindow(printWin, url);
         setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
         return;
       }
@@ -466,15 +483,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         setWarning(`${message}. No se pudo importar ninguna etiqueta. Verificá que las ventas tengan etiqueta disponible en Mercado Libre.`);
       }
 
-      // import_and_print: tras importar, abrir el PDF de las etiquetas resultantes.
+      // import_and_print: ya importamos a la operación; ahora imprimimos pidiendo el PDF
+      // directo a Mercado Libre (no depende del ZPL importado).
       if (action === "import_and_print") {
-        // Combinar las etiquetas recién importadas (data.shipmentRowIds) con las que ya
-        // estaban importadas en la selección, evitando duplicados.
-        const importedIds = Array.isArray(data.shipmentRowIds) ? data.shipmentRowIds.filter(Boolean) : [];
-        const existingIds = list.map((order) => order.shipmentRowId).filter(Boolean);
-        const shipmentRowIds = [...new Set([...existingIds, ...importedIds])];
-        if (shipmentRowIds.length) {
-          renderPrintWindow(printWin, `/api/labels/pdf?ids=${shipmentRowIds.join(",")}`);
+        const url = buildMlPdfUrl(list);
+        if (url) {
+          renderPrintWindow(printWin, url);
           setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
         } else {
           try { printWin.close(); } catch (e) { /* noop */ }
@@ -511,10 +525,13 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   };
 
   const handlePrint = (order) => {
-    if (!order.shipmentRowId) return;
+    if (!order.connectionId) return;
     const win = openPrintWindow();
     if (!win) return;
-    renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`);
+    renderPrintWindow(
+      win,
+      `/api/labels/ml-pdf?orderId=${encodeURIComponent(order.id)}&connectionId=${encodeURIComponent(order.connectionId)}`,
+    );
     setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
   };
 
