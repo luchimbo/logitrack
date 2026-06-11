@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { findIntegrationConnectionByStore } from '@/lib/integrationService';
-import { createMercadoLibreClient } from '@/lib/mercadolibreClient';
+import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { upsertMercadoLibreOrder } from '@/lib/mercadolibreStore';
+
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
 
 const ORDER_TOPICS = new Set(['orders_v2', 'orders']);
 const SHIPMENT_TOPICS = new Set(['shipments', 'flex-handshakes']);
@@ -45,14 +48,15 @@ export async function POST(request) {
       return NextResponse.json({ received: true, ignored: 'cuenta no conectada' });
     }
 
-    const client = createMercadoLibreClient({ accessToken: connection.config.accessToken });
+    // Cliente con token refrescado automáticamente (evita fallar si el access token venció).
+    const targets = await listMercadoLibreClientTargets(connection.workspaceId, { connectionId: connection.id });
+    const client = targets[0]?.client;
+    if (!client) {
+      return NextResponse.json({ received: true, ignored: 'cliente no disponible' });
+    }
+
     let order = null;
     let shipment = null;
-    let shipmentItems = [];
-    let leadTime = null;
-    let delays = null;
-    let carrier = null;
-    let history = [];
 
     if (ORDER_TOPICS.has(body.topic)) {
       const orderId = orderIdFromResource(body.resource);
@@ -69,28 +73,19 @@ export async function POST(request) {
         const storedOrderId = await findStoredOrderIdByShipment({ workspaceId: connection.workspaceId, connectionId: connection.id, shipmentId });
         if (storedOrderId) order = await client.getOrder(storedOrderId).catch(() => null);
       }
+    } else {
+      return NextResponse.json({ received: true, ignored: `topic ${body.topic || ''}` });
     }
 
+    // Procesamiento liviano: solo order + shipment (estado/listado). El detalle completo
+    // (carrier/flex/historial) se trae on-demand con el botón "Actualizar" de la orden.
     const shipmentId = order?.shipping?.id || shipment?.id;
     if (shipmentId) {
-      shipment = shipment || await client.getShipment(shipmentId);
-      shipmentItems = await client.getShipmentItems(shipmentId).catch(() => []);
-      leadTime = await client.getShipmentLeadTime(shipmentId).catch(() => null);
-      delays = await client.getShipmentDelays(shipmentId);
-      carrier = await client.getShipmentCarrier(shipmentId);
-      history = await client.getShipmentHistory(shipmentId);
-      if (shipment?.logistic?.type === 'self_service') {
-        const siteId = shipment?.source?.site_id || connection.config.siteId || 'MLA';
-        const assignment = await client.getFlexAssignment({ siteId, shipmentId }).catch(() => null);
-        const flexConfig = client.getFlexConfigurationForUser
-          ? await client.getFlexConfigurationForUser({ siteId, userId: order?.seller?.id || connection.externalStoreId }).catch(() => null)
-          : null;
-        if (assignment || flexConfig) carrier = { ...(carrier || {}), flex_assignment: assignment, flex_config: flexConfig };
-      }
+      shipment = shipment || await client.getShipment(shipmentId).catch(() => null);
     }
 
     if (order) {
-      await upsertMercadoLibreOrder(connection.workspaceId, { order, shipment, shipmentItems, leadTime, delays, carrier, history }, {
+      await upsertMercadoLibreOrder(connection.workspaceId, { order, shipment }, {
         connectionId: connection.id,
         externalStoreId: connection.externalStoreId,
         siteId: connection.config.siteId || 'MLA',
@@ -99,7 +94,9 @@ export async function POST(request) {
 
     return NextResponse.json({ received: true, updated: Boolean(order) });
   } catch (error) {
+    // Responder 200 igual: la notificación quedó registrada y no queremos que ML reintente
+    // en loop por un fallo puntual al traer la orden.
     console.error('Mercado Libre webhook error:', error);
-    return NextResponse.json({ error: error.message || 'Error procesando webhook Mercado Libre' }, { status: 500 });
+    return NextResponse.json({ received: true, error: error.message || 'error procesando' });
   }
 }
