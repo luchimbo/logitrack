@@ -21,11 +21,35 @@ async function extractZplFromMlZip(arrayBuffer) {
     return labels;
 }
 
-// Renderiza ZPL concatenado a un PDF multipágina 10x15 cm (= 3.94x5.91 in, tamaño térmico
-// real de las etiquetas ML colecta/flex) vía Labelary. Coincidir el tamaño del PDF con la
-// media evita que la impresora recorte el borde inferior.
+// Calcula el alto real de la etiqueta en pulgadas a partir del ZPL, teniendo en cuenta los
+// desplazamientos ^LH (label home). Las etiquetas Flex de ML incluyen una parte superior
+// "recortable" y son bastante más altas que 15 cm; un alto fijo recortaba el pie.
+function computeZplHeightInches(zpl) {
+    const DPI = 203.2; // 8 dpmm
+    const regex = /\^LH\s*(\d+)\s*,\s*(\d+)|\^F[OT](\d+),(\d+)/gi;
+    let lhY = 0;
+    let maxY = 0;
+    let match;
+    while ((match = regex.exec(zpl)) !== null) {
+        if (match[1] !== undefined) {
+            lhY = Number(match[2]) || 0; // nuevo ^LH
+        } else {
+            const absY = lhY + (Number(match[4]) || 0);
+            if (absY > maxY) maxY = absY;
+        }
+    }
+    // Margen para la altura del último elemento (texto/FB) + borde inferior.
+    const heightDots = maxY + 180;
+    const inches = heightDots / DPI;
+    // Acotar a un rango sensato (mín ~6 in / 15 cm, máx ~10 in).
+    return Math.min(10, Math.max(6, Number(inches.toFixed(2))));
+}
+
+// Renderiza ZPL concatenado a un PDF multipágina vía Labelary. Ancho 10 cm (3.94 in) y alto
+// calculado del propio ZPL para no recortar etiquetas Flex (más altas que 15 cm).
 async function zplToPdf4x6(zpl) {
-    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/3.94x6.5/';
+    const heightIn = computeZplHeightInches(zpl);
+    const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/3.94x${heightIn}/`;
     const attemptHeaders = [
         { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
         { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
