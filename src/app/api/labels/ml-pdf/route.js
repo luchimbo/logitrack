@@ -111,6 +111,7 @@ export async function GET(request) {
         return new NextResponse(pdf, {
             headers: {
                 'Content-Type': 'application/pdf',
+                'Content-Disposition': 'inline; filename="etiqueta.pdf"',
                 'Cache-Control': 'no-store',
             },
         });
