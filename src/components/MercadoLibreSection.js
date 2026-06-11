@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
-import { printPdfFromUrl, openPrintWindow } from "@/lib/printLabel";
+import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 const VIEW_OPTIONS = [
@@ -438,14 +438,8 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           toast("Las ventas seleccionadas no tienen etiqueta importada", "error");
           return;
         }
-        const ok = await printPdfFromUrl("/api/labels/pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: shipmentRowIds }),
-        }, printWin);
-        if (ok) {
-          setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-        }
+        renderPrintWindow(printWin, `/api/labels/pdf?ids=${shipmentRowIds.join(",")}`);
+        setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
         return;
       }
 
@@ -480,14 +474,8 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         const existingIds = list.map((order) => order.shipmentRowId).filter(Boolean);
         const shipmentRowIds = [...new Set([...existingIds, ...importedIds])];
         if (shipmentRowIds.length) {
-          const ok = await printPdfFromUrl("/api/labels/pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids: shipmentRowIds }),
-          }, printWin);
-          if (ok) {
-            setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-          }
+          renderPrintWindow(printWin, `/api/labels/pdf?ids=${shipmentRowIds.join(",")}`);
+          setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
         } else {
           try { printWin.close(); } catch (e) { /* noop */ }
         }
@@ -522,19 +510,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
-  const handlePrint = async (order) => {
+  const handlePrint = (order) => {
     if (!order.shipmentRowId) return;
     const win = openPrintWindow();
     if (!win) return;
-    setPrintingId(order.id);
-    try {
-      const ok = await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`, {}, win);
-      if (ok) {
-        setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
-      }
-    } finally {
-      setPrintingId("");
-    }
+    renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`);
+    setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
   };
 
   const handleRefresh = async (order) => {

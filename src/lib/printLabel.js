@@ -17,39 +17,22 @@ export function openPrintWindow() {
     return win;
 }
 
-// Carga un PDF (una o varias etiquetas) en la ventana indicada y dispara la impresión.
-// `win` debe venir de openPrintWindow() llamado en el clic. Si no se pasa, se intenta abrir
-// (puede ser bloqueado si ya hubo un await previo).
-export async function printPdfFromUrl(url, fetchOptions = {}, win = undefined) {
-    const targetWin = win === undefined ? openPrintWindow() : win;
-    if (!targetWin) return false;
-    try {
-        const response = await fetch(url, fetchOptions);
-        if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data.error || data.detail || "No se pudo generar el PDF");
-        }
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-
-        // Cargar el PDF en la ventana y abrir el diálogo de impresión al terminar de cargar.
-        targetWin.location.href = blobUrl;
-        const triggerPrint = () => {
-            try {
-                targetWin.focus();
-                targetWin.print();
-            } catch (e) {
-                /* el visor de PDF igual queda visible para imprimir manualmente */
-            }
-        };
-        targetWin.onload = triggerPrint;
-        // Respaldo: algunos navegadores no disparan onload al cargar un blob PDF.
-        setTimeout(triggerPrint, 1200);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-        return true;
-    } catch (err) {
-        try { targetWin.close(); } catch (e) { /* noop */ }
-        toast(err.message || "Error al generar el PDF de impresión", "error");
-        return false;
-    }
+// Carga el PDF de la etiqueta dentro de la ventana indicada usando un <iframe> al endpoint
+// (mismo origen, con cookies) y dispara el diálogo de impresión al terminar de cargar.
+// Navegar directo a la URL de la API evita los problemas de blob: entre ventanas.
+export function renderPrintWindow(win, url) {
+    if (!win) return;
+    const safeUrl = String(url).replace(/"/g, "%22");
+    win.document.open();
+    win.document.write(
+        "<!doctype html><html><head><meta charset='utf-8'><title>Imprimir etiqueta</title>" +
+        "<style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100vh}</style></head>" +
+        "<body><iframe id='lbl' src=\"" + safeUrl + "\"></iframe>" +
+        "<script>(function(){var f=document.getElementById('lbl');" +
+        "function p(){try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}}" +
+        "f.addEventListener('load',function(){setTimeout(p,300);});" +
+        "setTimeout(p,2500);})();<\/script>" +
+        "</body></html>"
+    );
+    win.document.close();
 }

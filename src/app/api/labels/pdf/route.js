@@ -80,12 +80,17 @@ export async function GET(request) {
         const workspaceId = authResult.actor.workspaceId;
         const { searchParams } = new URL(request.url);
         const shipmentId = searchParams.get('shipmentId');
+        const idsParam = searchParams.get('ids');
 
-        if (!shipmentId) {
-            return NextResponse.json({ error: 'Missing shipmentId parameter' }, { status: 400 });
+        const ids = idsParam
+            ? idsParam.split(',').map((s) => s.trim()).filter(Boolean)
+            : (shipmentId ? [shipmentId] : []);
+
+        if (!ids.length) {
+            return NextResponse.json({ error: 'Missing shipmentId/ids parameter' }, { status: 400 });
         }
 
-        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, [shipmentId]);
+        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids);
         if (error) {
             return NextResponse.json(error.body, { status: error.status });
         }

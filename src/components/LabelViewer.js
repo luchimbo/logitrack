@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "@/lib/api";
-import { printPdfFromUrl, openPrintWindow } from "@/lib/printLabel";
+import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 
 export default function LabelViewer({ shipmentId, onClose }) {
     const [loading, setLoading] = useState(true);
@@ -78,16 +78,11 @@ export default function LabelViewer({ shipmentId, onClose }) {
         }
     };
 
-    const handlePrint = async () => {
+    const handlePrint = () => {
         if (!shipmentId) return;
         const win = openPrintWindow();
         if (!win) return;
-        setPrinting(true);
-        try {
-            await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`, {}, win);
-        } finally {
-            setPrinting(false);
-        }
+        renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`);
     };
 
     const handlePreviewPrint = () => {
