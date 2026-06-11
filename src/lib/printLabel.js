@@ -19,20 +19,36 @@ export function openPrintWindow() {
 
 // Carga el PDF de la etiqueta dentro de la ventana indicada usando un <iframe> al endpoint
 // (mismo origen, con cookies) y dispara el diálogo de impresión al terminar de cargar.
-// Navegar directo a la URL de la API evita los problemas de blob: entre ventanas.
+// Se manipula el DOM del popup directamente (mismo origen) en vez de document.write para
+// máxima compatibilidad; navegar al endpoint evita los problemas de blob: entre ventanas.
 export function renderPrintWindow(win, url) {
     if (!win) return;
-    const safeUrl = String(url).replace(/"/g, "%22");
-    win.document.open();
-    win.document.write(
-        "<!doctype html><html><head><meta charset='utf-8'><title>Imprimir etiqueta</title>" +
-        "<style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100vh}</style></head>" +
-        "<body><iframe id='lbl' src=\"" + safeUrl + "\"></iframe>" +
-        "<script>(function(){var f=document.getElementById('lbl');" +
-        "function p(){try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}}" +
-        "f.addEventListener('load',function(){setTimeout(p,300);});" +
-        "setTimeout(p,2500);})();<\/script>" +
-        "</body></html>"
-    );
-    win.document.close();
+    try {
+        const doc = win.document;
+        doc.title = "Imprimir etiqueta";
+        doc.body.style.margin = "0";
+        doc.body.innerHTML = "";
+
+        const iframe = doc.createElement("iframe");
+        iframe.style.border = "0";
+        iframe.style.width = "100%";
+        iframe.style.height = "100vh";
+        iframe.src = url;
+
+        const triggerPrint = () => {
+            try {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            } catch (e) {
+                /* el PDF igual queda visible para imprimir manualmente */
+            }
+        };
+        iframe.addEventListener("load", () => setTimeout(triggerPrint, 300));
+        doc.body.appendChild(iframe);
+        // Respaldo por si el evento load del PDF no dispara.
+        setTimeout(triggerPrint, 2500);
+    } catch (e) {
+        // Último recurso: navegar la ventana directo al PDF.
+        try { win.location.href = url; } catch (err) { /* noop */ }
+    }
 }
