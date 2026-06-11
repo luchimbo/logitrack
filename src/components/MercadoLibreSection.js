@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
-import { printPdfFromUrl } from "@/lib/printLabel";
+import { printPdfFromUrl, openPrintWindow } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 const VIEW_OPTIONS = [
@@ -423,6 +423,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (willPrint && list.length > 5) {
       if (!confirm(`¿Imprimir etiquetas de ${list.length} ventas?`)) return;
     }
+    // Abrir la ventana de impresión de forma síncrona (dentro del gesto del clic) para que
+    // el bloqueador de popups no la cancele tras los await siguientes.
+    const printWin = willPrint ? openPrintWindow() : null;
+    if (willPrint && !printWin) return;
     setBulkAction(action);
     try {
       // "print" puro: imprimir directo el PDF de las etiquetas ya importadas, sin pasar por
@@ -430,6 +434,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       if (action === "print") {
         const shipmentRowIds = list.map((order) => order.shipmentRowId).filter(Boolean);
         if (!shipmentRowIds.length) {
+          try { printWin.close(); } catch (e) { /* noop */ }
           toast("Las ventas seleccionadas no tienen etiqueta importada", "error");
           return;
         }
@@ -437,9 +442,8 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: shipmentRowIds }),
-        });
+        }, printWin);
         if (ok) {
-          toast(`Abriendo impresión de ${shipmentRowIds.length} etiqueta(s)`, "success");
           setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
         }
         return;
@@ -480,16 +484,18 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids: shipmentRowIds }),
-          });
+          }, printWin);
           if (ok) {
-            toast(`Abriendo impresión de ${shipmentRowIds.length} etiqueta(s)`, "success");
             setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
           }
+        } else {
+          try { printWin.close(); } catch (e) { /* noop */ }
         }
       }
 
       await load({ syncMode: "0" });
     } catch (err) {
+      if (printWin) { try { printWin.close(); } catch (e) { /* noop */ } }
       toast(err.message || "Error al procesar etiquetas", "error");
     } finally {
       setBulkAction("");
@@ -518,11 +524,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
   const handlePrint = async (order) => {
     if (!order.shipmentRowId) return;
+    const win = openPrintWindow();
+    if (!win) return;
     setPrintingId(order.id);
     try {
-      const ok = await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`);
+      const ok = await printPdfFromUrl(`/api/labels/pdf?shipmentId=${encodeURIComponent(order.shipmentRowId)}`, {}, win);
       if (ok) {
-        toast("Abriendo impresión de etiqueta", "success");
         setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
       }
     } finally {
