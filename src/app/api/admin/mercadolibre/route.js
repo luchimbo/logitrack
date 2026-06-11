@@ -3,6 +3,9 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { getMercadoLibreSyncMeta, listStoredMercadoLibreOrders, syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   try {
     const authResult = await requireWorkspaceActor(request);
@@ -30,6 +33,7 @@ export async function GET(request) {
             externalStoreId: target.externalStoreId,
             siteId: target.config?.siteId || 'MLA',
             q: '',
+            light: true,
           });
         }
         didSync = true;

@@ -225,8 +225,11 @@ async function getFlexConfigCached(client, { siteId, userId, cache }) {
   return config;
 }
 
-async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = new Map() } = {}) {
-  const order = orderSummary?.id ? await client.getOrder(orderSummary.id) : orderSummary;
+async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = new Map(), light = false } = {}) {
+  // En modo liviano usamos los campos que ya trae searchOrders y solo pedimos el shipment
+  // (estado/substatus/logistic/tracking/destino). Evita ~6 llamadas extra por orden y previene
+  // timeouts en el sync masivo.
+  const order = light ? orderSummary : (orderSummary?.id ? await client.getOrder(orderSummary.id) : orderSummary);
   const shipmentId = order?.shipping?.id;
   let shipment = null;
   let shipmentItems = [];
@@ -236,6 +239,9 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   let history = [];
   if (shipmentId) {
     shipment = await client.getShipment(shipmentId);
+    if (light) {
+      return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
+    }
     shipmentItems = await client.getShipmentItems(shipmentId).catch(() => []);
     leadTime = await client.getShipmentLeadTime(shipmentId).catch(() => null);
     delays = await client.getShipmentDelays(shipmentId);
@@ -254,7 +260,7 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
 }
 
-export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '' } = {}) {
+export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false } = {}) {
   await ensureDb();
   const sellerId = externalStoreId;
   if (!sellerId) throw new Error('Seller ID de Mercado Libre no disponible');
@@ -267,7 +273,7 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
     for (const orderSummary of orders) {
-      const full = await fetchFullOrder(client, orderSummary, siteId, { flexConfigCache });
+      const full = await fetchFullOrder(client, orderSummary, siteId, { flexConfigCache, light });
       await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
       totalSynced++;
     }

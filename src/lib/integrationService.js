@@ -107,6 +107,33 @@ export async function listIntegrationConnections({ workspaceId, provider = '', i
   return (result.rows || []).map((row) => mapConnectionRow(row, includeConfig));
 }
 
+export async function listAllActiveIntegrationConnections({ provider = '', includeConfig = false } = {}) {
+  await ensureDb();
+  const conditions = ['is_active = 1'];
+  const args = [];
+  if (provider) {
+    conditions.push('provider = ?');
+    args.push(provider);
+  }
+
+  const result = await db.execute({
+    sql: `SELECT id, workspace_id, provider, external_store_id, display_name, config_json, connected_at, is_active
+          FROM workspace_integration_connections
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY workspace_id ASC, provider ASC`,
+    args,
+  });
+
+  return (result.rows || []).map((row) => {
+    try {
+      return mapConnectionRow(row, includeConfig);
+    } catch (error) {
+      console.error('Integration config decrypt error:', error.message || error);
+      return null;
+    }
+  }).filter(Boolean);
+}
+
 export async function getIntegrationConnection({ workspaceId, provider, id, externalStoreId, includeConfig = true } = {}) {
   await ensureDb();
   const conditions = ['workspace_id = ?', 'provider = ?', 'is_active = 1'];

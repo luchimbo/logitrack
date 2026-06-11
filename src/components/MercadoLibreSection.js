@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
 import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
@@ -316,8 +316,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         setWarning("");
       }
       setLastSyncedAt(data.lastSyncedAt || "");
+      return data;
     } catch (err) {
       setError(err.message || "Error inesperado");
+      return null;
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -339,7 +341,27 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   }, [loadStatus]);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
-  useEffect(() => { if (connected) load({ syncMode: "0" }); }, [connected, selectedConnectionId, view, load]);
+
+  // Carga el cache rápido y, si los datos están viejos (>3 min) o no hay, sincroniza solo
+  // en segundo plano. Una vez por cuenta por sesión para no resincronizar en cada cambio.
+  const autoSyncedRef = useRef(new Set());
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    (async () => {
+      const data = await load({ syncMode: "0" });
+      if (cancelled || !data) return;
+      const key = String(selectedConnectionId || "all");
+      if (autoSyncedRef.current.has(key)) return;
+      const last = data.lastSyncedAt ? new Date(data.lastSyncedAt).getTime() : 0;
+      const stale = !last || (Date.now() - last > 3 * 60 * 1000);
+      if (stale) {
+        autoSyncedRef.current.add(key);
+        load({ syncMode: "force" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [connected, selectedConnectionId, view, load]);
 
   const toggleOrderSelection = (order) => {
     const key = orderKey(order);
