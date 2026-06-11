@@ -4,49 +4,40 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 
-// Detecta el tipo de respuesta de Mercado Libre por magic bytes.
-function startsWith(bytes, signature) {
-    if (bytes.length < signature.length) return false;
-    for (let i = 0; i < signature.length; i++) {
-        if (bytes[i] !== signature[i]) return false;
+// Extrae solo los bloques ZPL (la etiqueta) del ZIP que devuelve ML; ignora el remito
+// (Control.pdf) y cualquier otro adjunto. Mismo criterio que extractZplLabelsFromZip.
+async function extractZplFromMlZip(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    // Si por algún motivo no es ZIP (PK), no hay ZPL utilizable.
+    if (bytes.length < 2 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return [];
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const files = unzipSync(bytes);
+    const labels = [];
+    for (const [name, data] of Object.entries(files)) {
+        if (!/\.(txt|zpl)$/i.test(name)) continue;
+        const text = strFromU8(data).trim();
+        if (text) labels.push(text);
     }
-    return true;
+    return labels;
 }
 
-const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46]; // %PDF
-const ZIP_MAGIC = [0x50, 0x4b]; // PK
-
-// Normaliza la respuesta de ML (PDF directo o ZIP con varios PDF) a un único PDF.
-async function normalizeToPdf(arrayBuffer) {
-    const bytes = new Uint8Array(arrayBuffer);
-
-    if (startsWith(bytes, PDF_MAGIC)) {
-        return Buffer.from(bytes);
+// Renderiza ZPL concatenado a un PDF multipágina 4x6 (tamaño térmico) vía Labelary.
+async function zplToPdf4x6(zpl) {
+    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/4x6/';
+    const attemptHeaders = [
+        { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
+        { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
+    ];
+    let response = null;
+    for (const headers of attemptHeaders) {
+        response = await fetch(labelaryUrl, { method: 'POST', headers, body: zpl });
+        if (response.ok || response.status !== 415) break;
     }
-
-    if (startsWith(bytes, ZIP_MAGIC)) {
-        const { unzipSync } = await import('fflate');
-        const files = unzipSync(bytes);
-        const pdfs = Object.entries(files)
-            .filter(([name]) => /\.pdf$/i.test(name))
-            .map(([, data]) => data);
-
-        if (!pdfs.length) return null;
-        if (pdfs.length === 1) return Buffer.from(pdfs[0]);
-
-        // Combinar varios PDF en uno solo.
-        const { PDFDocument } = await import('pdf-lib');
-        const merged = await PDFDocument.create();
-        for (const data of pdfs) {
-            const doc = await PDFDocument.load(data);
-            const pages = await merged.copyPages(doc, doc.getPageIndices());
-            pages.forEach((page) => merged.addPage(page));
-        }
-        const out = await merged.save();
-        return Buffer.from(out);
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`Labelary: ${errorText}`);
     }
-
-    return null;
+    return Buffer.from(await response.arrayBuffer());
 }
 
 export async function GET(request) {
@@ -95,17 +86,26 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Conexión de Mercado Libre no disponible' }, { status: 404 });
         }
 
-        let buffer;
+        // Pedir el ZPL (solo la etiqueta, sin remito) y renderizarlo a PDF 4x6.
+        let zipBuffer;
         try {
-            buffer = await target.client.downloadShipmentLabelsPdf(shipmentIds);
+            zipBuffer = await target.client.downloadShipmentLabelsZpl(shipmentIds);
         } catch (err) {
-            console.error('ML label PDF download error:', err);
-            return NextResponse.json({ error: 'Mercado Libre no pudo generar la etiqueta PDF' }, { status: 502 });
+            console.error('ML label ZPL download error:', err);
+            return NextResponse.json({ error: 'Mercado Libre no pudo generar la etiqueta (¿la venta sigue lista para imprimir?)' }, { status: 502 });
         }
 
-        const pdf = await normalizeToPdf(buffer);
-        if (!pdf) {
-            return NextResponse.json({ error: 'Mercado Libre no devolvió una etiqueta PDF válida' }, { status: 502 });
+        const labels = await extractZplFromMlZip(zipBuffer);
+        if (!labels.length) {
+            return NextResponse.json({ error: 'Mercado Libre no devolvió la etiqueta en formato imprimible' }, { status: 502 });
+        }
+
+        let pdf;
+        try {
+            pdf = await zplToPdf4x6(labels.join('\r\n'));
+        } catch (err) {
+            console.error('Labelary render error:', err);
+            return NextResponse.json({ error: 'No se pudo generar el PDF de la etiqueta' }, { status: 502 });
         }
 
         return new NextResponse(pdf, {
