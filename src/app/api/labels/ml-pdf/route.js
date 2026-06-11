@@ -25,7 +25,7 @@ async function extractZplFromMlZip(arrayBuffer) {
 // real de las etiquetas ML colecta/flex) vía Labelary. Coincidir el tamaño del PDF con la
 // media evita que la impresora recorte el borde inferior.
 async function zplToPdf4x6(zpl) {
-    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/3.94x5.91/';
+    const labelaryUrl = 'https://api.labelary.com/v1/printers/8dpmm/labels/3.94x6.5/';
     const attemptHeaders = [
         { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
         { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
