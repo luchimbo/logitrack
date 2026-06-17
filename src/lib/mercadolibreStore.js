@@ -298,13 +298,13 @@ export async function listStoredMercadoLibreOrders({ workspaceId, connectionId =
     args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   if (view === 'ready') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship'`);
-  if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print', 'printed')))`);
+  if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print')))`);
   if (view === 'no_label') conditions.push(`mo.label_imported_at IS NULL AND NOT (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print', 'printed'))`);
   if (view === 'flex') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) = 'self_service'`);
   if (view === 'colecta') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) != 'self_service'`);
   if (view === 'delayed') conditions.push(`(LOWER(COALESCE(mo.shipment_substatus, '')) LIKE '%delayed%' OR COALESCE(mo.delays_json, 'null') NOT IN ('', 'null'))`);
   if (view === 'imported') conditions.push(`mo.label_imported_at IS NOT NULL`);
-  if (view === 'to_dispatch') conditions.push(`(mo.label_printed_at IS NOT NULL OR mo.label_imported_at IS NOT NULL OR mo.shipment_row_id IS NOT NULL) AND LOWER(COALESCE(mo.shipment_status, '')) NOT IN ('shipped','delivered','in_transit','cancelled','canceled') AND LOWER(COALESCE(mo.shipment_substatus, '')) NOT IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier')`);
+  if (view === 'to_dispatch') conditions.push(`(mo.label_printed_at IS NOT NULL OR mo.label_imported_at IS NOT NULL OR mo.shipment_row_id IS NOT NULL OR LOWER(COALESCE(mo.shipment_substatus, '')) = 'printed') AND LOWER(COALESCE(mo.shipment_status, '')) NOT IN ('shipped','delivered','in_transit','cancelled','canceled') AND LOWER(COALESCE(mo.shipment_substatus, '')) NOT IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier')`);
   if (view === 'dispatched_today') conditions.push(`date(mo.label_imported_at) = date('now','localtime')`);
   if (view === 'in_transit') conditions.push(`(LOWER(COALESCE(mo.shipment_status, '')) IN ('shipped','in_transit') OR LOWER(COALESCE(mo.shipment_substatus, '')) IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier'))`);
   if (view === 'delivered') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'delivered'`);

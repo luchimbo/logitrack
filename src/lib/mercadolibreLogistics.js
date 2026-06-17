@@ -31,6 +31,7 @@ const STATE_META = {
 
 const PRINTABILITY_META = {
   imported: { id: 'imported', label: 'Etiqueta descargada', color: '#22c55e', canImport: false, canPrint: true },
+  printed: { id: 'printed', label: 'Etiqueta impresa', color: '#059669', canImport: true, canPrint: false },
   printable: { id: 'printable', label: 'Lista para imprimir', color: '#f97316', canImport: true, canPrint: false },
   not_ready: { id: 'not_ready', label: 'ML aún no generó etiqueta', color: '#64748b', canImport: false, canPrint: false },
   unavailable: { id: 'unavailable', label: 'Sin envío asignado', color: '#64748b', canImport: false, canPrint: false },
@@ -238,6 +239,7 @@ export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipm
   // ready_to_ship => ML ya genero la etiqueta y se puede descargar (salvo Mercado Full, que lo gestiona ML)
   if (status === 'ready_to_ship') {
     if (type === 'fulfillment') return asPrintability('not_ready', 'Gestiona Mercado Full');
+    if (substatus === 'printed') return asPrintability('printed');
     return asPrintability('printable');
   }
   return asPrintability('not_ready', eventLabel(status, substatus));
