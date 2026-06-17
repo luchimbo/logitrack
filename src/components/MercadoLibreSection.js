@@ -201,7 +201,7 @@ const STATE_BORDER = {
 };
 
 function isToDispatch(order) {
-  const hasLabel = Boolean(order.labelImportedAt || order.shipmentRowId);
+  const hasLabel = Boolean(order.labelPrintedAt || order.labelImportedAt || order.shipmentRowId);
   const state = order.packageState?.id;
   const gone = ["in_transit", "delivered", "canceled", "problem"].includes(state);
   return hasLabel && !gone;
@@ -259,7 +259,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   }, [orders, selectedOrderKeys]);
 
   const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
-  const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
+  const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable" && !order.labelPrintedAt), [orders]);
   const printableFlexCount = useMemo(() => printableOrders.filter((o) => o.logisticType === "self_service").length, [printableOrders]);
   const printableColectaCount = useMemo(() => printableOrders.filter((o) => o.logisticType !== "self_service").length, [printableOrders]);
   const toDispatchOrders = useMemo(() => orders.filter(isToDispatch), [orders]);

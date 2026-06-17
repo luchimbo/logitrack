@@ -538,6 +538,7 @@ export async function initDb() {
   await addColumnIfMissing("shipments", "external_order_id", "TEXT");
   await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
   await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
+  await addColumnIfMissing("mercadolibre_orders", "label_printed_at", "DATETIME");
   await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");

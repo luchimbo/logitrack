@@ -92,6 +92,26 @@ export async function POST(request) {
         sql: `UPDATE print_queue SET status = 'printed', printed_at = CURRENT_TIMESTAMP, error = NULL WHERE queue_job_id = ?`,
         args: [String(queue_job_id)],
       });
+      // Marcar label_printed_at en las órdenes ML vinculadas a este job
+      const jobRow = await db.execute({
+        sql: `SELECT workspace_id, shipment_ids_json FROM print_queue WHERE queue_job_id = ? LIMIT 1`,
+        args: [String(queue_job_id)],
+      });
+      if (jobRow.rows.length) {
+        const { workspace_id, shipment_ids_json } = jobRow.rows[0];
+        let shipmentIds = [];
+        try { shipmentIds = JSON.parse(shipment_ids_json || '[]'); } catch { /* noop */ }
+        for (const sid of shipmentIds) {
+          await db.execute({
+            sql: `UPDATE mercadolibre_orders SET label_printed_at = CURRENT_TIMESTAMP
+                  WHERE workspace_id = ? AND (
+                    shipment_row_id IN (SELECT id FROM shipments WHERE workspace_id = ? AND external_shipment_id = ?)
+                    OR shipment_row_id IN (SELECT id FROM shipments WHERE workspace_id = ? AND id = ?)
+                  ) AND label_printed_at IS NULL`,
+            args: [Number(workspace_id), Number(workspace_id), String(sid), Number(workspace_id), Number(sid)],
+          });
+        }
+      }
     } else {
       await db.execute({
         sql: `UPDATE print_queue SET status = 'failed', error = ? WHERE queue_job_id = ?`,
