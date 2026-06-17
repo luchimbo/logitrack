@@ -574,6 +574,31 @@ export async function initDb() {
     console.error("Dispatch status backfill error:", e.message || e);
   }
 
+  // Backfill label_printed_at desde print_queue ya impresos
+  try {
+    await exec(`
+      UPDATE mercadolibre_orders
+      SET label_printed_at = (
+        SELECT MIN(pq.printed_at)
+        FROM print_queue pq, json_each(pq.shipment_ids_json) je
+        WHERE pq.status = 'printed'
+          AND pq.workspace_id = mercadolibre_orders.workspace_id
+          AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
+      )
+      WHERE label_printed_at IS NULL
+        AND shipment_row_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM print_queue pq, json_each(pq.shipment_ids_json) je
+          WHERE pq.status = 'printed'
+            AND pq.workspace_id = mercadolibre_orders.workspace_id
+            AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
+        )
+    `);
+  } catch (e) {
+    console.error("label_printed_at backfill error:", e.message || e);
+  }
+
   let legacyWorkspaceId = null;
   try {
     const legacyWorkspace = await exec(
