@@ -209,10 +209,13 @@ function isToDispatch(order) {
 }
 
 function isTodayDispatch(order, todayStr) {
-  const cutoff = order.cutoffDetail?.value;
-  if (!cutoff) return true; // sin fecha = no excluir
-  const dateStr = cutoff.slice(0, 10); // YYYY-MM-DD
-  return dateStr === todayStr;
+  // Usar la fecha de límite de handling de ML (campo confiable YYYY-MM-DD)
+  if (order.handlingLimitDate) return order.handlingLimitDate === todayStr;
+  // Fallback: datetime de asignación Flex
+  const cutoff = order.cutoffDetail;
+  if (cutoff?.precision === 'datetime' && cutoff.value) return cutoff.value.slice(0, 10) === todayStr;
+  // Sin fecha confiable: excluir (evita mostrar pedidos viejos)
+  return false;
 }
 
 function sortByUrgency(orders) {

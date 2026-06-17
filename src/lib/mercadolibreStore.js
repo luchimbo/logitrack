@@ -85,6 +85,7 @@ function mapOrderRow(row) {
     history,
     labelImportedAt: row.label_imported_at || '',
     labelPrintedAt: row.label_printed_at || '',
+    handlingLimitDate: (parseJson(row.lead_time_json, {}))?.estimated_handling_limit?.date?.slice(0, 10) || '',
     shipmentRowId: row.shipment_row_id ? Number(row.shipment_row_id) : null,
     createdAt: row.created_at_external || '',
     updatedAt: row.updated_at_external || '',
