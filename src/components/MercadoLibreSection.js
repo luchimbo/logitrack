@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
+import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
 import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
@@ -208,6 +208,13 @@ function isToDispatch(order) {
   return hasLabel && !gone;
 }
 
+function isTodayDispatch(order, todayStr) {
+  const cutoff = order.cutoffDetail?.value;
+  if (!cutoff) return true; // sin fecha = no excluir
+  const dateStr = cutoff.slice(0, 10); // YYYY-MM-DD
+  return dateStr === todayStr;
+}
+
 function sortByUrgency(orders) {
   const urgency = (o) => {
     const state = o.packageState?.id;
@@ -259,15 +266,17 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     return orders.filter((order) => keys.has(orderKey(order)));
   }, [orders, selectedOrderKeys]);
 
+  const todayStr = useMemo(() => getArgentinaDateString(), []);
   const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
-  const printableOrders = useMemo(() => orders.filter((order) => order.printability?.id === "printable"), [orders]);
+  const todayOrders = useMemo(() => orders.filter((o) => isTodayDispatch(o, todayStr)), [orders, todayStr]);
+  const printableOrders = useMemo(() => todayOrders.filter((order) => order.printability?.id === "printable"), [todayOrders]);
   const printableFlexCount = useMemo(() => printableOrders.filter((o) => o.logisticType === "self_service").length, [printableOrders]);
   const printableColectaCount = useMemo(() => printableOrders.filter((o) => o.logisticType !== "self_service").length, [printableOrders]);
-  const toDispatchOrders = useMemo(() => orders.filter(isToDispatch), [orders]);
+  const toDispatchOrders = useMemo(() => todayOrders.filter(isToDispatch), [todayOrders]);
   const toDispatchFlexCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType === "self_service").length, [toDispatchOrders]);
   const toDispatchColectaCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType !== "self_service").length, [toDispatchOrders]);
-  const flexCount = useMemo(() => orders.filter((o) => o.logisticType === "self_service").length, [orders]);
-  const colectaCount = useMemo(() => orders.filter((o) => o.logisticType !== "self_service").length, [orders]);
+  const flexCount = useMemo(() => todayOrders.filter((o) => o.logisticType === "self_service").length, [todayOrders]);
+  const colectaCount = useMemo(() => todayOrders.filter((o) => o.logisticType !== "self_service").length, [todayOrders]);
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = orders.length > 0 && orders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
