@@ -15,6 +15,7 @@ const SCANNED_SUBSTATUSES = new Set([
   'authorized_by_carrier',
 ]);
 const PRINTABLE_SUBSTATUSES = new Set(['ready_to_print', 'printed']);
+const PRINTED_SUBSTATUSES = new Set(['printed', 'ready_for_pickup']);
 const PREPARING_SUBSTATUSES = new Set(['waiting_for_label_generation', 'regenerating', 'invoice_pending']);
 
 const STATE_META = {
@@ -224,22 +225,23 @@ export function derivePackageState({ shipmentStatus = '', shipmentSubstatus = ''
   return asState('pending');
 }
 
-export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipmentSubstatus = '', logisticType = '', labelImportedAt = '', shipmentRowId = null } = {}) {
+export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipmentSubstatus = '', logisticType = '', labelImportedAt = '', labelPrintedAt = '', shipmentRowId = null } = {}) {
   const status = lower(shipmentStatus);
   const substatus = lower(shipmentSubstatus);
   const type = lower(logisticType);
 
-  if (labelImportedAt || shipmentRowId) return asPrintability('imported');
   if (!shipmentId) return asPrintability('unavailable', 'La venta no tiene shipment_id');
   if (CANCELED_STATUSES.has(status) || PROBLEM_STATUSES.has(status)) return asPrintability('error', 'El envio no esta disponible para imprimir');
   // Ya despachada / en movimiento: la etiqueta ya se uso, no hay accion de impresion
   if (IN_TRANSIT_STATUSES.has(status) || DELIVERED_STATUSES.has(status) || SCANNED_SUBSTATUSES.has(substatus)) {
     return asPrintability('not_ready', 'Ya despachada');
   }
+  // Ya impresa (en Geomodi o marcada por ML): pasa a "para despachar", pero se puede reimprimir.
+  if (labelPrintedAt || PRINTED_SUBSTATUSES.has(substatus)) return asPrintability('printed');
+  if (labelImportedAt || shipmentRowId) return asPrintability('imported');
   // ready_to_ship => ML ya genero la etiqueta y se puede descargar (salvo Mercado Full, que lo gestiona ML)
   if (status === 'ready_to_ship') {
     if (type === 'fulfillment') return asPrintability('not_ready', 'Gestiona Mercado Full');
-    if (substatus === 'printed') return asPrintability('printed');
     return asPrintability('printable');
   }
   return asPrintability('not_ready', eventLabel(status, substatus));

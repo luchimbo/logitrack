@@ -69,6 +69,55 @@ function Timeline({ events = [] }) {
   );
 }
 
+// Card estilo panel ML con filas clickeables: "Etiquetas por imprimir" filtra los por-imprimir,
+// "Listas para despachar" filtra los ya impresos de ese método.
+function dispatchCardRow({ label, value, color, filterValue, cardFilter, onToggle }) {
+  const isActive = cardFilter === filterValue;
+  return (
+    <button
+      key={filterValue}
+      type="button"
+      onClick={() => onToggle(filterValue)}
+      style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+        fontSize: "13px", color: "var(--text-secondary)", background: isActive ? "var(--accent-soft)" : "transparent",
+        border: "none", borderRadius: "8px", padding: "6px 8px", cursor: "pointer", textAlign: "left",
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ color: color || "var(--text)", fontWeight: 700 }}>{value}</span>
+    </button>
+  );
+}
+
+function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) {
+  const onToggle = (value) => setCardFilter((prev) => prev === value ? null : value);
+  const active = cardFilter === kind || cardFilter === `${kind}_dispatch`;
+  return (
+    <div style={{ background: "var(--bg-secondary)", border: active ? "2px solid var(--accent)" : "1px solid var(--border)", borderRadius: "var(--radius)", padding: "14px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", padding: "0 8px" }}>
+        <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.04em", color: "var(--text-muted)" }}>{tag}</span>
+        <span style={{ fontSize: "13px", fontWeight: 800, color: "var(--text)", background: "var(--bg)", borderRadius: "999px", padding: "2px 10px", minWidth: "26px", textAlign: "center" }}>{summary.total}</span>
+      </div>
+      <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text)", marginBottom: "8px", padding: "0 8px" }}>{title}</div>
+      {summary.canceled > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", padding: "6px 8px" }}>
+          <span>Canceladas. No despachar</span>
+          <span style={{ color: "#ef4444", fontWeight: 700 }}>{summary.canceled}</span>
+        </div>
+      )}
+      {dispatchCardRow({ label: "Etiquetas por imprimir", value: summary.toPrint, color: "#f97316", filterValue: kind, cardFilter, onToggle })}
+      {dispatchCardRow({ label: "Listas para despachar", value: summary.toDispatch, color: "#059669", filterValue: `${kind}_dispatch`, cardFilter, onToggle })}
+      {summary.rescheduled > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", padding: "6px 8px" }}>
+          <span>Reprogramadas</span>
+          <span style={{ fontWeight: 700 }}>{summary.rescheduled}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrderCard({
   order,
   selected,
@@ -89,6 +138,10 @@ function OrderCard({
   const productNames = products.map((item) => item.name).filter(Boolean).slice(0, 2).join(" · ");
   const isLoading = importing || printing || refreshing;
   const borderColor = STATE_BORDER[order.packageState?.id] || "#cbd5e1";
+  const printabilityId = order.printability?.id;
+  const alreadyPrinted = printabilityId === "printed" || Boolean(order.labelPrintedAt);
+  const canPrint = alreadyPrinted || ["printable", "imported"].includes(printabilityId) || Boolean(order.shipmentRowId);
+  const printLabel = alreadyPrinted ? "Reimprimir" : "Imprimir";
 
   if (compact) {
     return (
@@ -121,10 +174,10 @@ function OrderCard({
               {importing ? "..." : "Importar"}
             </button>
           )}
-          {order.shipmentRowId && (
+          {canPrint && (
             <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)}
               disabled={isLoading} style={{ fontSize: "11px", padding: "4px 8px" }}>
-              {printing ? "..." : "Imprimir"}
+              {printing ? "..." : printLabel}
             </button>
           )}
         </div>
@@ -169,9 +222,9 @@ function OrderCard({
         <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || order.printability?.id === "not_ready"}>
           {importing ? "Importando..." : order.labelImportedAt ? "Reimportar etiqueta" : "Importar ZPL"}
         </button>
-        {order.shipmentRowId ? (
+        {canPrint ? (
           <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)} disabled={isLoading}>
-            {printing ? "Encolando..." : "Imprimir"}
+            {printing ? "Encolando..." : printLabel}
           </button>
         ) : null}
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRefresh(order)} disabled={isLoading}>
@@ -199,24 +252,6 @@ const STATE_BORDER = {
   preparing: "#60a5fa",
   pending: "#cbd5e1",
 };
-
-function isToDispatch(order) {
-  const printed = order.printability?.id === "printed" || Boolean(order.labelPrintedAt);
-  const hasLabel = printed || Boolean(order.labelImportedAt || order.shipmentRowId);
-  const state = order.packageState?.id;
-  const gone = ["in_transit", "delivered", "canceled", "problem"].includes(state);
-  return hasLabel && !gone;
-}
-
-function isTodayDispatch(order, todayStr) {
-  // Usar la fecha de límite de handling de ML (campo confiable YYYY-MM-DD)
-  if (order.handlingLimitDate) return order.handlingLimitDate === todayStr;
-  // Fallback: datetime de asignación Flex
-  const cutoff = order.cutoffDetail;
-  if (cutoff?.precision === 'datetime' && cutoff.value) return cutoff.value.slice(0, 10) === todayStr;
-  // Sin fecha confiable: excluir (evita mostrar pedidos viejos)
-  return false;
-}
 
 function sortByUrgency(orders) {
   const urgency = (o) => {
@@ -249,6 +284,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const [openHistoryKeys, setOpenHistoryKeys] = useState([]);
   const [queuedOrderKeys, setQueuedOrderKeys] = useState(new Set());
   const [view, setView] = useState("");
+  const [cardFilter, setCardFilter] = useState(null);
   const [search, setSearch] = useState("");
   const [compact, setCompact] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState("");
@@ -271,17 +307,63 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
   const todayStr = useMemo(() => getArgentinaDateString(), []);
   const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
-  const todayOrders = useMemo(() => orders.filter((o) => isTodayDispatch(o, todayStr)), [orders, todayStr]);
-  const printableOrders = useMemo(() => todayOrders.filter((order) => order.printability?.id === "printable"), [todayOrders]);
-  const printableFlexCount = useMemo(() => printableOrders.filter((o) => o.logisticType === "self_service").length, [printableOrders]);
-  const printableColectaCount = useMemo(() => printableOrders.filter((o) => o.logisticType !== "self_service").length, [printableOrders]);
-  const toDispatchOrders = useMemo(() => todayOrders.filter(isToDispatch), [todayOrders]);
-  const toDispatchFlexCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType === "self_service").length, [toDispatchOrders]);
-  const toDispatchColectaCount = useMemo(() => toDispatchOrders.filter((o) => o.logisticType !== "self_service").length, [toDispatchOrders]);
-  const flexCount = useMemo(() => todayOrders.filter((o) => o.logisticType === "self_service").length, [todayOrders]);
-  const colectaCount = useMemo(() => todayOrders.filter((o) => o.logisticType !== "self_service").length, [todayOrders]);
+
+  // Solo lo del día de hoy: ML agrupa el panel por la fecha límite de despacho, que derivamos
+  // de estimated_delivery_time.pay_before (handlingLimitDate). Paquetes de otros días o ya
+  // despachados NO entran. Si no hay fecha confiable, se excluye.
+  const isToday = useCallback((o) => Boolean(o.handlingLimitDate) && o.handlingLimitDate === todayStr, [todayStr]);
+  const isFlex = (o) => o.logisticType === "self_service";
+  const isFull = (o) => o.logisticType === "fulfillment";
+  // "Listo para imprimir" real: etiqueta en ready_to_print sin imprimir/importar, del día de hoy.
+  const isPrintableToday = useCallback((o) => (
+    isToday(o)
+    && o.printability?.id === "printable"
+    && String(o.shipmentSubstatus || "").toLowerCase() === "ready_to_print"
+  ), [isToday]);
+
+  const printableOrders = useMemo(() => orders.filter(isPrintableToday), [orders, isPrintableToday]);
+  const printableFlexCount = useMemo(() => printableOrders.filter(isFlex).length, [printableOrders]);
+  const printableColectaCount = useMemo(() => printableOrders.filter((o) => !isFlex(o) && !isFull(o)).length, [printableOrders]);
+
+  // Ya impresa y lista para despachar hoy (sin escanear todavía). Permite reimprimir.
+  const isToDispatchToday = useCallback((o) => (
+    isToday(o)
+    && o.printability?.id === "printed"
+  ), [isToday]);
+
+  // Cards estilo panel ML (Colecta/Flex), acotadas al día de hoy.
+  const dispatchSummary = useMemo(() => {
+    const pendingToday = (o) => isToday(o) && ["ready_to_print", "ready_to_ship"].includes(o.packageState?.id) && o.printability?.id !== "printed";
+    const isResched = (o) => String(o.shipmentSubstatus || "").toLowerCase().includes("reschedul");
+    const flexPending = orders.filter((o) => isFlex(o) && pendingToday(o));
+    const colectaPending = orders.filter((o) => !isFlex(o) && !isFull(o) && pendingToday(o));
+    return {
+      flex: {
+        total: flexPending.length,
+        toPrint: flexPending.filter(isPrintableToday).length,
+        toDispatch: orders.filter((o) => isFlex(o) && isToDispatchToday(o)).length,
+        rescheduled: orders.filter((o) => isFlex(o) && isToday(o) && isResched(o)).length,
+      },
+      colecta: {
+        total: colectaPending.length,
+        toPrint: colectaPending.filter(isPrintableToday).length,
+        toDispatch: orders.filter((o) => !isFlex(o) && !isFull(o) && isToDispatchToday(o)).length,
+        canceled: orders.filter((o) => !isFlex(o) && !isFull(o) && isToday(o) && o.packageState?.id === "canceled").length,
+      },
+    };
+  }, [orders, isToday, isPrintableToday, isToDispatchToday]);
+
+  // Filtro client-side al clickear una card: por imprimir hoy, o para despachar hoy, de ese método.
+  const visibleOrders = useMemo(() => {
+    const method = (o, flex) => flex ? isFlex(o) : (!isFlex(o) && !isFull(o));
+    if (cardFilter === "colecta") return sortedOrders.filter((o) => method(o, false) && isPrintableToday(o));
+    if (cardFilter === "flex") return sortedOrders.filter((o) => method(o, true) && isPrintableToday(o));
+    if (cardFilter === "colecta_dispatch") return sortedOrders.filter((o) => method(o, false) && isToDispatchToday(o));
+    if (cardFilter === "flex_dispatch") return sortedOrders.filter((o) => method(o, true) && isToDispatchToday(o));
+    return sortedOrders;
+  }, [sortedOrders, cardFilter, isPrintableToday, isToDispatchToday]);
   const selectedVisibleCount = selectedOrders.length;
-  const allVisibleSelected = orders.length > 0 && orders.every((order) => selectedOrderKeys.includes(orderKey(order)));
+  const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
 
   useEffect(() => {
@@ -358,6 +440,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   // Carga el cache rápido y, si los datos están viejos (>3 min) o no hay, sincroniza solo
   // en segundo plano. Una vez por cuenta por sesión para no resincronizar en cada cambio.
   const autoSyncedRef = useRef(new Set());
+  const autoRefreshRef = useRef(false);
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
@@ -376,13 +459,43 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     return () => { cancelled = true; };
   }, [connected, selectedConnectionId, view, load]);
 
+  // Mantiene el panel cercano a ML aunque el webhook tarde o no llegue: refresca cache cada
+  // 2 minutos y fuerza sync si la ultima sincronizacion supera 5 minutos.
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    const refresh = async () => {
+      if (cancelled || autoRefreshRef.current || document.visibilityState !== "visible") return;
+      autoRefreshRef.current = true;
+      try {
+        const data = await load({ syncMode: "0" });
+        if (!data || cancelled) return;
+        const last = data.lastSyncedAt ? new Date(data.lastSyncedAt).getTime() : 0;
+        const stale = !last || (Date.now() - last > 5 * 60 * 1000);
+        if (stale) await load({ syncMode: "force" });
+      } finally {
+        autoRefreshRef.current = false;
+      }
+    };
+    const intervalId = window.setInterval(refresh, 2 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [connected, load]);
+
   const toggleOrderSelection = (order) => {
     const key = orderKey(order);
     setSelectedOrderKeys((prev) => prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]);
   };
 
   const toggleVisibleSelection = () => {
-    const visibleKeys = orders.map(orderKey);
+    const visibleKeys = visibleOrders.map(orderKey);
     setSelectedOrderKeys((prev) => {
       if (visibleKeys.every((key) => prev.includes(key))) return prev.filter((key) => !visibleKeys.includes(key));
       return [...new Set([...prev, ...visibleKeys])];
@@ -492,6 +605,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         }
         renderPrintWindow(printWin, url);
         setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
+        await markPrintedAndReload(list);
         return;
       }
 
@@ -525,6 +639,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         if (url) {
           renderPrintWindow(printWin, url);
           setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
+          await markPrintedAndReload(list);
         } else {
           try { printWin.close(); } catch (e) { /* noop */ }
         }
@@ -559,6 +674,30 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
+  // Persiste que las etiquetas se imprimieron (label_printed_at) para que pasen a "para
+  // despachar" y el botón muestre "Reimprimir". Agrupa por conexión.
+  const markPrintedAndReload = async (list) => {
+    const byConn = new Map();
+    for (const order of list) {
+      if (!order.connectionId) continue;
+      const key = String(order.connectionId);
+      if (!byConn.has(key)) byConn.set(key, []);
+      byConn.get(key).push(order.id);
+    }
+    try {
+      await Promise.all([...byConn.entries()].map(([connectionId, orderIds]) =>
+        fetch("/api/admin/mercadolibre/mark-printed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ connectionId, orderIds }),
+        })
+      ));
+      await load({ syncMode: "0" });
+    } catch (err) {
+      console.error("mark-printed error", err);
+    }
+  };
+
   const handlePrint = (order) => {
     if (!order.connectionId) return;
     const win = openPrintWindow();
@@ -568,6 +707,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       `/api/labels/ml-pdf?orderId=${encodeURIComponent(order.id)}&connectionId=${encodeURIComponent(order.connectionId)}`,
     );
     setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
+    markPrintedAndReload([order]);
   };
 
   const handleRefresh = async (order) => {
@@ -617,47 +757,25 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
       {connected ? (
         <>
-          {/* Stats rápidas */}
+          {/* Cards estilo panel Mercado Libre: Colecta (programada) y Flex (por enviar) */}
           {orders.length > 0 && (
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-              {printableOrders.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setView("printable")}
-                  style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px", cursor: "pointer", textAlign: "left" }}
-                >
-                  <span style={{ fontSize: "22px", fontWeight: 800, color: "#ea580c", lineHeight: 1 }}>{printableOrders.length}</span>
-                  <span style={{ fontSize: "11px", color: "#9a3412", fontWeight: 600 }}>Listas para imprimir</span>
-                  <span style={{ fontSize: "11px", color: "#c2410c", marginTop: "2px" }}>
-                    {printableColectaCount} colecta · {printableFlexCount} flex
-                  </span>
-                </button>
-              )}
-              {toDispatchOrders.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setView("to_dispatch")}
-                  style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "150px", cursor: "pointer", textAlign: "left" }}
-                >
-                  <span style={{ fontSize: "22px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{toDispatchOrders.length}</span>
-                  <span style={{ fontSize: "11px", color: "#065f46", fontWeight: 600 }}>Para despachar</span>
-                  <span style={{ fontSize: "11px", color: "#047857", marginTop: "2px" }}>
-                    {toDispatchColectaCount} colecta · {toDispatchFlexCount} flex
-                  </span>
-                </button>
-              )}
-              {flexCount > 0 && (
-                <div style={{ background: "var(--accent-light)", border: "1px solid var(--accent-soft)", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                  <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--accent)", lineHeight: 1 }}>{flexCount}</span>
-                  <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600 }}>Flex</span>
-                </div>
-              )}
-              {colectaCount > 0 && (
-                <div style={{ background: "var(--warning-bg)", border: "1px solid #fde68a", borderRadius: "var(--radius)", padding: "10px 16px", display: "flex", flexDirection: "column", gap: "2px", minWidth: "100px" }}>
-                  <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--warning)", lineHeight: 1 }}>{colectaCount}</span>
-                  <span style={{ fontSize: "11px", color: "var(--warning)", fontWeight: 600 }}>Colecta</span>
-                </div>
-              )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+              <DispatchCard
+                kind="colecta"
+                tag="PROGRAMADA"
+                title="Colecta"
+                summary={dispatchSummary.colecta}
+                cardFilter={cardFilter}
+                setCardFilter={setCardFilter}
+              />
+              <DispatchCard
+                kind="flex"
+                tag="POR ENVIAR"
+                title="Flex"
+                summary={dispatchSummary.flex}
+                cardFilter={cardFilter}
+                setCardFilter={setCardFilter}
+              />
             </div>
           )}
 
@@ -672,7 +790,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
               </div>
               <div className="form-group" style={{ minWidth: "220px" }}>
                 <label className="form-label">Vista</label>
-                <select className="form-input" value={view} onChange={(e) => setView(e.target.value)}>
+                <select className="form-input" value={view} onChange={(e) => { setView(e.target.value); setCardFilter(null); }}>
                   {VIEW_OPTIONS.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
@@ -713,10 +831,15 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
               )}
               <div className="flex-between" style={{ gap: "12px", flexWrap: "wrap" }}>
                 <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                  {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${orders.length} ventas visibles`}
+                  {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${visibleOrders.length} ventas visibles`}
+                  {cardFilter ? (
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "8px", fontSize: "12px" }} onClick={() => setCardFilter(null)}>
+                      ✕ Quitar filtro {cardFilter === "flex" ? "Flex" : "Colecta"}
+                    </button>
+                  ) : null}
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={toggleVisibleSelection} disabled={!orders.length}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={toggleVisibleSelection} disabled={!visibleOrders.length}>
                     {allVisibleSelected ? "Deseleccionar visibles" : "Seleccionar visibles"}
                   </button>
                   <button type="button" className="btn btn-sm" onClick={() => runBulk("import", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
@@ -725,7 +848,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                   <button type="button" className="btn btn-sm" onClick={() => runBulk("print", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
                     {bulkAction === "print" ? "Encolando..." : "Imprimir seleccionadas"}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => runBulk("import_and_print", orders)} disabled={!orders.length || Boolean(bulkAction)}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => runBulk("import_and_print", visibleOrders)} disabled={!visibleOrders.length || Boolean(bulkAction)}>
                     {bulkAction === "import_and_print" ? "Procesando..." : "Importar e imprimir visibles"}
                   </button>
                 </div>
@@ -735,7 +858,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
           {loading ? <div className="spinner"></div> : (
             <div style={{ display: "grid", gap: compact ? "4px" : "12px" }}>
-              {sortedOrders.map((order) => {
+              {visibleOrders.map((order) => {
                 const key = orderKey(order);
                 return (
                   <OrderCard

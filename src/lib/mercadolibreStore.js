@@ -51,6 +51,7 @@ function mapOrderRow(row) {
     carrier,
     history,
     labelImportedAt: row.label_imported_at || '',
+    labelPrintedAt: row.label_printed_at || '',
     shipmentRowId: row.shipment_row_id ? Number(row.shipment_row_id) : null,
     labelDispatchDate: row.imported_dispatch_date || '',
   });
@@ -85,7 +86,13 @@ function mapOrderRow(row) {
     history,
     labelImportedAt: row.label_imported_at || '',
     labelPrintedAt: row.label_printed_at || '',
-    handlingLimitDate: (parseJson(row.lead_time_json, {}))?.estimated_handling_limit?.date?.slice(0, 10) || '',
+    // Fecha límite de despacho que usa ML para agrupar el panel del día. ML no expone
+    // estimated_handling_limit por API; el campo confiable es estimated_delivery_time.pay_before
+    // (viene en offset AR, así que slice(0,10) da la fecha local correcta).
+    handlingLimitDate: (() => {
+      const lt = parseJson(row.lead_time_json, {});
+      return (lt?.estimated_handling_limit?.date || lt?.estimated_delivery_time?.pay_before || '').slice(0, 10);
+    })(),
     shipmentRowId: row.shipment_row_id ? Number(row.shipment_row_id) : null,
     createdAt: row.created_at_external || '',
     updatedAt: row.updated_at_external || '',
@@ -262,6 +269,17 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
 }
 
+// Sincroniza UNA orden con su detalle COMPLETO (shipment, items, lead_time, delays, carrier,
+// historial y asignación Flex). Lo usa el webhook para guardar toda la data del envío en cada
+// cambio que notifica ML.
+export async function syncSingleMercadoLibreOrder({ workspaceId, client, orderId, connectionId, externalStoreId, siteId = 'MLA', light = false } = {}) {
+  await ensureDb();
+  if (!orderId) return null;
+  const full = await fetchFullOrder(client, { id: String(orderId) }, siteId, { light });
+  await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
+  return full;
+}
+
 export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false } = {}) {
   await ensureDb();
   const sellerId = externalStoreId;
@@ -305,7 +323,7 @@ export async function listStoredMercadoLibreOrders({ workspaceId, connectionId =
   if (view === 'colecta') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) != 'self_service'`);
   if (view === 'delayed') conditions.push(`(LOWER(COALESCE(mo.shipment_substatus, '')) LIKE '%delayed%' OR COALESCE(mo.delays_json, 'null') NOT IN ('', 'null'))`);
   if (view === 'imported') conditions.push(`mo.label_imported_at IS NOT NULL`);
-  if (view === 'to_dispatch') conditions.push(`(mo.label_printed_at IS NOT NULL OR mo.label_imported_at IS NOT NULL OR mo.shipment_row_id IS NOT NULL OR LOWER(COALESCE(mo.shipment_substatus, '')) = 'printed') AND LOWER(COALESCE(mo.shipment_status, '')) NOT IN ('shipped','delivered','in_transit','cancelled','canceled') AND LOWER(COALESCE(mo.shipment_substatus, '')) NOT IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier')`);
+  if (view === 'to_dispatch') conditions.push(`(mo.label_printed_at IS NOT NULL OR mo.label_imported_at IS NOT NULL OR mo.shipment_row_id IS NOT NULL OR LOWER(COALESCE(mo.shipment_substatus, '')) IN ('printed','ready_for_pickup')) AND LOWER(COALESCE(mo.shipment_status, '')) NOT IN ('shipped','delivered','in_transit','cancelled','canceled') AND LOWER(COALESCE(mo.shipment_substatus, '')) NOT IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier')`);
   if (view === 'dispatched_today') conditions.push(`date(mo.label_imported_at) = date('now','localtime')`);
   if (view === 'in_transit') conditions.push(`(LOWER(COALESCE(mo.shipment_status, '')) IN ('shipped','in_transit') OR LOWER(COALESCE(mo.shipment_substatus, '')) IN ('picked_up','in_hub','in_transit','out_for_delivery','deliver_attempt','waiting_for_pickup','ready_to_pickup','me2_in_transit','me2_picked_up','authorized_by_carrier'))`);
   if (view === 'delivered') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'delivered'`);
@@ -337,6 +355,21 @@ export async function getMercadoLibreSyncMeta({ workspaceId, connectionId = '' }
   });
   const row = result.rows?.[0] || {};
   return { lastSyncedAt: row.last_synced_at || '', totalOrders: Number(row.total_orders || 0) };
+}
+
+// Marca etiquetas como impresas (label_printed_at) para que pasen de "por imprimir" a "para
+// despachar". Se usa al imprimir el PDF directo de ML, que no pasa por la cola.
+export async function markMercadoLibreLabelsPrinted({ workspaceId, connectionId, orderIds = [] } = {}) {
+  await ensureDb();
+  const ids = (Array.isArray(orderIds) ? orderIds : [orderIds]).map((id) => String(id || '').trim()).filter(Boolean);
+  if (!ids.length || !connectionId) return 0;
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.execute({
+    sql: `UPDATE mercadolibre_orders SET label_printed_at = CURRENT_TIMESTAMP
+          WHERE workspace_id = ? AND integration_connection_id = ? AND order_id IN (${placeholders})`,
+    args: [workspaceId, Number(connectionId), ...ids],
+  });
+  return ids.length;
 }
 
 async function extractZplLabelsFromZip(arrayBuffer) {

@@ -539,6 +539,9 @@ export async function initDb() {
   await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
   await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
   await addColumnIfMissing("mercadolibre_orders", "label_printed_at", "DATETIME");
+  // ZPL de la etiqueta guardado al imprimir, para poder reimprimir aunque ML ya no la entregue
+  // (NOT_PRINTABLE_STATUS cuando el envío avanzó de estado).
+  await addColumnIfMissing("mercadolibre_orders", "printed_label_zpl", "TEXT");
   await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
   await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");

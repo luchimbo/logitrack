@@ -4,6 +4,8 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 
+export const maxDuration = 60;
+
 // Extrae solo los bloques ZPL (la etiqueta) del ZIP que devuelve ML; ignora el remito
 // (Control.pdf) y cualquier otro adjunto. Mismo criterio que extractZplLabelsFromZip.
 async function extractZplFromMlZip(arrayBuffer) {
@@ -21,35 +23,34 @@ async function extractZplFromMlZip(arrayBuffer) {
     return labels;
 }
 
-// Calcula el alto real de la etiqueta en pulgadas a partir del ZPL, teniendo en cuenta los
-// desplazamientos ^LH (label home). Las etiquetas Flex de ML incluyen una parte superior
-// "recortable" y son bastante más altas que 15 cm; un alto fijo recortaba el pie.
-function computeZplHeightInches(zpl) {
-    const DPI = 203.2; // 8 dpmm
-    const regex = /\^LH\s*(\d+)\s*,\s*(\d+)|\^F[OT](\d+),(\d+)/gi;
-    let lhY = 0;
-    let maxY = 0;
-    let match;
-    while ((match = regex.exec(zpl)) !== null) {
-        if (match[1] !== undefined) {
-            lhY = Number(match[2]) || 0; // nuevo ^LH
-        } else {
-            const absY = lhY + (Number(match[4]) || 0);
-            if (absY > maxY) maxY = absY;
-        }
-    }
-    // Margen para la altura del último elemento (texto/FB) + borde inferior.
-    const heightDots = maxY + 180;
-    const inches = heightDots / DPI;
-    // Acotar a un rango sensato (mín ~6 in / 15 cm, máx ~10 in).
-    return Math.min(10, Math.max(6, Number(inches.toFixed(2))));
+const DPMM = 8; // densidad de impresión de las etiquetas ML
+const DPI = DPMM * 25.4; // 203.2 dpi
+
+const LABEL_WIDTH_IN = 3.94; // 10 cm — ancho estándar de las etiquetas térmicas de ML
+const LABEL_HEIGHT_DOTS = 1200; // 15 cm a 8 dpmm
+
+// Divide un ZPL con varias etiquetas concatenadas en bloques individuales ^XA ... ^XZ y
+// descarta los bloques vacíos (ML a veces agrega un ^XA^XZ sin contenido que, si se renderiza,
+// produce una página en blanco).
+function splitZplLabels(zpl) {
+    const blocks = (zpl.match(/\^XA[\s\S]*?\^XZ/g) || []).filter((b) => /\^F[OT]\d/.test(b));
+    return blocks.length ? blocks : [zpl];
 }
 
-// Renderiza ZPL concatenado a un PDF multipágina vía Labelary. Ancho 10 cm (3.94 in) y alto
-// calculado del propio ZPL para no recortar etiquetas Flex (más altas que 15 cm).
-async function zplToPdf4x6(zpl) {
-    const heightIn = computeZplHeightInches(zpl);
-    const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/3.94x${heightIn}/`;
+// Alto de UNA etiqueta en pulgadas. El ZPL de ML NO trae ^LL/^PW, así que medimos la mayor
+// coordenada Y de los campos (^FO/^FT, contemplando ^LH). Piso de 15 cm para que una etiqueta
+// normal ocupe toda la hoja 10x15; si el contenido supera los 15 cm (ej. Flex con encabezado
+// recortable), se expande para no cortar el pie.
+function labelHeightInches(zpl) {
+    const regex = /\^F[OT](\d+),(\d+)/gi;
+    let maxY = 0, m;
+    while ((m = regex.exec(zpl)) !== null) maxY = Math.max(maxY, Number(m[2]) || 0);
+    const heightDots = maxY <= LABEL_HEIGHT_DOTS ? LABEL_HEIGHT_DOTS : maxY + 80;
+    return Math.min(12, Number((heightDots / DPI).toFixed(2)));
+}
+
+async function renderSingleLabelPdf(zpl, height) {
+    const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/${LABEL_WIDTH_IN}x${height}/`;
     const attemptHeaders = [
         { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
         { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
@@ -63,7 +64,22 @@ async function zplToPdf4x6(zpl) {
         const errorText = await response.text().catch(() => 'Unknown error');
         throw new Error(`Labelary: ${errorText}`);
     }
-    return Buffer.from(await response.arrayBuffer());
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+// Renderiza cada etiqueta a su tamaño real y las une en un PDF multipágina. Así una etiqueta
+// 10x15 ocupa una página 10x15 (sin espacio en blanco) y las Flex más altas tampoco se recortan.
+async function zplToPdf4x6(zpl) {
+    const { PDFDocument } = await import('pdf-lib');
+    const labels = splitZplLabels(zpl);
+    const merged = await PDFDocument.create();
+    for (const label of labels) {
+        const bytes = await renderSingleLabelPdf(label, labelHeightInches(label));
+        const src = await PDFDocument.load(bytes);
+        const pages = await merged.copyPages(src, src.getPageIndices());
+        for (const page of pages) merged.addPage(page);
+    }
+    return Buffer.from(await merged.save());
 }
 
 export async function GET(request) {
@@ -94,24 +110,25 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Conexión de Mercado Libre no disponible' }, { status: 404 });
         }
 
-        // Resolver los shipment_id (ML externo) a partir de los order_id del workspace.
+        // Resolver shipment_id y ZPL ya guardado (si se imprimió antes) por order_id.
         const placeholders = orderIds.map(() => '?').join(', ');
         const result = await db.execute({
-            sql: `SELECT order_id, shipment_id FROM mercadolibre_orders
+            sql: `SELECT order_id, shipment_id, printed_label_zpl FROM mercadolibre_orders
                   WHERE workspace_id = ? AND order_id IN (${placeholders})`,
             args: [workspaceId, ...orderIds],
         });
 
-        const shipmentByOrder = new Map(
-            result.rows
-                .filter((row) => String(row.shipment_id || '').trim())
-                .map((row) => [String(row.order_id), String(row.shipment_id).trim()]),
-        );
+        const shipmentByOrder = new Map();
+        const storedZplByOrder = new Map();
+        for (const row of result.rows) {
+            const oid = String(row.order_id);
+            if (String(row.shipment_id || '').trim()) shipmentByOrder.set(oid, String(row.shipment_id).trim());
+            if (String(row.printed_label_zpl || '').trim()) storedZplByOrder.set(oid, String(row.printed_label_zpl));
+        }
 
-        // Fallback: para los order_id que no estén sincronizados (o sin envío en la base),
-        // pedir el envío directo a ML. Permite imprimir ventas recién creadas.
+        // Fallback: order_id no sincronizados -> pedir el envío directo a ML.
         for (const orderId of orderIds) {
-            if (shipmentByOrder.has(orderId)) continue;
+            if (shipmentByOrder.has(orderId) || storedZplByOrder.has(orderId)) continue;
             try {
                 const order = await target.client.getOrder(orderId);
                 const shipId = order?.shipping?.id;
@@ -121,29 +138,44 @@ export async function GET(request) {
             }
         }
 
-        const shipmentIds = [...new Set([...shipmentByOrder.values()])];
-
-        if (!shipmentIds.length) {
-            return NextResponse.json({ error: 'Las ventas no tienen envío asignado en Mercado Libre' }, { status: 404 });
+        // Para cada orden: usar el ZPL guardado o, si no hay, descargarlo de ML y guardarlo
+        // (así una reimpresión no depende de que ML siga entregando la etiqueta).
+        const labelParts = [];
+        const errors = [];
+        for (const orderId of orderIds) {
+            if (storedZplByOrder.has(orderId)) {
+                labelParts.push(storedZplByOrder.get(orderId));
+                continue;
+            }
+            const shipmentId = shipmentByOrder.get(orderId);
+            if (!shipmentId) { errors.push(orderId); continue; }
+            try {
+                const zip = await target.client.downloadShipmentLabelsZpl([shipmentId]);
+                const labels = await extractZplFromMlZip(zip);
+                const zpl = labels.join('\r\n').trim();
+                if (!zpl) { errors.push(orderId); continue; }
+                labelParts.push(zpl);
+                // Persistir para reimpresiones futuras.
+                await db.execute({
+                    sql: `UPDATE mercadolibre_orders SET printed_label_zpl = ?
+                          WHERE workspace_id = ? AND order_id = ?`,
+                    args: [zpl, workspaceId, orderId],
+                }).catch((e) => console.error('store zpl error', orderId, e?.message || e));
+            } catch (err) {
+                console.error('ML label ZPL download error for', orderId, ':', err?.message || err);
+                errors.push(orderId);
+            }
         }
 
-        // Pedir el ZPL (solo la etiqueta, sin remito) y renderizarlo a PDF 4x6.
-        let zipBuffer;
-        try {
-            zipBuffer = await target.client.downloadShipmentLabelsZpl(shipmentIds);
-        } catch (err) {
-            console.error('ML label ZPL download error:', err);
-            return NextResponse.json({ error: 'Mercado Libre no pudo generar la etiqueta (¿la venta sigue lista para imprimir?)' }, { status: 502 });
-        }
-
-        const labels = await extractZplFromMlZip(zipBuffer);
-        if (!labels.length) {
-            return NextResponse.json({ error: 'Mercado Libre no devolvió la etiqueta en formato imprimible' }, { status: 502 });
+        if (!labelParts.length) {
+            return NextResponse.json({
+                error: 'Mercado Libre no pudo generar la etiqueta (¿la venta sigue lista para imprimir?)',
+            }, { status: 502 });
         }
 
         let pdf;
         try {
-            pdf = await zplToPdf4x6(labels.join('\r\n'));
+            pdf = await zplToPdf4x6(labelParts.join('\r\n'));
         } catch (err) {
             console.error('Labelary render error:', err);
             return NextResponse.json({ error: 'No se pudo generar el PDF de la etiqueta' }, { status: 502 });

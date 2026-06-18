@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { findIntegrationConnectionByStore } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
-import { upsertMercadoLibreOrder } from '@/lib/mercadolibreStore';
+import { syncSingleMercadoLibreOrder } from '@/lib/mercadolibreStore';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -36,11 +36,12 @@ export async function POST(request) {
   try {
     await ensureDb();
     const body = await request.json().catch(() => ({}));
-    await db.execute({
+    const insertedNotification = await db.execute({
       sql: `INSERT INTO mercadolibre_notifications (topic, resource, user_id, application_id, payload_json)
             VALUES (?, ?, ?, ?, ?)`,
       args: [body.topic || '', body.resource || '', String(body.user_id || ''), String(body.application_id || ''), JSON.stringify(body)],
     });
+    const notificationId = Number(insertedNotification.lastInsertRowid || 0);
 
     const userId = String(body.user_id || '').trim();
     const connection = userId ? await findIntegrationConnectionByStore({ provider: 'mercadolibre', externalStoreId: userId, includeConfig: true }) : null;
@@ -55,44 +56,45 @@ export async function POST(request) {
       return NextResponse.json({ received: true, ignored: 'cliente no disponible' });
     }
 
-    let order = null;
-    let shipment = null;
-
+    // Resolver el order_id a partir del topic (orden directa o vía el shipment).
+    let orderId = '';
     if (ORDER_TOPICS.has(body.topic)) {
-      const orderId = orderIdFromResource(body.resource);
+      orderId = orderIdFromResource(body.resource);
       if (!orderId) return NextResponse.json({ received: true, ignored: 'sin order id' });
-      order = await client.getOrder(orderId);
     } else if (SHIPMENT_TOPICS.has(body.topic)) {
       const shipmentId = shipmentIdFromResource(body.resource);
       if (!shipmentId) return NextResponse.json({ received: true, ignored: 'sin shipment id' });
-      shipment = await client.getShipment(shipmentId);
+      const shipment = await client.getShipment(shipmentId).catch(() => null);
       const externalReference = String(shipment?.external_reference || '');
-      const possibleOrderId = externalReference && /^\d+$/.test(externalReference) ? externalReference : '';
-      if (possibleOrderId) order = await client.getOrder(possibleOrderId).catch(() => null);
-      if (!order) {
-        const storedOrderId = await findStoredOrderIdByShipment({ workspaceId: connection.workspaceId, connectionId: connection.id, shipmentId });
-        if (storedOrderId) order = await client.getOrder(storedOrderId).catch(() => null);
+      if (externalReference && /^\d+$/.test(externalReference)) orderId = externalReference;
+      if (!orderId) {
+        orderId = await findStoredOrderIdByShipment({ workspaceId: connection.workspaceId, connectionId: connection.id, shipmentId });
       }
+      if (!orderId) return NextResponse.json({ received: true, ignored: 'shipment sin order asociado' });
     } else {
       return NextResponse.json({ received: true, ignored: `topic ${body.topic || ''}` });
     }
 
-    // Procesamiento liviano: solo order + shipment (estado/listado). El detalle completo
-    // (carrier/flex/historial) se trae on-demand con el botón "Actualizar" de la orden.
-    const shipmentId = order?.shipping?.id || shipment?.id;
-    if (shipmentId) {
-      shipment = shipment || await client.getShipment(shipmentId).catch(() => null);
-    }
+    // Traer el detalle COMPLETO del envío (shipment, items, lead_time, delays, carrier, historial
+    // y asignación Flex) y guardarlo. Así Geomodi tiene toda la data de envíos en tiempo real.
+    const full = await syncSingleMercadoLibreOrder({
+      workspaceId: connection.workspaceId,
+      client,
+      orderId,
+      connectionId: connection.id,
+      externalStoreId: connection.externalStoreId,
+      siteId: connection.config.siteId || 'MLA',
+      light: false,
+    });
 
-    if (order) {
-      await upsertMercadoLibreOrder(connection.workspaceId, { order, shipment }, {
-        connectionId: connection.id,
-        externalStoreId: connection.externalStoreId,
-        siteId: connection.config.siteId || 'MLA',
+    if (notificationId) {
+      await db.execute({
+        sql: `UPDATE mercadolibre_notifications SET processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        args: [notificationId],
       });
     }
 
-    return NextResponse.json({ received: true, updated: Boolean(order) });
+    return NextResponse.json({ received: true, updated: Boolean(full?.order) });
   } catch (error) {
     // Responder 200 igual: la notificación quedó registrada y no queremos que ML reintente
     // en loop por un fallo puntual al traer la orden.
