@@ -308,10 +308,17 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const todayStr = useMemo(() => getArgentinaDateString(), []);
   const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
 
-  // Solo lo del día de hoy: ML agrupa el panel por la fecha límite de despacho, que derivamos
-  // de estimated_delivery_time.pay_before (handlingLimitDate). Paquetes de otros días o ya
-  // despachados NO entran. Si no hay fecha confiable, se excluye.
-  const isToday = useCallback((o) => Boolean(o.handlingLimitDate) && o.handlingLimitDate === todayStr, [todayStr]);
+  // ML agrupa el panel por la colecta/entrega del día, fecha que NO expone por API. La aproximamos
+  // con una ventana reciente sobre handlingLimitDate (estimated_delivery_time.pay_before): NO se
+  // puede exigir "=== hoy" porque deja afuera órdenes arrastradas de ayer que ML sí lista hoy.
+  // La ventana (últimos días) incluye lo de hoy + lo arrastrado y excluye datos viejos/stale
+  // (ej. envíos ya entregados que quedaron sin re-sincronizar).
+  const recentCutoffStr = useMemo(() => {
+    const d = new Date(`${todayStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 2);
+    return d.toISOString().slice(0, 10);
+  }, [todayStr]);
+  const isToday = useCallback((o) => Boolean(o.handlingLimitDate) && o.handlingLimitDate >= recentCutoffStr, [recentCutoffStr]);
   const isFlex = (o) => o.logisticType === "self_service";
   const isFull = (o) => o.logisticType === "fulfillment";
   // "Listo para imprimir" real: etiqueta en ready_to_print sin imprimir/importar, del día de hoy.

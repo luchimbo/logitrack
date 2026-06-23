@@ -247,7 +247,9 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   let carrier = null;
   let history = [];
   if (shipmentId) {
-    shipment = await client.getShipment(shipmentId);
+    // Resiliente: un fallo puntual de ML (429/5xx/red) no debe abortar el sync masivo. Si no
+    // se puede traer el shipment, guardamos igual la orden con los datos del search.
+    shipment = await client.getShipment(shipmentId).catch(() => null);
     if (light) {
       return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
     }
@@ -289,17 +291,35 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   let totalSynced = 0;
   let pages = 0;
   const flexConfigCache = new Map();
+  const failed = [];
+  // Procesa una orden aislando su error: si falla, la registramos para reintentar al final pero
+  // NUNCA cortamos el barrido. Antes, una sola excepción dejaba sin sincronizar todas las órdenes
+  // posteriores (las más viejas), por eso faltaban etiquetas que ML sí mostraba.
+  const processOne = async (orderSummary) => {
+    try {
+      const full = await fetchFullOrder(client, orderSummary, siteId, { flexConfigCache, light });
+      await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
+      totalSynced++;
+      return true;
+    } catch (error) {
+      console.error(`ML sync: orden ${orderSummary?.id || '?'} falló:`, error?.message || error);
+      return false;
+    }
+  };
   while (pages < 5) {
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
     for (const orderSummary of orders) {
-      const full = await fetchFullOrder(client, orderSummary, siteId, { flexConfigCache, light });
-      await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
-      totalSynced++;
+      const ok = await processOne(orderSummary);
+      if (!ok) failed.push(orderSummary);
     }
     if (orders.length < limit) break;
     offset += limit;
     pages++;
+  }
+  // Segundo intento para las que fallaron (típicamente 429 transitorios): da una pasada más.
+  for (const orderSummary of failed) {
+    await processOne(orderSummary);
   }
   return totalSynced;
 }
