@@ -136,14 +136,9 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
 
     if (!batchId) {
         const mlRange = getMercadoLibreDashboardRange(range, period);
-        const mlResult = await db.execute({
-            sql: `SELECT *
-                  FROM mercadolibre_orders
-                  WHERE workspace_id = ?
-                    AND shipment_row_id IS NULL
-                    AND LOWER(COALESCE(logistic_type, '')) NOT IN ('self_service', 'fulfillment')
-                    AND LOWER(COALESCE(shipment_status, '')) = 'ready_to_ship'
-                    AND COALESCE(
+        const todayMlDateFilter = period === 'today'
+            ? `AND LOWER(COALESCE(shipment_substatus, '')) IN ('ready_for_pickup', 'ready_to_print')`
+            : `AND COALESCE(
                       CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_handling_limit.date'), 1, 10) END,
                       CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_delivery_time.pay_before'), 1, 10) END,
                       ''
@@ -152,8 +147,16 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
                       CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_handling_limit.date'), 1, 10) END,
                       CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_delivery_time.pay_before'), 1, 10) END,
                       ''
-                    ) <= ?`,
-            args: [workspaceId, mlRange.from, mlRange.to],
+                    ) <= ?`;
+        const mlResult = await db.execute({
+            sql: `SELECT *
+                  FROM mercadolibre_orders
+                  WHERE workspace_id = ?
+                    AND shipment_row_id IS NULL
+                    AND LOWER(COALESCE(logistic_type, '')) NOT IN ('self_service', 'fulfillment')
+                    AND LOWER(COALESCE(shipment_status, '')) = 'ready_to_ship'
+                    ${todayMlDateFilter}`,
+            args: period === 'today' ? [workspaceId] : [workspaceId, mlRange.from, mlRange.to],
         });
 
         for (const row of mlResult.rows || []) {
