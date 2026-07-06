@@ -3,32 +3,6 @@ import { db } from '@/lib/db';
 import { getArgentinaDateString, getDateRange } from '@/lib/dateUtils';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
-import { fetchStoredZipnovaDashboardRows } from '@/lib/zipnovaStore';
-
-function parseJson(value, fallback) {
-    try {
-        return value ? JSON.parse(value) : fallback;
-    } catch {
-        return fallback;
-    }
-}
-
-function getMercadoLibreHandlingDate(row) {
-    const leadTime = parseJson(row.lead_time_json, {});
-    return (leadTime?.estimated_handling_limit?.date || leadTime?.estimated_delivery_time?.pay_before || '').slice(0, 10);
-}
-
-function getMercadoLibreProvince(row) {
-    const address = parseJson(row.address_json, {});
-    return address?.state?.name || address?.city?.name || 'Desconocida';
-}
-
-function getMercadoLibreDashboardRange(range, period) {
-    if (period !== 'today') return range;
-    const from = new Date(`${range.from}T00:00:00Z`);
-    from.setUTCDate(from.getUTCDate() - 2);
-    return { from: from.toISOString().slice(0, 10), to: range.to };
-}
 
 function getComparisonRange(period) {
     const now = new Date();
@@ -127,54 +101,7 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
 
     const result = await db.execute({ sql, args });
     const shipments = result.rows;
-    const importedMercadoLibreShipmentIds = new Set(
-        shipments
-            .map((shipment) => String(shipment.external_shipment_id || '').trim())
-            .filter(Boolean)
-    );
-    const mercadoLibreRows = [];
-
-    if (!batchId) {
-        const mlRange = getMercadoLibreDashboardRange(range, period);
-        const todayMlDateFilter = period === 'today'
-            ? `AND LOWER(COALESCE(shipment_substatus, '')) IN ('ready_for_pickup', 'ready_to_print')`
-            : `AND COALESCE(
-                      CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_handling_limit.date'), 1, 10) END,
-                      CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_delivery_time.pay_before'), 1, 10) END,
-                      ''
-                    ) >= ?
-                    AND COALESCE(
-                      CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_handling_limit.date'), 1, 10) END,
-                      CASE WHEN json_valid(lead_time_json) THEN SUBSTR(json_extract(lead_time_json, '$.estimated_delivery_time.pay_before'), 1, 10) END,
-                      ''
-                    ) <= ?`;
-        const mlResult = await db.execute({
-            sql: `SELECT *
-                  FROM mercadolibre_orders
-                  WHERE workspace_id = ?
-                    AND shipment_row_id IS NULL
-                    AND LOWER(COALESCE(logistic_type, '')) NOT IN ('self_service', 'fulfillment')
-                    AND LOWER(COALESCE(shipment_status, '')) = 'ready_to_ship'
-                    ${todayMlDateFilter}`,
-            args: period === 'today' ? [workspaceId] : [workspaceId, mlRange.from, mlRange.to],
-        });
-
-        for (const row of mlResult.rows || []) {
-            const shipmentId = String(row.shipment_id || '').trim();
-            if (shipmentId && importedMercadoLibreShipmentIds.has(shipmentId)) continue;
-            mercadoLibreRows.push({
-                id: `ml-${row.id}`,
-                quantity: 1,
-                status: 'pendiente',
-                shipping_method: 'colecta',
-                assigned_carrier: null,
-                province: getMercadoLibreProvince(row),
-                batch_date: getMercadoLibreHandlingDate(row) || range.to,
-            });
-        }
-    }
-    const zipnovaShipments = [];
-    return summarizeShipments([...shipments, ...mercadoLibreRows, ...zipnovaShipments], period);
+    return summarizeShipments(shipments, period);
 }
 
 export async function GET(request) {
