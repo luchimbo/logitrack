@@ -14,6 +14,7 @@ import UploadSection from "@/components/UploadSection";
 import UserManagementSection from "@/components/UserManagementSection";
 import ZipnovaSection from "@/components/ZipnovaSection";
 import ZoneConfig from "@/components/ZoneConfig";
+import GoogleSheetsSection from "@/components/GoogleSheetsSection";
 
 export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
   switch (activeTab) {
@@ -22,6 +23,7 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "flex": return <FlexSection />;
     case "colecta": return <ColectaSection />;
     case "zoneConfig": return <ZoneConfig />;
+    case "sheetSync": return currentUser ? <GoogleSheetsSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
     case "dashboard": return <Dashboard />;
     case "map": return <MapSection />;
     case "integrations": return currentUser ? <IntegrationsSection onNavigate={onNavigate} /> : <div>No autorizado</div>;

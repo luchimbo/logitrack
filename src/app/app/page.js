@@ -27,6 +27,36 @@ export default function AppHome() {
   const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
 
+  // Auto-polling for Google Sheets shipments (GeoModi only)
+  // Syncs every 5 minutes and updates the sidebar badge automatically
+  useEffect(() => {
+    if (!currentUser || currentUser.workspaceSlug !== 'legacy') return;
+
+    const syncAndUpdateBadge = async () => {
+      try {
+        // First sync from Google Sheets to get latest entries
+        await fetch('/api/cron/sheets-sync', { method: 'GET' });
+        // Then fetch badge count
+        const res = await fetch('/api/shipments/sheet?status=pending');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.pendingCount !== undefined) {
+            handleBadgeUpdate('sheetSync', data.pendingCount);
+          }
+        }
+      } catch (e) {
+        // Silent fail - don't disrupt the user
+      }
+    };
+
+    // Run immediately on load
+    syncAndUpdateBadge();
+
+    // Then every 5 minutes
+    const interval = setInterval(syncAndUpdateBadge, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.workspaceSlug]);
+
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') setSidebarOpen(false);

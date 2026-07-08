@@ -467,7 +467,34 @@ export async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_invites_token ON mercadolibre_invites(token)`,
-    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_invites_workspace ON mercadolibre_invites(workspace_id)`
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_invites_workspace ON mercadolibre_invites(workspace_id)`,
+    `CREATE TABLE IF NOT EXISTS google_sheets_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      row_index INTEGER NOT NULL,
+      timestamp TEXT,
+      client_name TEXT,
+      order_id TEXT,
+      product_name TEXT,
+      address TEXT,
+      floor_depto TEXT,
+      city TEXT,
+      province TEXT,
+      postal_code TEXT,
+      phone TEXT,
+      dni TEXT,
+      notes TEXT,
+      responsible TEXT,
+      packed INTEGER DEFAULT 0,
+      dispatched INTEGER DEFAULT 0,
+      shipping_method TEXT,
+      tracking_number TEXT,
+      notified INTEGER DEFAULT 0,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, row_index, timestamp)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_google_sheets_shipments_workspace ON google_sheets_shipments(workspace_id)`
   ];
 
   for (const stmt of statements) {

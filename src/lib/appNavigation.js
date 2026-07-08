@@ -1,15 +1,21 @@
 export function buildAppNavigation({ currentUser, canManageUsers, connectedProviders }) {
+  const operacionItems = [
+    { id: "upload", icon: "📦", label: "Subir Etiquetas" },
+    { id: "pickingList", icon: "📋", label: "Lista de Picking" },
+    { id: "flex", icon: "🚀", label: "Logística Flex" },
+    { id: "colecta", icon: "📦", label: "Colecta" },
+    { id: "map", icon: "📍", label: "Mapa" },
+    { id: "dashboard", icon: "📊", label: "Dashboard" },
+  ];
+
+  if (currentUser?.workspaceId === 1 || currentUser?.workspaceSlug === 'legacy') {
+    operacionItems.push({ id: "sheetSync", icon: "📊", label: "Envíos Planilla", badgeKey: "sheetSync" });
+  }
+
   const navGroups = [
     {
       title: "Operación",
-      items: [
-        { id: "upload", icon: "📦", label: "Subir Etiquetas" },
-        { id: "pickingList", icon: "📋", label: "Lista de Picking" },
-        { id: "flex", icon: "🚀", label: "Logística Flex" },
-        { id: "colecta", icon: "📦", label: "Colecta" },
-        { id: "map", icon: "📍", label: "Mapa" },
-        { id: "dashboard", icon: "📊", label: "Dashboard" },
-      ],
+      items: operacionItems,
     },
     {
       title: "Configuración",
