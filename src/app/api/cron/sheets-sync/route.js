@@ -91,8 +91,11 @@ async function syncShipments(request) {
       return NextResponse.json({ ok: true, message: 'La planilla está vacía', count: 0 });
     }
     
-    // Skip header row
-    const dataRows = rows.slice(1);
+    // Only the most recent form responses need operational sync. Keeping the
+    // original row offset is important because dispatch writes back by row.
+    const recentRowsLimit = 50;
+    const firstDataRowOffset = Math.max(1, rows.length - recentRowsLimit);
+    const dataRows = rows.slice(firstDataRowOffset);
     let newCount = 0;
     let updatedCount = 0;
     const existingResult = await db.execute({
@@ -109,8 +112,8 @@ async function syncShipments(request) {
     
     for (let index = 0; index < dataRows.length; index++) {
       const row = dataRows[index];
-      // Google Sheet rows are 1-indexed, and header is row 1. So row index in spreadsheet = index + 2.
-      const rowIndex = index + 2;
+      // Google Sheet rows are 1-indexed, including the header row.
+      const rowIndex = firstDataRowOffset + index + 1;
       
       const timestamp = row[0] || '';
       const clientName = row[1] || '';
