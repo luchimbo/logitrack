@@ -95,6 +95,17 @@ async function syncShipments(request) {
     const dataRows = rows.slice(1);
     let newCount = 0;
     let updatedCount = 0;
+    const existingResult = await db.execute({
+      sql: 'SELECT id, row_index, timestamp, packed, dispatched FROM google_sheets_shipments WHERE workspace_id = ?',
+      args: [workspaceId]
+    });
+    const existingByRow = new Map(
+      existingResult.rows.map((record) => [
+        `${record.row_index}\u0000${record.timestamp || ''}`,
+        record
+      ])
+    );
+    const changes = [];
     
     for (let index = 0; index < dataRows.length; index++) {
       const row = dataRows[index];
@@ -127,17 +138,11 @@ async function syncShipments(request) {
         continue;
       }
       
-      // Check if it already exists
-      const existing = await db.execute({
-        sql: 'SELECT id, packed, dispatched FROM google_sheets_shipments WHERE workspace_id = ? AND row_index = ? AND timestamp = ? LIMIT 1',
-        args: [workspaceId, rowIndex, timestamp]
-      });
-      
-      if (existing.rows.length > 0) {
-        const record = existing.rows[0];
+      const record = existingByRow.get(`${rowIndex}\u0000${timestamp}`);
+      if (record) {
         // If it exists, update it if things changed in the sheet
         if (record.packed !== isPacked || record.dispatched !== isDispatched) {
-          await db.execute({
+          changes.push({
             sql: 'UPDATE google_sheets_shipments SET packed = ?, dispatched = ?, synced_at = CURRENT_TIMESTAMP WHERE id = ?',
             args: [isPacked, isDispatched, record.id]
           });
@@ -146,7 +151,7 @@ async function syncShipments(request) {
       } else {
         // Insert new shipment
         // Set notified to 0 initially so the UI can detect new records
-        await db.execute({
+        changes.push({
           sql: `INSERT INTO google_sheets_shipments (
             workspace_id, row_index, timestamp, client_name, order_id, product_name,
             address, floor_depto, city, province, postal_code, phone, dni,
@@ -160,6 +165,13 @@ async function syncShipments(request) {
         });
         newCount++;
       }
+    }
+
+    // One network round trip per chunk instead of two queries for every row.
+    // This makes manual sync fast even when the sheet has a long history.
+    const batchSize = 100;
+    for (let offset = 0; offset < changes.length; offset += batchSize) {
+      await db.batch(changes.slice(offset, offset + batchSize));
     }
     
     return NextResponse.json({
