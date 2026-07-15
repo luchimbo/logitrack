@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propiedades Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Propiedades Monitor</a>
+    <nav class="module-tabs" aria-label="Secciones principales">
+      <button class="module-tab active" type="button" data-view-target="search-view">Buscar</button>
+      <button class="module-tab" type="button" data-view-target="monitor-view">Monitorear</button>
+      <button class="module-tab" type="button" data-view-target="leads-view">Leads</button>
+    </nav>
+    <div class="top-actions">
+      <button id="save-current-search" class="ghost-action" type="button" hidden>Guardar búsqueda</button>
+      <span id="search-count" class="badge">0 guardadas</span>
+      <span id="alert-count" class="badge">0 alertas</span>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero-panel">
+      <p class="eyebrow">Scraper inmobiliario</p>
+      <h1>Buscá, monitoreá y exportá leads de propiedades.</h1>
+      <p>El flujo principal es simple: elegís una localidad, buscás resultados, guardás lo que sirve y trabajás los contactos desde Leads.</p>
+    </section>
+
+    <section id="search-view" class="app-view active">
+      <section class="city-search" aria-label="Buscador por ciudad o barrio">
+        <div class="location-box">
+          <input id="location-input" placeholder="Ingresá ciudad o barrio" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="location-suggestions">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <div id="location-suggestions" class="location-suggestions" role="listbox" hidden>
+            <p class="suggestion-title">Ubicaciones</p>
+            <div id="location-suggestion-list"></div>
+          </div>
+        </div>
+        <button id="search-now" class="primary-action" type="button">Buscar</button>
+        <button id="toggle-advanced" class="filter-button optional-toggle" type="button" aria-expanded="false">
+          <span>Filtros opcionales</span><span class="chevron">⌄</span>
+        </button>
+      </section>
+
+      <section id="advanced-filters" class="instant-search advanced-filters" aria-label="Filtros opcionales" hidden>
+        <div class="filter-group">
+          <button class="filter-button" type="button" data-popover-target="operation-popover">
+            <span id="operation-label">Comprar</span><span class="chevron">⌄</span>
+          </button>
+          <div class="filter-popover compact-popover" id="operation-popover">
+            <h3>Tipo de operación</h3>
+            <label class="radio-row"><input type="radio" name="operation" value="alquiler">Alquilar</label>
+            <label class="radio-row"><input type="radio" name="operation" value="venta" checked>Comprar</label>
+            <label class="radio-row"><input type="radio" name="operation" value="temporal">Temporal</label>
+            <label class="radio-row"><input type="radio" name="operation" value="emprendimientos">Emprendimientos</label>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <button class="filter-button" type="button" data-popover-target="property-popover">
+            <span id="property-label">Propiedad</span><span class="chevron">⌄</span>
+          </button>
+          <div class="filter-popover compact-popover" id="property-popover">
+            <h3>Tipo de propiedad</h3>
+            <label class="check-row"><input type="checkbox" name="property_type" value="departamentos">Departamento</label>
+            <label class="check-row"><input type="checkbox" name="property_type" value="casas">Casa</label>
+            <label class="check-row"><input type="checkbox" name="property_type" value="ph">PH</label>
+            <label class="check-row"><input type="checkbox" name="property_type" value="terrenos">Terreno</label>
+            <label class="check-row"><input type="checkbox" name="property_type" value="locales-comerciales">Local comercial</label>
+            <label class="check-row"><input type="checkbox" name="property_type" value="oficinas-comerciales">Oficina</label>
+            <div class="popover-footer">
+              <button type="button" class="text-action" data-clear="property">Limpiar</button>
+              <button type="button" class="outline-action" data-apply>Ver resultados</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <button class="filter-button" type="button" data-popover-target="rooms-popover">
+            <span id="rooms-label">Dormitorios | Ambientes</span><span class="chevron">⌄</span>
+          </button>
+          <div class="filter-popover rooms-popover" id="rooms-popover">
+            <h3>Dormitorios</h3>
+            <div class="two-cols">
+              <select id="bedrooms-min"><option value="">Sin mínimo</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select>
+              <select id="bedrooms-max"><option value="">Sin máximo</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4+</option></select>
+            </div>
+            <h3>Ambientes</h3>
+            <div class="two-cols">
+              <select id="rooms-min"><option value="">Sin mínimo</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option><option value="5">5+</option></select>
+              <select id="rooms-max"><option value="">Sin máximo</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select>
+            </div>
+            <div class="popover-footer">
+              <button type="button" class="text-action" data-clear="rooms">Limpiar</button>
+              <button type="button" class="outline-action" data-apply>Ver resultados</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <button class="filter-button" type="button" data-popover-target="price-popover">
+            <span id="price-label">Precio</span><span class="chevron">⌄</span>
+          </button>
+          <div class="filter-popover price-popover" id="price-popover">
+            <h3>Precio</h3>
+            <div class="radio-inline">
+              <label class="radio-row"><input type="radio" name="currency" value="ARS" checked>Pesos</label>
+              <label class="radio-row"><input type="radio" name="currency" value="USD">USD</label>
+            </div>
+            <div class="two-cols">
+              <input id="price-min" type="number" placeholder="Desde">
+              <input id="price-max" type="number" placeholder="Hasta">
+            </div>
+            <div class="popover-footer">
+              <button type="button" class="text-action" data-clear="price">Limpiar</button>
+              <button type="button" class="outline-action" data-apply>Ver resultados</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="status-line" class="status-line">Ingresá una ciudad o barrio para buscar. Los filtros son opcionales.</div>
+
+      <section class="results-panel full-panel">
+        <div class="results-header">
+          <div>
+            <h1>Resultados</h1>
+            <p id="result-summary">Ingresá una ciudad o barrio para ver publicaciones.</p>
+          </div>
+          <div class="results-actions">
+            <button id="export-current-results" class="outline-action" type="button" hidden>Exportar CSV</button>
+            <button id="save-current-search-inline" class="outline-action" type="button" hidden>Guardar búsqueda</button>
+          </div>
+        </div>
+        <div id="quick-filters" class="quick-filters" hidden>
+          <button type="button" data-result-filter="all" class="active">Todos</button>
+          <button type="button" data-result-filter="with_whatsapp">Con WhatsApp</button>
+          <button type="button" data-result-filter="with_phone">Con teléfono</button>
+          <button type="button" data-result-filter="with_photo">Con foto</button>
+        </div>
+        <div id="properties" class="property-list"></div>
+      </section>
+    </section>
+
+    <section id="monitor-view" class="app-view">
+      <section class="section-grid">
+        <div class="side-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Monitoreo</p>
+              <h2>Búsquedas guardadas</h2>
+            </div>
+            <a class="outline-link" href="/api/export/properties.csv">Exportar todo</a>
+          </div>
+          <div id="searches" class="small-stack"></div>
+        </div>
+        <div class="side-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Cambios</p>
+              <h2>Alertas</h2>
+            </div>
+          </div>
+          <div id="alerts" class="small-stack"></div>
+        </div>
+      </section>
+    </section>
+
+    <section id="leads-view" class="app-view">
+      <section class="results-panel full-panel">
+        <div class="results-header">
+          <div>
+            <p class="eyebrow">Leads</p>
+            <h1>Propiedades con contacto</h1>
+            <p id="leads-summary">Los contactos aparecen cuando una búsqueda guardada o preview logra detectar teléfono/WhatsApp.</p>
+          </div>
+          <div class="results-actions">
+            <button id="refresh-leads" class="outline-action" type="button">Actualizar</button>
+            <a class="outline-link" href="/api/export/properties.csv?with_phone=true">Exportar leads CSV</a>
+          </div>
+        </div>
+        <div id="leads-list" class="property-list"></div>
+      </section>
+    </section>
+  </main>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

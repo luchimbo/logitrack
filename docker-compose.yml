@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: propiedades
+      POSTGRES_USER: propiedades
+      POSTGRES_PASSWORD: propiedades
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U propiedades -d propiedades"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://propiedades:propiedades@db:5432/propiedades
+      APP_ENV: docker
+      PLAYWRIGHT_HEADLESS: "true"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  postgres_data:
