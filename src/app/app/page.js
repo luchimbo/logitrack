@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useClerk, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useConnectedProviders } from "@/hooks/useConnectedProviders";
@@ -21,16 +21,17 @@ export default function AppHome() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navBadges, setNavBadges] = useState({});
 
-  const handleBadgeUpdate = (key, count) => {
+  const handleBadgeUpdate = useCallback((key, count) => {
     setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
-  };
+  }, []);
   const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
+  const workspaceSlug = currentUser?.workspaceSlug;
 
   // Auto-polling for Google Sheets shipments (GeoModi only)
   // Syncs every 5 minutes and updates the sidebar badge automatically
   useEffect(() => {
-    if (!currentUser || currentUser.workspaceSlug !== 'legacy') return;
+    if (workspaceSlug !== 'legacy') return;
 
     const syncAndUpdateBadge = async () => {
       try {
@@ -55,7 +56,7 @@ export default function AppHome() {
     // Then every 5 minutes
     const interval = setInterval(syncAndUpdateBadge, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [currentUser?.workspaceSlug]);
+  }, [workspaceSlug, handleBadgeUpdate]);
 
   useEffect(() => {
     const handleEscape = (e) => {
