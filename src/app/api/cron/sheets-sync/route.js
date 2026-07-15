@@ -91,11 +91,15 @@ async function syncShipments(request) {
       return NextResponse.json({ ok: true, message: 'La planilla está vacía', count: 0 });
     }
     
-    // Only the most recent form responses need operational sync. Keeping the
-    // original row offset is important because dispatch writes back by row.
+    // Only the most recent real form responses need operational sync. Some
+    // Sheets keep empty/formula rows after the responses, so limit after
+    // removing those rows and retain each original row number for write-back.
     const recentRowsLimit = 50;
-    const firstDataRowOffset = Math.max(1, rows.length - recentRowsLimit);
-    const dataRows = rows.slice(firstDataRowOffset);
+    const dataRows = rows
+      .slice(1)
+      .map((row, index) => ({ row, rowIndex: index + 2 }))
+      .filter(({ row }) => row[0] || row[1] || row[2] || row[3])
+      .slice(-recentRowsLimit);
     let newCount = 0;
     let updatedCount = 0;
     const existingResult = await db.execute({
@@ -111,9 +115,7 @@ async function syncShipments(request) {
     const changes = [];
     
     for (let index = 0; index < dataRows.length; index++) {
-      const row = dataRows[index];
-      // Google Sheet rows are 1-indexed, including the header row.
-      const rowIndex = firstDataRowOffset + index + 1;
+      const { row, rowIndex } = dataRows[index];
       
       const timestamp = row[0] || '';
       const clientName = row[1] || '';
