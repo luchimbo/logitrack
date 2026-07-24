@@ -6,6 +6,18 @@ import {
   deriveCutoffDetail,
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
+import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+
+test('operation card counts only Mercado Libre shipments next to pack', () => {
+  const metrics = getMercadoLibrePackingMetrics([
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service' },
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: '', logisticType: 'cross_docking' },
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_for_pickup', logisticType: 'self_service' },
+    { shipmentStatus: 'shipped', shipmentSubstatus: '', logisticType: 'cross_docking' },
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'fulfillment' },
+  ]);
+  assert.deepEqual(metrics, { total: 2, flex: 1, colecta: 1 });
+});
 
 test('ready_to_ship + ready_to_print is printable', () => {
   const result = deriveMercadoLibreLogistics({

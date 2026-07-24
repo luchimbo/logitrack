@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
+import { getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
 
 const todayInArgentina = (value) => value && new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(value)) === getArgentinaDateString();
+const CACHE_TTL_MS = 60_000;
+let operationCache = null;
 const statusCopy = {
   ready: { label: "Listo para preparar", note: "El último lote llegó completo y no tiene incidencias.", tone: "success" },
   review: { label: "Revisar", note: "Hay una incidencia que conviene verificar antes de preparar.", tone: "warning" },
@@ -12,16 +15,29 @@ const statusCopy = {
 };
 
 export default function OperationToday({ onNavigate }) {
-  const [jobs, setJobs] = useState([]);
-  const [health, setHealth] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [sources, setSources] = useState({ mercadolibre: null, tiendanube: null, sheet: null });
-  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs] = useState(() => operationCache?.jobs || []);
+  const [health, setHealth] = useState(() => operationCache?.health || null);
+  const [detail, setDetail] = useState(() => operationCache?.detail || null);
+  const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null, tiendanube: null, sheet: null });
+  const [loading, setLoading] = useState(() => !operationCache);
   const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(() => operationCache?.updatedAt || null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError("");
+  const hydrate = useCallback((snapshot) => {
+    setJobs(snapshot.jobs); setHealth(snapshot.health); setDetail(snapshot.detail);
+    setSources(snapshot.sources); setLastUpdated(snapshot.updatedAt);
+  }, []);
+
+  const load = useCallback(async (options = {}) => {
+    const force = options?.force === true || Boolean(options?.currentTarget);
+    const cacheIsFresh = operationCache && Date.now() - operationCache.cachedAt < CACHE_TTL_MS;
+    if (!force && cacheIsFresh) {
+      hydrate(operationCache);
+      setLoading(false);
+      return operationCache;
+    }
+    if (!operationCache) setLoading(true);
+    setError("");
     try {
       const [jobsData, healthData, mlResult, tnResult, sheetResult] = await Promise.all([
         api("/v2/print-jobs?limit=20"), api("/flex-health?period=today"),
@@ -30,14 +46,20 @@ export default function OperationToday({ onNavigate }) {
         api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })),
       ]);
       const todayJobs = (jobsData.jobs || []).filter((job) => todayInArgentina(job.received_at));
-      setJobs(todayJobs); setHealth(healthData); setSources({ mercadolibre: mlResult, tiendanube: tnResult, sheet: sheetResult }); setLastUpdated(new Date());
-      if (todayJobs[0]) setDetail(await api(`/v2/print-jobs/${encodeURIComponent(todayJobs[0].job_id)}`)); else setDetail(null);
+      const detail = todayJobs[0] ? await api(`/v2/print-jobs/${encodeURIComponent(todayJobs[0].job_id)}`) : null;
+      const snapshot = {
+        jobs: todayJobs, health: healthData, detail,
+        sources: { mercadolibre: mlResult, tiendanube: tnResult, sheet: sheetResult },
+        updatedAt: new Date(), cachedAt: Date.now(),
+      };
+      operationCache = snapshot;
+      hydrate(snapshot);
     } catch (err) { setError(err.message || "No se pudo cargar la operación de hoy."); }
     finally { setLoading(false); }
-  }, []);
+  }, [hydrate]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const intervalId = window.setInterval(load, 30 * 1000);
+    const intervalId = window.setInterval(() => { load().catch(() => {}); }, CACHE_TTL_MS);
     return () => window.clearInterval(intervalId);
   }, [load]);
 
@@ -71,7 +93,7 @@ export default function OperationToday({ onNavigate }) {
   return <div className="section operation-today">
     <div className="operation-header"><div><p className="operation-kicker">Paquetes que entran automáticamente</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre, Tiendanube y planilla se actualizan sin cargar etiquetas.</p>{lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading}>{loading ? "Actualizando…" : "Actualizar"}</button></div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
-    <section className="operation-sources" aria-label="Paquetes por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Divididos por sector</h2><p>La operación de cada canal queda separada para evitar mezclar paquetes.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Pedidos sincronizados desde Mercado Libre" tone="ml" data={sources.mercadolibre} onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.orders} />} /><SourceCard title="Tiendanube" subtitle="Pedidos sincronizados desde Tiendanube" tone="tn" data={sources.tiendanube} onOpen={() => onNavigate("tiendanube")} renderMetrics={(data) => <TiendanubeMetrics orders={data.orders} />} /><SourceCard title="Envíos a coordinar" subtitle="Pendientes recibidos desde la planilla" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
+    <section className="operation-sources" aria-label="Paquetes por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Divididos por sector</h2><p>La operación de cada canal queda separada para evitar mezclar paquetes.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Envíos listos para empaquetar" tone="ml" data={sources.mercadolibre} onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.orders} />} /><SourceCard title="Tiendanube" subtitle="Pedidos sincronizados desde Tiendanube" tone="tn" data={sources.tiendanube} onOpen={() => onNavigate("tiendanube")} renderMetrics={(data) => <TiendanubeMetrics orders={data.orders} />} /><SourceCard title="Envíos a coordinar" subtitle="Pendientes recibidos desde la planilla" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
     <section className={`operation-hero ${copy.tone}`} aria-live="polite"><div><p className="operation-eyebrow">Estado del último lote impreso</p><h2>{copy.label}</h2><p>{copy.note}</p></div><div className="operation-status-mark" aria-hidden="true">{status === "ready" ? "✓" : status === "review" ? "!" : "—"}</div></section>
     {job ? <><section className="operation-metrics" aria-label="Resumen del último lote"><Metric value={job.labels_total} label="etiquetas" /><Metric value={job.skus_total} label="SKUs" /><Metric value={job.reprints_total} label="reimpresiones" /><Metric value={job.integrity?.verified ? "OK" : "—"} label="integridad" /></section><section className="operation-lot card"><div><p className="operation-eyebrow">Último lote sincronizado</p><h3>{formatArgentinaDateTime(job.received_at)}</h3><p>Impresora: {job.printer_path || "No informada"}</p></div><div className="operation-actions"><button className="btn btn-primary" onClick={() => onNavigate("printJobs")}>Ver detalle</button><button className="btn btn-ghost" onClick={() => document.getElementById("preparacion")?.scrollIntoView({ behavior: "smooth" })}>Ver resumen de preparación</button></div></section></> : null}
     {alerts.length ? <section className="operation-alerts"><h2>Revisar antes de preparar</h2>{alerts.map((alert, index) => <div key={`${alert.text}-${index}`} className={`operation-alert ${alert.severity}`}><span>{alert.severity === "critical" ? "Crítico" : "Atención"}</span><p>{alert.text}</p><button className="btn btn-ghost btn-sm" onClick={() => alert.target ? onNavigate(alert.target) : load}>{alert.action}</button></div>)}</section> : null}
@@ -86,10 +108,8 @@ function SourceCard({ title, subtitle, tone, data, onOpen, renderMetrics }) {
   return <article className={`operation-source-card ${tone}`}><div className="operation-source-head"><div><p>{title}</p><span>{subtitle}</span></div><button className="btn btn-ghost btn-sm" onClick={onOpen}>Ver sector</button></div>{unavailable ? <div className="operation-source-empty">{title === "Envíos a coordinar" ? "La planilla no está disponible para este espacio." : "Sin datos sincronizados o integración no conectada."}</div> : renderMetrics(data)}</article>;
 }
 function MercadoLibreMetrics({ orders = [] }) {
-  const actionable = orders.filter((order) => !["cancelled", "delivered"].includes(String(order.shipmentStatus || "").toLowerCase()));
-  const flex = actionable.filter((order) => String(order.logisticType || order.shippingMethod || "").toLowerCase().includes("self_service") || String(order.shippingMethod || "").toLowerCase() === "flex").length;
-  const colecta = actionable.filter((order) => String(order.logisticType || order.shippingMethod || "").toLowerCase().includes("cross_docking") || String(order.shippingMethod || "").toLowerCase() === "colecta").length;
-  return <SourceMetrics total={actionable.length} rows={[{ label: "Flex", value: flex }, { label: "Colecta", value: colecta }]} />;
+  const metrics = getMercadoLibrePackingMetrics(orders);
+  return <SourceMetrics total={metrics.total} rows={[{ label: "Flex", value: metrics.flex }, { label: "Colecta", value: metrics.colecta }]} />;
 }
 function TiendanubeMetrics({ orders = [] }) {
   const actionable = orders.filter((order) => !["cancelled", "closed", "delivered"].includes(String(order.shippingStatus || "").toLowerCase()));
