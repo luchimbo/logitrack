@@ -15,8 +15,8 @@ export default function AppHome() {
   const { isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === "undefined") return "upload";
-    return new URLSearchParams(window.location.search).get("tab") || "upload";
+    if (typeof window === "undefined") return "operationToday";
+    return new URLSearchParams(window.location.search).get("tab") || "operationToday";
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navBadges, setNavBadges] = useState({});
@@ -27,6 +27,7 @@ export default function AppHome() {
   const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
   const workspaceSlug = currentUser?.workspaceSlug;
+  const effectiveActiveTab = workspaceSlug === "legacy" ? activeTab : (activeTab === "operationToday" ? "upload" : activeTab);
 
   // Auto-polling for Google Sheets shipments (GeoModi only)
   // Syncs every 5 minutes and updates the sidebar badge automatically
@@ -101,7 +102,7 @@ export default function AppHome() {
   const navGroups = buildAppNavigation({ currentUser, canManageUsers, connectedProviders });
 
   const navLinks = navGroups.flatMap((group) => group.items);
-  const currentSection = navLinks.find(l => l.id === activeTab);
+  const currentSection = navLinks.find(l => l.id === effectiveActiveTab);
   const sectionTitle = currentSection?.label || 'GeoModi';
 
   if (!authChecked) {
@@ -153,9 +154,9 @@ export default function AppHome() {
 
   return (
     <>
-      {showOnboarding && <OnboardingTour activeTab={activeTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
+      {showOnboarding && <OnboardingTour activeTab={effectiveActiveTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
       <AppShell
-        activeTab={activeTab}
+        activeTab={effectiveActiveTab}
         currentUser={currentUser}
         navBadges={navBadges}
         navGroups={navGroups}
@@ -167,7 +168,7 @@ export default function AppHome() {
         sidebarOpen={sidebarOpen}
       >
         <AppSectionRenderer
-          activeTab={activeTab}
+          activeTab={effectiveActiveTab}
           canManageUsers={canManageUsers}
           currentUser={currentUser}
           onBadgeUpdate={handleBadgeUpdate}

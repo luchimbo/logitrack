@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import { toast } from "@/lib/api";
 import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 
@@ -9,7 +10,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [imageUrl, setImageUrl] = useState(null);
-    const [printing, setPrinting] = useState(false);
+    const [printing] = useState(false);
 
     const loadLabel = useCallback(async () => {
         if (!shipmentId) return;
@@ -110,7 +111,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
             <div className="label-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="label-modal-header">
                     <h3>Vista previa de etiqueta</h3>
-                    <button className="label-modal-close" onClick={onClose}>✕</button>
+                    <button className="label-modal-close" onClick={onClose} aria-label="Cerrar vista previa">×</button>
                 </div>
                 <div className="label-modal-body">
                     {loading && (
@@ -126,7 +127,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
                         </div>
                     )}
                     {!loading && !error && imageUrl && (
-                        <img src={imageUrl} alt="Etiqueta" className="label-modal-image" />
+                        <Image src={imageUrl} alt="Etiqueta" className="label-modal-image" width={1200} height={1800} unoptimized />
                     )}
                 </div>
                 <div className="label-modal-footer">

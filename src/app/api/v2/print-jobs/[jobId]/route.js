@@ -27,7 +27,11 @@ export async function GET(request, context) {
           print_file_path,
           labels_total,
           skus_total,
-          reprints_total
+          reprints_total,
+          integrity_verified,
+          integrity_input_blocks,
+          integrity_output_blocks,
+          parser_misses
         FROM print_jobs
         WHERE job_id = ?
         LIMIT 1`,
@@ -68,6 +72,12 @@ export async function GET(request, context) {
         labels_total: Number(header.labels_total) || 0,
         skus_total: Number(header.skus_total) || 0,
         reprints_total: Number(header.reprints_total) || 0,
+        integrity: {
+          verified: Number(header.integrity_verified) === 1,
+          input_blocks: Number(header.integrity_input_blocks) || 0,
+          output_blocks: Number(header.integrity_output_blocks) || 0,
+          parser_misses: Number(header.parser_misses) || 0,
+        },
       },
       items: itemsResult.rows.map((row) => ({
         item_order: Number(row.item_order) || 0,

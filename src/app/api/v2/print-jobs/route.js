@@ -31,7 +31,11 @@ export async function GET(request) {
           printer_path,
           labels_total,
           skus_total,
-          reprints_total
+          reprints_total,
+          integrity_verified,
+          integrity_input_blocks,
+          integrity_output_blocks,
+          parser_misses
         FROM print_jobs
         ORDER BY id DESC
         LIMIT ?`,
@@ -55,6 +59,12 @@ export async function GET(request) {
       labels_total: Number(row.labels_total) || 0,
       skus_total: Number(row.skus_total) || 0,
       reprints_total: Number(row.reprints_total) || 0,
+      integrity: {
+        verified: Number(row.integrity_verified) === 1,
+        input_blocks: Number(row.integrity_input_blocks) || 0,
+        output_blocks: Number(row.integrity_output_blocks) || 0,
+        parser_misses: Number(row.parser_misses) || 0,
+      },
     }));
 
     const summaryRow = summaryResult.rows[0] || {};

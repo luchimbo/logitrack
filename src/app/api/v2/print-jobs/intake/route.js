@@ -729,8 +729,9 @@ export async function POST(request) {
       insertResult = await db.execute({
         sql: `INSERT INTO print_jobs (
           workspace_id, job_id, created_at_client, source_files_json, sku_order_json,
-          printer_path, print_file_path, labels_total, skus_total, reprints_total
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          printer_path, print_file_path, labels_total, skus_total, reprints_total,
+          integrity_verified, integrity_input_blocks, integrity_output_blocks, parser_misses
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           asDbValue(workspaceId),
           asDbValue(jobId),
@@ -742,6 +743,10 @@ export async function POST(request) {
           asDbValue(labelsTotal),
           asDbValue(skusTotal),
           asDbValue(reprintsTotal),
+          1,
+          asDbValue(contractValidation.integrity.input_blocks_count),
+          asDbValue(contractValidation.integrity.output_blocks_count),
+          asDbValue(contractValidation.integrity.parser_misses),
         ],
       });
     } catch (error) {

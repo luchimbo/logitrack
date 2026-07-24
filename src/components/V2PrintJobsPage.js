@@ -138,6 +138,9 @@ export default function V2PrintJobsPage() {
                 <strong>Cliente:</strong> {formatDate(detail.job.created_at_client)}
                 <br />
                 <strong>Impresora:</strong> {detail.job.printer_path || "-"}
+                <br />
+                <strong>Integridad:</strong> {detail.job.integrity?.verified ? `Verificada (${detail.job.integrity.input_blocks}/${detail.job.integrity.output_blocks})` : "No disponible"}
+                {detail.job.integrity?.parser_misses ? <><br /><strong>Lecturas incompletas:</strong> {detail.job.integrity.parser_misses}</> : null}
               </div>
 
               <div className="table-container">

@@ -1,6 +1,7 @@
 "use client";
 
 import GeoModiLogo from "@/components/GeoModiLogo";
+import AppIcon from "@/components/AppIcon";
 
 export default function AppShell({
   activeTab,
@@ -51,7 +52,7 @@ export default function AppShell({
                         onNavigate(link.id);
                       }}
                     >
-                      <span className="nav-icon">{link.icon}</span>
+                      <span className="nav-icon"><AppIcon name={link.icon} /></span>
                       <span style={{ flex: 1 }}>{link.label}</span>
                       {link.badgeKey && navBadges[link.badgeKey] > 0 && (
                         <span style={{

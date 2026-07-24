@@ -966,7 +966,6 @@ async function watchLoop(config) {
 
   const knownTrackingIndex = loadKnownTrackings();
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const queueJob = await claimQueueJob(baseUrl, config);

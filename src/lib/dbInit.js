@@ -141,7 +141,11 @@ export async function initDb() {
       print_file_path TEXT,
       labels_total INTEGER DEFAULT 0,
       skus_total INTEGER DEFAULT 0,
-      reprints_total INTEGER DEFAULT 0
+      reprints_total INTEGER DEFAULT 0,
+      integrity_verified INTEGER DEFAULT 0,
+      integrity_input_blocks INTEGER DEFAULT 0,
+      integrity_output_blocks INTEGER DEFAULT 0,
+      parser_misses INTEGER DEFAULT 0
     )`,
     `CREATE TABLE IF NOT EXISTS print_job_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -547,6 +551,10 @@ export async function initDb() {
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
   await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
+  await addColumnIfMissing("print_jobs", "integrity_verified", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("print_jobs", "integrity_input_blocks", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("print_jobs", "integrity_output_blocks", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("print_jobs", "parser_misses", "INTEGER DEFAULT 0");
   await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
   await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
   await addColumnIfMissing("app_users", "is_global_admin", "INTEGER DEFAULT 0");
