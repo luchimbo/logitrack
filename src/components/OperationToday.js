@@ -12,6 +12,7 @@ let operationCache = null;
 export default function OperationToday({ onNavigate }) {
   const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null, sheet: null });
   const [loading, setLoading] = useState(() => !operationCache);
+  const [manualUpdating, setManualUpdating] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(() => operationCache?.updatedAt || null);
 
@@ -20,8 +21,9 @@ export default function OperationToday({ onNavigate }) {
   }, []);
 
   const load = useCallback(async (options = {}) => {
-    const force = options?.force === true || Boolean(options?.currentTarget);
-    const syncSources = options?.syncSources === true || Boolean(options?.currentTarget);
+    const manualRefresh = Boolean(options?.currentTarget);
+    const force = options?.force === true || manualRefresh;
+    const syncSources = options?.syncSources === true || manualRefresh;
     const cacheIsFresh = operationCache && Date.now() - operationCache.cachedAt < CACHE_TTL_MS;
     if (!force && cacheIsFresh) {
       hydrate(operationCache);
@@ -29,6 +31,7 @@ export default function OperationToday({ onNavigate }) {
       return operationCache;
     }
     if (!operationCache) setLoading(true);
+    if (manualRefresh) setManualUpdating(true);
     setError("");
     try {
       const [mlResult, sheetResult] = await Promise.all([
@@ -42,7 +45,10 @@ export default function OperationToday({ onNavigate }) {
       operationCache = snapshot;
       hydrate(snapshot);
     } catch (err) { setError(err.message || "No se pudo cargar la operación de hoy."); }
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+      if (manualRefresh) setManualUpdating(false);
+    }
   }, [hydrate]);
   // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
   // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
@@ -58,7 +64,7 @@ export default function OperationToday({ onNavigate }) {
   }, [load]);
 
   return <div className="section operation-today">
-    <div className="operation-header"><div><p className="operation-kicker">Etiquetas a preparar</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre y el Excel de etiquetas se actualizan automáticamente.</p>{lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading}>{loading ? "Actualizando…" : "Actualizar"}</button></div>
+    <div className="operation-header"><div><p className="operation-kicker">Etiquetas a preparar</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre y el Excel de etiquetas se actualizan automáticamente.</p>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button></div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
     <section className="operation-sources" aria-label="Etiquetas por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Por origen</h2><p>Las etiquetas de Mercado Libre y del Excel se mantienen separadas para preparar sin mezclas.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Etiquetas listas para imprimir" tone="ml" data={sources.mercadolibre} onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.orders} />} /><SourceCard title="Etiquetas a preparar" subtitle="Pendientes recibidos desde Excel" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
   </div>;
