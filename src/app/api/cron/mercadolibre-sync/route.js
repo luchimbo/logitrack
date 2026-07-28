@@ -37,6 +37,7 @@ export async function GET(request) {
           siteId: target.config?.siteId || 'MLA',
           q: '',
           light: true,
+          maxPages: 1,
         });
         totalSynced += count;
         results.push({ connectionId: connection.id, ok: true, synced: count });

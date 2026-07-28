@@ -21,7 +21,7 @@ export async function GET(request) {
     let didSync = false;
     let syncedCount = 0;
 
-    if (syncMode === 'force') {
+    if (syncMode === 'force' || syncMode === 'quick') {
       try {
         const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
         if (!targets.length) throw new Error('Mercado Libre no esta conectado para este workspace');
@@ -34,6 +34,9 @@ export async function GET(request) {
             siteId: target.config?.siteId || 'MLA',
             q: '',
             light: true,
+            // El tablero sólo necesita detectar cambios recientes. Evitamos
+            // recorrer todo el historial cuando se solicita una actualización rápida.
+            maxPages: syncMode === 'quick' ? 1 : 5,
           });
         }
         didSync = true;

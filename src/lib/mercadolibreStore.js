@@ -282,7 +282,7 @@ export async function syncSingleMercadoLibreOrder({ workspaceId, client, orderId
   return full;
 }
 
-export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false } = {}) {
+export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5 } = {}) {
   await ensureDb();
   const sellerId = externalStoreId;
   if (!sellerId) throw new Error('Seller ID de Mercado Libre no disponible');
@@ -306,7 +306,7 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
       return false;
     }
   };
-  while (pages < 5) {
+  while (pages < maxPages) {
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
     for (const orderSummary of orders) {

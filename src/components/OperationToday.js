@@ -12,7 +12,7 @@ let operationCache = null;
 const statusCopy = {
   ready: { label: "Listo para preparar", note: "El último lote llegó completo y no tiene incidencias.", tone: "success" },
   review: { label: "Revisar", note: "Hay una incidencia que conviene verificar antes de preparar.", tone: "warning" },
-  missing: { label: "Sin sincronizar", note: "Todavía no hay un lote confirmado hoy. Ejecutá el .bat y actualizá esta vista.", tone: "danger" },
+  missing: { label: "Sin lote impreso", note: "Todavía no se registró un lote de impresión hoy. Ejecutá el .bat para enviarlo a la cola.", tone: "danger" },
 };
 
 export default function OperationToday({ onNavigate }) {
@@ -43,7 +43,7 @@ export default function OperationToday({ onNavigate }) {
     try {
       const [jobsData, healthData, mlResult, tnResult, sheetResult] = await Promise.all([
         api("/v2/print-jobs?limit=20"), api("/flex-health?period=today"),
-        api(`/admin/mercadolibre?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
+        api(`/admin/mercadolibre?sync=${syncSources ? "quick" : "0"}`).catch((error) => ({ error: error.message })),
         api(`/admin/tiendanube?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
         api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })),
       ]);
@@ -75,7 +75,7 @@ export default function OperationToday({ onNavigate }) {
   const job = jobs[0];
   const alerts = useMemo(() => {
     const next = [];
-    if (!job) next.push({ severity: "critical", text: "No hay un lote sincronizado hoy.", action: "Actualizar" });
+    if (!job) next.push({ severity: "critical", text: "No hay un lote de impresión registrado hoy.", action: "Actualizar" });
     else {
       if (!job.integrity?.verified || job.integrity.input_blocks !== job.integrity.output_blocks) next.push({ severity: "critical", text: "La integridad del último lote no pudo verificarse.", action: "Ver detalle", target: "printJobs" });
       if (job.reprints_total > 0) next.push({ severity: "attention", text: `${job.reprints_total} etiqueta${job.reprints_total === 1 ? "" : "s"} fue${job.reprints_total === 1 ? "" : "ron"} reimpresa${job.reprints_total === 1 ? "" : "s"}.`, action: "Revisar incidencias", target: "printJobs" });
