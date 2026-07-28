@@ -37,7 +37,7 @@ export async function GET(request) {
           siteId: target.config?.siteId || 'MLA',
           q: '',
           light: true,
-          maxPages: 1,
+          maxPages: 5,
         });
         return { connectionId: connection.id, ok: true, synced: count };
       } catch (error) {

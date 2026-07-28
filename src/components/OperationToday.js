@@ -35,7 +35,7 @@ export default function OperationToday({ onNavigate }) {
     setError("");
     try {
       const [mlResult, sheetResult] = await Promise.all([
-        api(`/admin/mercadolibre?sync=${syncSources ? "quick" : "0"}`).catch((error) => ({ error: error.message })),
+        api(`/admin/mercadolibre?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
         api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })),
       ]);
       const snapshot = {
