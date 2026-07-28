@@ -7,6 +7,7 @@ import { getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
 
 const todayInArgentina = (value) => value && new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(value)) === getArgentinaDateString();
 const CACHE_TTL_MS = 60_000;
+const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
 let operationCache = null;
 const statusCopy = {
   ready: { label: "Listo para preparar", note: "El último lote llegó completo y no tiene incidencias.", tone: "success" },
@@ -30,6 +31,7 @@ export default function OperationToday({ onNavigate }) {
 
   const load = useCallback(async (options = {}) => {
     const force = options?.force === true || Boolean(options?.currentTarget);
+    const syncSources = options?.syncSources === true || Boolean(options?.currentTarget);
     const cacheIsFresh = operationCache && Date.now() - operationCache.cachedAt < CACHE_TTL_MS;
     if (!force && cacheIsFresh) {
       hydrate(operationCache);
@@ -41,8 +43,8 @@ export default function OperationToday({ onNavigate }) {
     try {
       const [jobsData, healthData, mlResult, tnResult, sheetResult] = await Promise.all([
         api("/v2/print-jobs?limit=20"), api("/flex-health?period=today"),
-        api("/admin/mercadolibre?sync=0").catch((error) => ({ error: error.message })),
-        api("/admin/tiendanube?sync=0").catch((error) => ({ error: error.message })),
+        api(`/admin/mercadolibre?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
+        api(`/admin/tiendanube?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
         api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })),
       ]);
       const todayJobs = (jobsData.jobs || []).filter((job) => todayInArgentina(job.received_at));
@@ -57,10 +59,17 @@ export default function OperationToday({ onNavigate }) {
     } catch (err) { setError(err.message || "No se pudo cargar la operación de hoy."); }
     finally { setLoading(false); }
   }, [hydrate]);
-  useEffect(() => { load(); }, [load]);
+  // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
+  // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
+  // las ventas contra las APIs externas en cada actualización.
+  useEffect(() => { load({ force: true }); }, [load]);
   useEffect(() => {
-    const intervalId = window.setInterval(() => { load().catch(() => {}); }, CACHE_TTL_MS);
-    return () => window.clearInterval(intervalId);
+    const refreshIntervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") load({ force: true }).catch(() => {});
+    }, DISPLAY_REFRESH_INTERVAL_MS);
+    return () => {
+      window.clearInterval(refreshIntervalId);
+    };
   }, [load]);
 
   const job = jobs[0];

@@ -11,18 +11,23 @@ function shippingMethod(order) {
 // This card is for the picker, not the commercial order history.
 export function getMercadoLibrePackingMetrics(orders = []) {
   const nextToPack = orders.filter((order) => {
-    const status = lower(order.shipmentStatus);
     const substatus = lower(order.shipmentSubstatus);
-    const logisticType = lower(order.logisticType);
-    return status === 'ready_to_ship'
-      && logisticType !== 'fulfillment'
-      && !['ready_for_pickup', 'printed'].includes(substatus)
+    return order.printability?.id === 'printable'
+      && substatus === 'ready_to_print'
       && Boolean(shippingMethod(order));
   });
 
+  // Un pack de Mercado Libre puede tener más de una venta, pero sale en un solo
+  // paquete. El tablero operativo muestra paquetes físicos, por lo que nunca
+  // debe sumar dos veces el mismo shipment.
+  const shipments = [...new Map(nextToPack.map((order, index) => [
+    String(order.shipmentId || order.id || `row-${index}`),
+    order,
+  ])).values()];
+
   return {
-    total: nextToPack.length,
-    flex: nextToPack.filter((order) => shippingMethod(order) === 'flex').length,
-    colecta: nextToPack.filter((order) => shippingMethod(order) === 'colecta').length,
+    total: shipments.length,
+    flex: shipments.filter((order) => shippingMethod(order) === 'flex').length,
+    colecta: shipments.filter((order) => shippingMethod(order) === 'colecta').length,
   };
 }
