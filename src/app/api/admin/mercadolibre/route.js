@@ -25,8 +25,10 @@ export async function GET(request) {
       try {
         const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
         if (!targets.length) throw new Error('Mercado Libre no esta conectado para este workspace');
-        for (const target of targets) {
-          syncedCount += await syncMercadoLibreOrders({
+        // Cada cuenta tiene su propio token. Sincronizarlas en serie hacía que
+        // la segunda quedara fuera del límite de la petición cuando la primera
+        // tenía muchas ventas recientes.
+        const results = await Promise.allSettled(targets.map((target) => syncMercadoLibreOrders({
             workspaceId,
             client: target.client,
             connectionId: target.connectionId,
@@ -37,9 +39,15 @@ export async function GET(request) {
             // El tablero sólo necesita detectar cambios recientes. Evitamos
             // recorrer todo el historial cuando se solicita una actualización rápida.
             maxPages: syncMode === 'quick' ? 1 : 5,
-          });
+          })));
+        const failures = [];
+        for (let index = 0; index < results.length; index += 1) {
+          const result = results[index];
+          if (result.status === 'fulfilled') syncedCount += result.value;
+          else failures.push(`${targets[index].externalStoreId}: ${result.reason?.message || 'error de sincronización'}`);
         }
-        didSync = true;
+        didSync = syncedCount > 0;
+        if (failures.length) warning = `No se pudo actualizar una cuenta: ${failures.join(' · ')}`;
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Mercado Libre en vivo';
       }

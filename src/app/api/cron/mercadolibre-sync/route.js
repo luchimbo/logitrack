@@ -21,13 +21,12 @@ export async function GET(request) {
 
   try {
     const connections = await listAllActiveIntegrationConnections({ provider: 'mercadolibre' });
-    for (const connection of connections) {
+    const syncConnection = async (connection) => {
       try {
         const targets = await listMercadoLibreClientTargets(connection.workspaceId, { connectionId: connection.id });
         const target = targets[0];
         if (!target?.client) {
-          results.push({ connectionId: connection.id, ok: false, error: 'cliente no disponible' });
-          continue;
+          return { connectionId: connection.id, ok: false, error: 'cliente no disponible' };
         }
         const count = await syncMercadoLibreOrders({
           workspaceId: connection.workspaceId,
@@ -39,12 +38,16 @@ export async function GET(request) {
           light: true,
           maxPages: 1,
         });
-        totalSynced += count;
-        results.push({ connectionId: connection.id, ok: true, synced: count });
+        return { connectionId: connection.id, ok: true, synced: count };
       } catch (error) {
         console.error('Cron ML sync error (connection', connection.id, '):', error.message || error);
-        results.push({ connectionId: connection.id, ok: false, error: error.message || 'error' });
+        return { connectionId: connection.id, ok: false, error: error.message || 'error' };
       }
+    };
+    const connectionResults = await Promise.all(connections.map(syncConnection));
+    for (const result of connectionResults) {
+      results.push(result);
+      if (result.ok) totalSynced += result.synced;
     }
 
     return NextResponse.json({ ok: true, connections: connections.length, totalSynced, results });
