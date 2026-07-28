@@ -10,8 +10,8 @@ import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
 
 test('operation card counts only Mercado Libre shipments next to pack', () => {
   const metrics = getMercadoLibrePackingMetrics([
-    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', printability: { id: 'printable' } },
-    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', printability: { id: 'printable' } },
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', printability: { id: 'imported' } },
+    { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', printability: { id: 'printed' } },
     { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_for_pickup', logisticType: 'self_service', printability: { id: 'printed' } },
     { shipmentStatus: 'shipped', shipmentSubstatus: '', logisticType: 'cross_docking', printability: { id: 'not_ready' } },
     { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'fulfillment', printability: { id: 'not_ready' } },
@@ -24,6 +24,15 @@ test('operation card counts Mercado Libre packs as one physical package', () => 
     { id: 'sale-1', shipmentId: 'shipment-100', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', printability: { id: 'printable' } },
     { id: 'sale-2', shipmentId: 'shipment-100', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', printability: { id: 'printable' } },
     { id: 'sale-3', shipmentId: 'shipment-101', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', printability: { id: 'printable' } },
+  ]);
+
+  assert.deepEqual(metrics, { total: 2, flex: 1, colecta: 1 });
+});
+
+test('operation card ignores the local label import state', () => {
+  const metrics = getMercadoLibrePackingMetrics([
+    { shipmentId: 'shipment-200', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', printability: { id: 'imported' } },
+    { shipmentId: 'shipment-201', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', printability: { id: 'printed' } },
   ]);
 
   assert.deepEqual(metrics, { total: 2, flex: 1, colecta: 1 });

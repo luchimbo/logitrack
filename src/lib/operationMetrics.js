@@ -11,8 +11,11 @@ function shippingMethod(order) {
 // This card is for the picker, not the commercial order history.
 export function getMercadoLibrePackingMetrics(orders = []) {
   const nextToPack = orders.filter((order) => {
+    const status = lower(order.shipmentStatus);
     const substatus = lower(order.shipmentSubstatus);
-    return order.printability?.id === 'printable'
+    // Replica el estado de la etiqueta en Mercado Libre. No depende de si
+    // GeoModi ya descargó/importó la etiqueta ni de la cola de impresión local.
+    return status === 'ready_to_ship'
       && substatus === 'ready_to_print'
       && Boolean(shippingMethod(order));
   });
