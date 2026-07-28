@@ -3,7 +3,9 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { getMercadoLibreSyncMeta, listStoredMercadoLibreOrders, syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
 
-export const maxDuration = 60;
+// Las dos cuentas se consultan en paralelo, pero Mercado Libre puede demorar al
+// responder muchos envíos. Dejamos margen suficiente para completar el resumen.
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {

@@ -3,7 +3,8 @@ import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
 
-export const maxDuration = 60;
+// El cron debe poder completar todas las cuentas aunque la API de ML esté lenta.
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
