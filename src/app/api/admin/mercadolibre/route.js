@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
-import { getMercadoLibreSyncMeta, listStoredMercadoLibreOrders, syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
+import { getMercadoLibreSyncMeta, listLiveMercadoLibrePrintableOrders, listStoredMercadoLibreOrders, syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
 
 // Las dos cuentas se consultan en paralelo, pero Mercado Libre puede demorar al
 // responder muchos envíos. Dejamos margen suficiente para completar el resumen.
@@ -22,6 +22,24 @@ export async function GET(request) {
     let warning = '';
     let didSync = false;
     let syncedCount = 0;
+    let liveOrders = null;
+
+    if (syncMode === 'live') {
+      try {
+        const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
+        if (!targets.length) throw new Error('Mercado Libre no esta conectado para este workspace');
+        const perAccount = await Promise.all(targets.map((target) => listLiveMercadoLibrePrintableOrders({
+          client: target.client,
+          externalStoreId: target.externalStoreId,
+          maxPages: 5,
+        })));
+        liveOrders = perAccount.flat();
+        didSync = true;
+        syncedCount = liveOrders.length;
+      } catch (error) {
+        warning = error.message || 'No se pudo consultar Mercado Libre en vivo';
+      }
+    }
 
     if (syncMode === 'force' || syncMode === 'quick') {
       try {
@@ -57,7 +75,7 @@ export async function GET(request) {
 
     const orders = await listStoredMercadoLibreOrders({ workspaceId, connectionId, q, view });
     const meta = await getMercadoLibreSyncMeta({ workspaceId, connectionId });
-    return NextResponse.json({ orders, warning, didSync, syncedCount, totalOrders: meta.totalOrders || 0, lastSyncedAt: meta.lastSyncedAt || '' });
+    return NextResponse.json({ orders, liveOrders, warning, didSync, syncedCount, totalOrders: meta.totalOrders || 0, lastSyncedAt: meta.lastSyncedAt || '' });
   } catch (error) {
     console.error('Mercado Libre list error:', error);
     return NextResponse.json({ error: error.message || 'Error al consultar Mercado Libre' }, { status: 500 });

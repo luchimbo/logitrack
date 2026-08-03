@@ -35,11 +35,16 @@ export default function OperationToday({ onNavigate }) {
     setError("");
     try {
       const [mlResult, sheetResult] = await Promise.all([
-        api(`/admin/mercadolibre?sync=${syncSources ? "force" : "0"}`).catch((error) => ({ error: error.message })),
+        api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message })),
         api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })),
       ]);
       const snapshot = {
-        sources: { mercadolibre: mlResult, sheet: sheetResult },
+        sources: {
+          mercadolibre: syncSources
+            ? mlResult
+            : { ...mlResult, liveOrders: operationCache?.sources?.mercadolibre?.liveOrders ?? null },
+          sheet: sheetResult,
+        },
         updatedAt: new Date(), cachedAt: Date.now(),
       };
       operationCache = snapshot;
@@ -53,7 +58,7 @@ export default function OperationToday({ onNavigate }) {
   // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
   // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
   // las ventas contra las APIs externas en cada actualización.
-  useEffect(() => { load({ force: true }); }, [load]);
+  useEffect(() => { load({ force: true, syncSources: true }); }, [load]);
   useEffect(() => {
     const refreshIntervalId = window.setInterval(() => {
       if (document.visibilityState === "visible") load({ force: true }).catch(() => {});
@@ -66,12 +71,12 @@ export default function OperationToday({ onNavigate }) {
   return <div className="section operation-today">
     <div className="operation-header"><div><p className="operation-kicker">Etiquetas a preparar</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre y el Excel de etiquetas se actualizan automáticamente.</p>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button></div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
-    <section className="operation-sources" aria-label="Etiquetas por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Por origen</h2><p>Las etiquetas de Mercado Libre y del Excel se mantienen separadas para preparar sin mezclas.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Etiquetas listas para imprimir" tone="ml" data={sources.mercadolibre} onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.orders} />} /><SourceCard title="Etiquetas a preparar" subtitle="Pendientes recibidos desde Excel" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
+    <section className="operation-sources" aria-label="Etiquetas por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Por origen</h2><p>Las etiquetas de Mercado Libre y del Excel se mantienen separadas para preparar sin mezclas.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Etiquetas listas para imprimir" tone="ml" data={sources.mercadolibre} requireLiveData onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.liveOrders} />} /><SourceCard title="Etiquetas a preparar" subtitle="Pendientes recibidos desde Excel" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
   </div>;
 }
 
-function SourceCard({ title, subtitle, tone, data, onOpen, renderMetrics }) {
-  const unavailable = !data || data.error || data.ok === false;
+function SourceCard({ title, subtitle, tone, data, requireLiveData = false, onOpen, renderMetrics }) {
+  const unavailable = !data || data.error || data.ok === false || (requireLiveData && !Array.isArray(data.liveOrders));
   return <article className={`operation-source-card ${tone}`}><div className="operation-source-head"><div><p>{title}</p><span>{subtitle}</span></div><button className="btn btn-ghost btn-sm" onClick={onOpen}>Ver sector</button></div>{unavailable ? <div className="operation-source-empty">{title === "Envíos a coordinar" ? "La planilla no está disponible para este espacio." : "Sin datos sincronizados o integración no conectada."}</div> : renderMetrics(data)}</article>;
 }
 function MercadoLibreMetrics({ orders = [] }) {

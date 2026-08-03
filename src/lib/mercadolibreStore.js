@@ -324,6 +324,54 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   return totalSynced;
 }
 
+async function mapWithConcurrency(items, worker, concurrency = 8) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const run = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+  return results;
+}
+
+// Fuente autoritativa del tablero operativo: consulta ML directamente y no lee
+// mercadolibre_orders ni el estado local de impresión/importación.
+export async function listLiveMercadoLibrePrintableOrders({ client, externalStoreId, q = '', maxPages = 5 } = {}) {
+  const sellerId = String(externalStoreId || '').trim();
+  if (!sellerId) throw new Error('Seller ID de Mercado Libre no disponible');
+
+  const summaries = [];
+  const limit = 50;
+  for (let page = 0; page < maxPages; page += 1) {
+    const payload = await client.searchOrders({ sellerId, offset: page * limit, limit, q });
+    const orders = Array.isArray(payload?.results) ? payload.results : [];
+    summaries.push(...orders);
+    if (orders.length < limit) break;
+  }
+
+  const shipmentIds = [...new Set(summaries
+    .map((order) => String(order?.shipping?.id || '').trim())
+    .filter(Boolean))];
+  const shipments = await mapWithConcurrency(shipmentIds, async (shipmentId) => client.getShipment(shipmentId));
+
+  return shipments
+    .filter((shipment) => String(shipment?.status || '').toLowerCase() === 'ready_to_ship')
+    .filter((shipment) => String(shipment?.substatus || '').toLowerCase() === 'ready_to_print')
+    .filter((shipment) => String(shipment?.logistic?.type || '').toLowerCase() !== 'fulfillment')
+    .map((shipment) => ({
+      id: String(shipment.id),
+      shipmentId: String(shipment.id),
+      shipmentStatus: shipment.status || '',
+      shipmentSubstatus: shipment.substatus || '',
+      logisticType: shipment?.logistic?.type || '',
+      shippingMethod: String(shipment?.logistic?.type || '').toLowerCase() === 'self_service' ? 'flex' : 'colecta',
+    }));
+}
+
 export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', limit = 500 } = {}) {
   await ensureDb();
   const conditions = ['mo.workspace_id = ?'];
