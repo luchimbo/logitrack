@@ -44,7 +44,7 @@ TURSO_DATABASE_URL=libsql://<tu-db>.turso.io
 TURSO_AUTH_TOKEN=<tu-token>
 JWT_SECRET=<secreto-jwt-largo-y-unico>
 
-# Opcional (seguridad para print agent V2)
+# Exclusivo para el workspace GeoModi (slug legacy); no es parte del setup multicliente.
 PRINT_AGENT_TOKEN=<token-secreto>
 ```
 
@@ -52,7 +52,8 @@ Notas:
 
 - Si faltan `TURSO_DATABASE_URL` o `TURSO_AUTH_TOKEN`, la app no puede operar correctamente.
 - Si usas `/admin-login`, `JWT_SECRET` es obligatorio.
-- Si definis `PRINT_AGENT_TOKEN`, el agente de impresion debe mandar `x-print-agent-token`.
+- Para GeoModi, si definís `PRINT_AGENT_TOKEN`, el agente de impresión debe mandar `x-print-agent-token`.
+- Los workspaces multicliente no configuran ni utilizan este token.
 
 ---
 

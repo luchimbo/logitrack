@@ -29,7 +29,7 @@ export default function WorkspaceSetupSection() {
           name: data.printer.name || 'Impresora principal',
           printerPath: data.printer.printer_path || '',
           syncUrl: data.printer.sync_url || '',
-          syncToken: data.printer.sync_token || '',
+          syncToken: data.workspace?.slug === 'legacy' ? (data.printer.sync_token || '') : '',
           workspaceKey: data.printer.workspace_key || '',
         });
       }
@@ -97,10 +97,12 @@ export default function WorkspaceSetupSection() {
             <input className="form-input" value={form.syncUrl} onChange={(e) => setForm((prev) => ({ ...prev, syncUrl: e.target.value }))} placeholder="https://tu-dominio/api/v2/print-jobs/intake" />
           </div>
 
-          <div>
-            <label className="form-label">syncToken</label>
-            <input className="form-input" value={form.syncToken} onChange={(e) => setForm((prev) => ({ ...prev, syncToken: e.target.value }))} placeholder="Token del agente de impresión" />
-          </div>
+          {workspace?.slug === 'legacy' ? (
+            <div>
+              <label className="form-label">syncToken</label>
+              <input className="form-input" value={form.syncToken} onChange={(e) => setForm((prev) => ({ ...prev, syncToken: e.target.value }))} placeholder="Token del agente de impresión" />
+            </div>
+          ) : null}
 
           <div>
             <label className="form-label">workspaceKey</label>

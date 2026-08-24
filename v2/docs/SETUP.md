@@ -3,14 +3,15 @@
 ## 1) Backend (este proyecto)
 
 1. Desplegar cambios con rutas `/api/v2/print-jobs/*`
-2. (Opcional recomendado) definir `PRINT_AGENT_TOKEN` en Vercel
+2. Para GeoModi (workspace con slug `legacy`), definir `PRINT_AGENT_TOKEN` en Vercel si se quiere validar el agente.
+   Este token no forma parte del setup de workspaces multicliente.
 
 ## 2) Agente local
 
 1. Copiar `v2/print-agent/config.example.json` a `v2/print-agent/config.json`
 2. Completar:
    - `syncUrl`: `https://<tu-app>/api/v2/print-jobs/intake`
-   - `syncToken`: mismo valor de `PRINT_AGENT_TOKEN` (si aplica)
+   - `syncToken`: mismo valor de `PRINT_AGENT_TOKEN` para GeoModi (si aplica)
    - `printerPath`: recurso compartido local
 
 ## 3) Uso diario

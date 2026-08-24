@@ -17,6 +17,7 @@ export async function GET(request) {
     }
 
     const workspaceId = authResult.actor.workspaceId;
+    const isLegacyWorkspace = authResult.actor.workspaceSlug === 'legacy';
     const [printerResult, settingsResult] = await Promise.all([
       db.execute({
         sql: 'SELECT id, name, printer_path, sync_url, sync_token, workspace_key, is_default FROM workspace_printers WHERE workspace_id = ? ORDER BY is_default DESC, id ASC LIMIT 1',
@@ -28,8 +29,13 @@ export async function GET(request) {
       }),
     ]);
 
+    const printer = printerResult.rows[0] || null;
+    if (printer && !isLegacyWorkspace) {
+      delete printer.sync_token;
+    }
+
     return NextResponse.json({
-      printer: printerResult.rows[0] || null,
+      printer,
       printing_setup_completed: Boolean(settingsResult.rows[0]?.printing_setup_completed),
       workspace: {
         id: workspaceId,
@@ -52,11 +58,12 @@ export async function PATCH(request) {
     }
 
     const workspaceId = authResult.actor.workspaceId;
+    const isLegacyWorkspace = authResult.actor.workspaceSlug === 'legacy';
     const body = await request.json();
     const printerName = String(body.name || 'Impresora principal').trim();
     const printerPath = String(body.printerPath || '').trim();
     const syncUrl = String(body.syncUrl || '').trim();
-    const syncToken = String(body.syncToken || '').trim();
+    const syncToken = isLegacyWorkspace ? String(body.syncToken || '').trim() : null;
     const workspaceKey = String(body.workspaceKey || '').trim() || buildWorkspaceKey(authResult.actor.workspaceSlug);
 
     if (!printerPath || !syncUrl) {
@@ -69,17 +76,22 @@ export async function PATCH(request) {
     });
 
     if (existing.rows.length) {
+      const updateFields = ['name = ?', 'printer_path = ?', 'sync_url = ?', 'workspace_key = ?', 'is_default = 1'];
+      const updateArgs = [printerName, printerPath, syncUrl, workspaceKey];
+      if (isLegacyWorkspace) {
+        updateFields.splice(3, 0, 'sync_token = ?');
+        updateArgs.splice(3, 0, syncToken);
+      }
+      updateArgs.push(existing.rows[0].id, workspaceId);
       await db.execute({
-        sql: `UPDATE workspace_printers
-              SET name = ?, printer_path = ?, sync_url = ?, sync_token = ?, workspace_key = ?, is_default = 1
-              WHERE id = ? AND workspace_id = ?`,
-        args: [printerName, printerPath, syncUrl, syncToken, workspaceKey, existing.rows[0].id, workspaceId],
+        sql: `UPDATE workspace_printers SET ${updateFields.join(', ')} WHERE id = ? AND workspace_id = ?`,
+        args: updateArgs,
       });
     } else {
       await db.execute({
         sql: `INSERT INTO workspace_printers (workspace_id, name, printer_path, sync_url, sync_token, workspace_key, is_default)
               VALUES (?, ?, ?, ?, ?, ?, 1)`,
-        args: [workspaceId, printerName, printerPath, syncUrl, syncToken, workspaceKey],
+        args: [workspaceId, printerName, printerPath, syncUrl, isLegacyWorkspace ? syncToken : null, workspaceKey],
       });
     }
 
