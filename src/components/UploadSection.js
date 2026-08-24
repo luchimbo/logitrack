@@ -66,16 +66,62 @@ export default function UploadSection() {
         }
     };
 
+    const isRarFile = (name) => /\.rar$/i.test(name);
+
+    const extractTxtFromRar = async (file) => {
+        const { createExtractorFromData } = await import('node-unrar-js');
+        const wasmBinary = await fetch('/vendor/unrar.wasm').then(r => r.arrayBuffer());
+        const extractor = await createExtractorFromData({
+            data: await file.arrayBuffer(),
+            wasmBinary,
+        });
+        const { files } = extractor.extract();
+        const extracted = [];
+        for (const entry of files) {
+            const header = entry.fileHeader;
+            if (header.flags.directory) continue;
+            if (/\.txt$/i.test(header.name) && entry.extraction) {
+                extracted.push(new File([entry.extraction], header.name));
+            }
+        }
+        return extracted;
+    };
+
     const processFiles = async (files) => {
         setIsUploading(true);
         setUploadResult(null);
 
-        const formData = new FormData();
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
-        }
-
         try {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (!isRarFile(file.name)) {
+                    formData.append('files', file);
+                    continue;
+                }
+
+                let txtFiles;
+                try {
+                    txtFiles = await extractTxtFromRar(file);
+                } catch (err) {
+                    const message = String(err?.message || "");
+                    if (/password/i.test(message)) {
+                        throw new Error(`El archivo ${file.name} está protegido con contraseña. Descomprimilo antes de subirlo.`);
+                    }
+                    if (err?.reason || /rar|archive/i.test(message)) {
+                        throw new Error(`El archivo ${file.name} no es un RAR válido o está dañado.`);
+                    }
+                    throw err;
+                }
+
+                if (txtFiles.length === 0) {
+                    throw new Error(`El archivo ${file.name} no contiene archivos .txt (buscá "Etiquetas de Envío.txt")`);
+                }
+                for (const txt of txtFiles) {
+                    formData.append('files', txt);
+                }
+            }
+
             const result = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData,
@@ -94,7 +140,7 @@ export default function UploadSection() {
             toast(`✅ ${data.total_parsed} nuevos envíos agregados (${data.total_in_batch} total)`, "success");
         } catch (error) {
             console.error(error);
-            toast("Error procesando las etiquetas", "error");
+            toast(error?.message || "Error procesando las etiquetas", "error");
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -183,7 +229,7 @@ export default function UploadSection() {
         <div id="section-upload" className="section active">
             <div className="section-header">
                 <h1 className="section-title">📦 Subir Etiquetas</h1>
-                <p className="section-subtitle">Arrastrá o seleccioná archivos ZPL/TXT. Las etiquetas se procesan y entran directo a la operación del workspace actual.</p>
+                <p className="section-subtitle">Arrastrá o seleccioná archivos ZPL/TXT, o un .rar con el archivo &quot;Etiquetas de Envío.txt&quot; adentro. Las etiquetas se procesan y entran directo a la operación del workspace actual.</p>
             </div>
 
             <div
@@ -198,13 +244,13 @@ export default function UploadSection() {
                     className="upload-input"
                     ref={fileInputRef}
                     multiple
-                    accept=".txt,.zpl,.TXT,.ZPL"
+                    accept=".txt,.zpl,.rar,.TXT,.ZPL,.RAR"
                     onChange={handleFileSelect}
                     style={{ display: 'none' }}
                 />
                 <div className="upload-icon">📄</div>
                 <p className="upload-title">Arrastrá archivos aquí</p>
-                <p className="upload-subtitle">o hacé click para seleccionar — Archivos .txt o .zpl</p>
+                <p className="upload-subtitle">o hacé click para seleccionar — Archivos .txt, .zpl o .rar</p>
             </div>
 
             {isUploading && (
