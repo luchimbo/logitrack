@@ -470,6 +470,56 @@ function extractFdTexts(segment) {
     return texts;
 }
 
+function isMissingLabelValue(value) {
+    const normalized = String(value || "").trim().toUpperCase();
+    return !normalized || normalized === "SIN-SKU" || normalized === "N/A";
+}
+
+function extractVariantValue(text, label) {
+    const match = String(text || "").match(new RegExp(`${label}:\\s*([^|^]+?)(?=\\s*(?:\\||\\^|$))`, "i"));
+    return match ? match[1].trim() : null;
+}
+
+// Las etiquetas Flex cambian sus coordenadas con frecuencia. Extraemos los campos
+// de producto por contenido, como respaldo de los patrones de layout heredados.
+function extractFlexProductMetadata(content) {
+    const fields = [];
+    const fieldRegex = /\^FO(\d+),(\d+)(?:(?!\^FO)[\s\S])*?\^A0N,(\d+),(\d+)(?:(?!\^FO)[\s\S])*?\^FD([\s\S]*?)\^FS/g;
+    let match;
+    while ((match = fieldRegex.exec(content)) !== null) {
+        const text = decodeZplHex(match[5] || "").replace(/\s+/g, " ").trim();
+        if (text) fields.push({ y: Number(match[2]), fontHeight: Number(match[4]), text });
+    }
+
+    const allTexts = fields.map((field) => field.text);
+    const skus = uniqueValues(allTexts.map((text) => extractVariantValue(text, "SKU")));
+    const colors = uniqueValues(allTexts.map((text) => extractVariantValue(text, "Color")));
+    const voltages = uniqueValues(allTexts.map((text) => extractVariantValue(text, "Voltaje")));
+    const variantFields = fields.filter((field) => /(?:SKU|Color|Voltaje):/i.test(field.text));
+
+    const isProductCandidate = (field) => {
+        const text = field.text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim();
+        if (!text || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
+        if (/^\d+$/.test(text) || /^(RESIDENCIAL|COMERCIAL)$/i.test(text)) return false;
+        return field.fontHeight >= 25;
+    };
+
+    const productCandidates = fields.filter(isProductCandidate);
+    const productNames = [];
+    for (const variant of variantFields) {
+        const preceding = [...productCandidates].reverse().find((field) => field.y < variant.y);
+        if (preceding) productNames.push(preceding.text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim());
+    }
+    if (!productNames.length && productCandidates.length) productNames.push(productCandidates[0].text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim());
+
+    return {
+        sku: joinValues(skus),
+        color: joinValues(colors, ", "),
+        voltage: joinValues(voltages, ", "),
+        product_name: joinValues(productNames),
+    };
+}
+
 function stripRepeatedLabelPrefix(value, label) {
     let out = decodeZplHex(String(value || "")).trim();
     const prefix = new RegExp(`^(?:${label}:\\s*)+`, "i");
@@ -515,6 +565,12 @@ function parseFlexLabel(content) {
         const voltM = varText.match(/Voltaje:\s*([^|]+)/);
         if (voltM) shipment.voltage = voltM[1].trim();
     }
+
+    const metadata = extractFlexProductMetadata(content);
+    if (isMissingLabelValue(shipment.sku)) shipment.sku = metadata.sku;
+    if (isMissingLabelValue(shipment.product_name)) shipment.product_name = metadata.product_name;
+    if (isMissingLabelValue(shipment.color)) shipment.color = metadata.color;
+    if (isMissingLabelValue(shipment.voltage)) shipment.voltage = metadata.voltage;
 
     const remMatch = content.match(/#(\d{6,})\^FS/);
     if (remMatch) shipment.remitente_id = remMatch[1];

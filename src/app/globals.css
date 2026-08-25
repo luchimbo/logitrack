@@ -112,7 +112,13 @@ a{color:var(--accent);text-decoration:none} a:hover{color:var(--accent-hover)}
 .form-input:focus,.form-select:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px var(--accent-light)}
 .form-input::placeholder{color:var(--text-muted)}
 .form-select{-webkit-appearance:none;appearance:none;cursor:pointer}
-.form-select option{background:var(--bg-secondary);color:var(--text)}
+
+/* Los menús nativos no heredan el tema oscuro de un select por defecto en Windows.
+   Aplicar color-scheme al control y a las opciones mantiene contraste en toda la app,
+   incluidos los selects con estilos inline de Flex y transportistas. */
+select{color-scheme:dark}
+select option,select optgroup{background-color:var(--bg-secondary);color:var(--text)}
+select option:checked{background-color:var(--accent-hover);color:#fff}
 .form-row{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
 .form-group{flex:1;min-width:140px}
 

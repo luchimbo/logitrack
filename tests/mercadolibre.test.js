@@ -7,6 +7,50 @@ import {
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
 import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+import { parseZplFile } from '../src/lib/zplParser.js';
+
+function flexLabel(fields) {
+  return `^XA
+^FO10,10^A0N,20,20^FDEnvio Flex^FS
+${fields}
+^XZ`;
+}
+
+test('Flex parser extracts product metadata independently of label coordinates', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+^FO48,118^A0N,30,30^FB600,3,-1^FH^FDAuriculares Bluetooth | 2 u.^FS
+^FO48,177^A0N,22,22^FB600,3,-1^FH^FDSKU: AUR-NEG-01 | Color: Negro | Voltaje: 5V^FS
+`));
+
+  assert.equal(shipment.shipping_method, 'flex');
+  assert.equal(shipment.product_name, 'Auriculares Bluetooth');
+  assert.equal(shipment.sku, 'AUR-NEG-01');
+  assert.equal(shipment.color, 'Negro');
+  assert.equal(shipment.voltage, '5V');
+});
+
+test('Flex parser preserves multiple products and variants', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+^FO48,100^A0N,30,30^FB600,3,-1^FH^FDProducto Uno^FS
+^FO48,150^A0N,22,22^FB600,3,-1^FH^FDSKU: UNO-01 | Color: Rojo^FS
+^FO48,210^A0N,30,30^FB600,3,-1^FH^FDProducto Dos^FS
+^FO48,260^A0N,22,22^FB600,3,-1^FH^FDSKU: DOS-02 | Voltaje: 220V^FS
+`));
+
+  assert.equal(shipment.product_name, 'Producto Uno | Producto Dos');
+  assert.equal(shipment.sku, 'UNO-01 | DOS-02');
+  assert.equal(shipment.color, 'Rojo');
+  assert.equal(shipment.voltage, '220V');
+});
+
+test('Flex parser never invents SIN-SKU when the source label has no SKU', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+^FO48,118^A0N,30,30^FB600,3,-1^FH^FDProducto sin variante^FS
+`));
+
+  assert.equal(shipment.product_name, 'Producto sin variante');
+  assert.equal(shipment.sku, null);
+});
 
 test('operation card counts only Mercado Libre shipments next to pack', () => {
   const metrics = getMercadoLibrePackingMetrics([

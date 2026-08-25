@@ -202,6 +202,16 @@ function pickFirst(...values) {
   return null;
 }
 
+function pickFirstMetadata(...values) {
+  for (const value of values) {
+    const picked = pickFirst(value);
+    if (picked === null) continue;
+    if (typeof picked === "string" && /^(SIN-SKU|N\/?A)$/i.test(picked.trim())) continue;
+    return picked;
+  }
+  return null;
+}
+
 function parseShipmentFromRawBlock(rawBlock) {
   const block = stringOrNull(rawBlock, 40000);
   if (!block) return null;
@@ -409,8 +419,8 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
       sale_id: pickFirst(parsedShipment?.sale_id, item.sale_id),
       tracking_number: pickFirst(parsedShipment?.tracking_number, item.tracking_number),
       remitente_id: pickFirst(parsedShipment?.remitente_id, item.remitente_id),
-      product_name: pickFirst(parsedShipment?.product_name, item.product_name),
-      sku: pickFirst(parsedShipment?.sku, item.sku),
+      product_name: pickFirstMetadata(parsedShipment?.product_name, item.product_name),
+      sku: pickFirstMetadata(parsedShipment?.sku, item.sku),
       color: pickFirst(parsedShipment?.color, item.color),
       voltage: pickFirst(parsedShipment?.voltage, item.voltage),
       quantity: Math.max(1, intOrDefault(pickFirst(parsedShipment?.quantity, item.quantity), 1)),
@@ -432,7 +442,7 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
 
     if (!shipment.product_name) {
       shipment.product_name =
-        pickFirst(item.product_name, shipment.sku, shipment.tracking_number, "Etiqueta sin producto") ||
+        pickFirstMetadata(item.product_name, shipment.sku, shipment.tracking_number, "Etiqueta sin producto") ||
         "Etiqueta sin producto";
     }
 
@@ -706,8 +716,15 @@ export async function POST(request) {
         seenFingerprintsInJob.add(label.label_fingerprint);
       }
 
+      const parsedMetadata = parseShipmentFromRawBlock(label.raw_block);
+      const resolvedSku = pickFirstMetadata(parsedMetadata?.sku, label.sku) || "SIN-SKU";
+      const resolvedProductName = pickFirstMetadata(parsedMetadata?.product_name, label.product_name);
+
       return {
         ...label,
+        sku: resolvedSku,
+        product_name: resolvedProductName,
+        shipping_method: pickFirstMetadata(parsedMetadata?.shipping_method, label.shipping_method),
         is_reprint: isReprint ? 1 : 0,
       };
     });

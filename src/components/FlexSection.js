@@ -53,6 +53,7 @@ export default function FlexSection() {
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const [isPrintingBulk, setIsPrintingBulk] = useState(false);
+    const [isRepairingMetadata, setIsRepairingMetadata] = useState(false);
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
 
@@ -142,6 +143,20 @@ export default function FlexSection() {
 
     const handleBulkDownloadLabels = async (items) => {
         await downloadSelectedLabels(getSelectedIdsFrom(items));
+    };
+
+    const handleRepairMetadata = async () => {
+        if (!window.confirm('Se reprocesarán los ZPL de los envíos Flex de hoy que no tienen SKU o producto. No se crearán envíos nuevos.')) return;
+        setIsRepairingMetadata(true);
+        try {
+            const result = await api('/shipments/repair-flex-metadata', { method: 'POST' });
+            toast(`SKU/producto reparados: ${result.updated || 0} de ${result.candidates || 0} envíos`, 'success');
+            await loadData({ silent: true });
+        } catch (err) {
+            toast('Error al reparar SKU y producto', 'error');
+        } finally {
+            setIsRepairingMetadata(false);
+        }
     };
 
     const handleBulkPrintLabels = async (items) => {
@@ -304,6 +319,7 @@ export default function FlexSection() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-sm" onClick={() => loadData()} disabled={loading}>🔎 Verificar</button>
+                    <LoadingButton className="btn btn-sm" isLoading={isRepairingMetadata} onClick={handleRepairMetadata} style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning)' }}>🔧 Reparar SKU</LoadingButton>
                     <button className="btn btn-primary btn-sm" onClick={handleReassign}>🔄 Reasignar por zonas</button>
                 </div>
             </div>
