@@ -42,6 +42,10 @@ Crear `.env.local` en la raiz:
 ```env
 TURSO_DATABASE_URL=libsql://<tu-db>.turso.io
 TURSO_AUTH_TOKEN=<tu-token>
+# Token Turso separado, limitado a lectura, para el portal externo de transportistas.
+TURSO_READONLY_AUTH_TOKEN=<tu-token-de-solo-lectura>
+# Secreto aleatorio de al menos 32 caracteres para firmar links externos.
+CARRIER_PORTAL_SIGNING_SECRET=<secreto-largo-y-unico>
 JWT_SECRET=<secreto-jwt-largo-y-unico>
 
 # Exclusivo para el workspace GeoModi (slug legacy); no es parte del setup multicliente.
@@ -51,6 +55,7 @@ PRINT_AGENT_TOKEN=<token-secreto>
 Notas:
 
 - Si faltan `TURSO_DATABASE_URL` o `TURSO_AUTH_TOKEN`, la app no puede operar correctamente.
+- El portal externo requiere además `TURSO_READONLY_AUTH_TOKEN`; no usa ni acepta la credencial de escritura.
 - Si usas `/admin-login`, `JWT_SECRET` es obligatorio.
 - Para GeoModi, si definís `PRINT_AGENT_TOKEN`, el agente de impresión debe mandar `x-print-agent-token`.
 - Los workspaces multicliente no configuran ni utilizan este token.

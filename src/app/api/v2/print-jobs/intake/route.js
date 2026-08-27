@@ -458,14 +458,14 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
       sql: `INSERT INTO shipments (
         batch_id, workspace_id, sale_type, sale_id, tracking_number, remitente_id,
         product_name, sku, color, voltage, quantity,
-        recipient_name, recipient_user, address, postal_code,
+        recipient_name, recipient_user, recipient_phone, address, postal_code,
         city, partido, province, reference, shipping_method,
         carrier_code, carrier_name, assigned_carrier,
         dispatch_date, delivery_date, status, raw_zpl
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, 'pendiente', ?
@@ -484,6 +484,7 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
         asDbValue(shipment.quantity),
         asDbValue(shipment.recipient_name),
         asDbValue(shipment.recipient_user),
+        asDbValue(shipment.recipient_phone),
         asDbValue(shipment.address),
         asDbValue(shipment.postal_code),
         asDbValue(shipment.city),

@@ -514,6 +514,7 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     shipment.quantity || fallbackProduct.quantity || 1,
     shipment.recipient_name || order.recipientName,
     shipment.recipient_user || order.buyerNickname,
+    shipment.recipient_phone || order.recipientPhone || '',
     shipment.address || address.address_line || [address.street_name, address.street_number].filter(Boolean).join(' '),
     shipment.postal_code || address.zip_code || '',
     shipment.city || address.city?.name || '',
@@ -539,7 +540,7 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     await db.execute({
       sql: `UPDATE shipments SET
         batch_id = ?, workspace_id = ?, sale_type = ?, sale_id = ?, tracking_number = ?, remitente_id = ?, product_name = ?, sku = ?, color = ?, voltage = ?,
-        quantity = ?, recipient_name = ?, recipient_user = ?, address = ?, postal_code = ?, city = ?, partido = ?, province = ?, reference = ?,
+        quantity = ?, recipient_name = ?, recipient_user = ?, recipient_phone = ?, address = ?, postal_code = ?, city = ?, partido = ?, province = ?, reference = ?,
         shipping_method = ?, carrier_code = ?, carrier_name = ?, assigned_carrier = ?, dispatch_date = ?, delivery_date = ?, raw_zpl = ?,
         external_provider = ?, external_order_id = ?, external_shipment_id = ?, integration_connection_id = ?
         WHERE id = ? AND workspace_id = ?`,
@@ -549,10 +550,10 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     const inserted = await db.execute({
       sql: `INSERT INTO shipments (
         batch_id, workspace_id, sale_type, sale_id, tracking_number, remitente_id, product_name, sku, color, voltage,
-        quantity, recipient_name, recipient_user, address, postal_code, city, partido, province, reference,
+        quantity, recipient_name, recipient_user, recipient_phone, address, postal_code, city, partido, province, reference,
         shipping_method, carrier_code, carrier_name, assigned_carrier, dispatch_date, delivery_date, raw_zpl,
         external_provider, external_order_id, external_shipment_id, integration_connection_id, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')`,
       args: values,
     });
     shipmentRowId = Number(inserted.lastInsertRowid);

@@ -12,6 +12,10 @@ export async function DELETE(request, { params }) {
         }
         const { id } = await params;
         await db.execute({
+            sql: "DELETE FROM carrier_portal_links WHERE carrier_id = ? AND workspace_id = ?",
+            args: [id, authResult.actor.workspaceId]
+        });
+        await db.execute({
             sql: "DELETE FROM carriers WHERE id = ? AND workspace_id = ?",
             args: [id, authResult.actor.workspaceId]
         });

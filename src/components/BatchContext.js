@@ -1,12 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 
 const BatchContext = createContext();
 
 export function BatchProvider({ children }) {
+    const pathname = usePathname();
     const [batches, setBatches] = useState([]);
     const [currentBatchId, setCurrentBatchId] = useState(null);
 
@@ -17,6 +19,7 @@ export function BatchProvider({ children }) {
     const [rangeTo, setRangeTo] = useState('');
 
     useEffect(() => {
+        if (pathname?.startsWith('/transportista')) return undefined;
         async function fetchBatches() {
             try {
                 const data = await api("/batches");
@@ -31,7 +34,7 @@ export function BatchProvider({ children }) {
             }
         }
         fetchBatches();
-    }, []);
+    }, [pathname]);
 
     // Build query string based on active period
     const getQueryString = useCallback((extra = '') => {

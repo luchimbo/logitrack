@@ -30,6 +30,7 @@ export async function initDb() {
       quantity INTEGER DEFAULT 1,
       recipient_name TEXT,
       recipient_user TEXT,
+      recipient_phone TEXT,
       address TEXT,
       postal_code TEXT,
       city TEXT,
@@ -105,6 +106,19 @@ export async function initDb() {
       display_name TEXT,
       color TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS carrier_portal_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      carrier_id INTEGER NOT NULL,
+      public_id TEXT NOT NULL UNIQUE,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      rotated_at DATETIME,
+      revoked_at DATETIME,
+      UNIQUE(workspace_id, carrier_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(carrier_id) REFERENCES carriers(id)
     )`,
     `CREATE TABLE IF NOT EXISTS daily_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -272,6 +286,9 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_daily_batches_workspace_date ON daily_batches(workspace_id, date)`,
     `CREATE INDEX IF NOT EXISTS idx_zone_mappings_workspace_partido ON zone_mappings(workspace_id, partido)`,
     `CREATE INDEX IF NOT EXISTS idx_carriers_workspace_name ON carriers(workspace_id, name)`,
+    `CREATE INDEX IF NOT EXISTS idx_carrier_portal_links_public ON carrier_portal_links(public_id, active)`,
+    `CREATE INDEX IF NOT EXISTS idx_carrier_portal_links_workspace_carrier ON carrier_portal_links(workspace_id, carrier_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_shipments_portal_lookup ON shipments(workspace_id, assigned_carrier, shipping_method, batch_id, status)`,
     `CREATE INDEX IF NOT EXISTS idx_print_jobs_workspace_received ON print_jobs(workspace_id, received_at)`,
     `CREATE INDEX IF NOT EXISTS idx_print_job_items_workspace_tracking ON print_job_items(workspace_id, tracking_number)`,
     `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_created_date ON zipnova_shipments(created_date)`,
@@ -546,6 +563,7 @@ export async function initDb() {
 
   await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
   await addColumnIfMissing("shipments", "raw_zpl", "TEXT");
+  await addColumnIfMissing("shipments", "recipient_phone", "TEXT");
   await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
   await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
