@@ -195,6 +195,32 @@ select option:checked{background-color:var(--accent-hover);color:#fff}
 .carrier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
 .carrier-columns{grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));align-items:start}
 .carrier-columns .carrier-disclosure{height:max-content;margin-bottom:0}
+.carrier-picker{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-width:0}
+.carrier-picker-icon{width:25px;height:25px;display:grid;place-items:center;flex-shrink:0;border:1px solid var(--border-hover);border-radius:var(--radius);background:var(--bg-secondary);color:var(--text-muted);font-size:13px;font-weight:800;transition:color var(--duration) var(--ease),border-color var(--duration) var(--ease)}
+.carrier-picker:hover .carrier-picker-icon{color:var(--accent);border-color:var(--border-focus)}
+.carrier-picker select:focus{box-shadow:0 0 0 3px var(--accent-light)}
+.carrier-picker.is-moving{opacity:.7;pointer-events:none}
+.carrier-picker.is-moving .carrier-picker-icon{animation:carrierMovePulse .8s var(--ease) infinite alternate}
+@keyframes carrierMovePulse{to{color:var(--accent);border-color:var(--accent);transform:translateX(2px)}}
+
+.shipment-selection-toolbar{display:grid;gap:11px;margin-bottom:12px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-secondary);transition:border-color var(--duration) var(--ease),box-shadow var(--duration) var(--ease)}
+.shipment-selection-toolbar.has-selection{border-color:rgba(129,140,248,.3);box-shadow:inset 3px 0 0 var(--accent)}
+.selection-toolbar-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.selection-toolbar-head>div{display:grid;gap:2px;min-width:0}
+.selection-toolbar-head strong{color:var(--text);font-size:13px;line-height:1.35}
+.selection-toolbar-head span{color:var(--text-muted);font-size:11px;line-height:1.35}
+.carrier-transfer-workbench{display:grid;grid-template-columns:auto minmax(170px,1fr) auto;align-items:end;gap:10px;padding:12px;border:1px solid rgba(129,140,248,.22);border-radius:var(--radius);background:linear-gradient(105deg,rgba(129,140,248,.1),rgba(17,24,39,.76));animation:transferWorkbenchIn .22s var(--ease) both}
+@keyframes transferWorkbenchIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.carrier-transfer-direction{height:40px;display:flex;align-items:center;gap:4px;color:var(--accent);font-weight:800}
+.carrier-transfer-direction span:first-child{font-size:17px}
+.carrier-transfer-field{display:grid;gap:5px;min-width:0}
+.carrier-transfer-field>span{color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.carrier-transfer-field select{width:100%;height:40px;min-width:0;padding:0 32px 0 11px;border:1px solid var(--border-hover);border-radius:var(--radius);outline:none;background:var(--surface);color:var(--text);font:600 12px var(--font);cursor:pointer}
+.carrier-transfer-field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+.carrier-transfer-submit{height:40px}
+.selection-secondary-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:2px}
+.selection-secondary-actions>span{color:var(--text-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.selection-secondary-actions>div{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 .zipnova-orders-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
 .carrier-column{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface)}
 .carrier-header{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700}
@@ -312,6 +338,11 @@ tr:hover td{background:var(--surface-hover)}
   
   /* Carrier grid single column */
   .carrier-grid{grid-template-columns:1fr;gap:16px}
+  .carrier-transfer-workbench{grid-template-columns:auto minmax(0,1fr)}
+  .carrier-transfer-submit{grid-column:1/-1;width:100%}
+  .selection-secondary-actions{align-items:flex-start;flex-direction:column}
+  .selection-secondary-actions>div{width:100%;justify-content:stretch}
+  .selection-secondary-actions .btn{flex:1}
   .zipnova-orders-grid{grid-template-columns:1fr;gap:16px}
   .carrier-shipments{max-height:300px}
   

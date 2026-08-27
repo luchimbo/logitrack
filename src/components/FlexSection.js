@@ -54,6 +54,9 @@ export default function FlexSection() {
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
     const [isPrintingBulk, setIsPrintingBulk] = useState(false);
     const [isRepairingMetadata, setIsRepairingMetadata] = useState(false);
+    const [movingShipmentId, setMovingShipmentId] = useState(null);
+    const [isMovingBulk, setIsMovingBulk] = useState(false);
+    const [carrierMoveTargets, setCarrierMoveTargets] = useState({});
     const { selectedShipmentIds, toggleShipmentSelection, toggleItemsSelection, removeSelectedIds, keepOnlyExisting, getSelectedIdsFrom, getSelectedCountFrom, areAllSelected } = useShipmentSelection();
     const { downloadingId, isDownloadingBulk, handleDownloadLabel, handleBulkDownloadLabels: downloadSelectedLabels } = useShipmentLabelDownloads();
 
@@ -86,13 +89,18 @@ export default function FlexSection() {
         loadData();
     }, [loadData]);
 
-    const handleCarrierChange = async (id, newCarrier) => {
+    const handleCarrierChange = async (id, newCarrier, currentCarrier) => {
+        if (newCarrier === (currentCarrier || '')) return;
+        const destination = carriers.find(c => c.name === newCarrier)?.display_name || 'Sin asignar';
+        setMovingShipmentId(id);
         try {
             await api(`/shipments?id=${id}&assigned_carrier=${encodeURIComponent(newCarrier)}`, { method: 'PATCH' });
-            toast(`Transportista actualizado`, 'success');
+            toast(`Paquete movido a ${destination}`, 'success');
             await loadData({ silent: true });
         } catch (err) {
-            toast('Error actualizando transportista', 'error');
+            toast('No se pudo mover el paquete. Intentá de nuevo.', 'error');
+        } finally {
+            setMovingShipmentId(null);
         }
     };
 
@@ -199,27 +207,112 @@ export default function FlexSection() {
         }
     };
 
+    const getTransferContext = (items) => {
+        const sourceCarriers = [...new Set((items || []).map(item => item.assigned_carrier || '').filter(Boolean))];
+        return sourceCarriers.length === 1 ? sourceCarriers[0] : sourceCarriers.length ? '__mixed' : '__unassigned';
+    };
+
+    const handleBulkCarrierChange = async (items, contextKey) => {
+        const selectedIds = getSelectedIdsFrom(items);
+        const targetCarrier = carrierMoveTargets[contextKey];
+        if (!selectedIds.length || !targetCarrier) return;
+
+        setIsMovingBulk(true);
+        try {
+            const result = await api('/shipments/bulk', {
+                method: 'PATCH',
+                body: JSON.stringify({ ids: selectedIds, assigned_carrier: targetCarrier }),
+            });
+            removeSelectedIds(selectedIds);
+            setCarrierMoveTargets(prev => ({ ...prev, [contextKey]: '' }));
+            await loadData({ silent: true });
+            toast(`${result.updated || selectedIds.length} ${selectedIds.length === 1 ? 'paquete movido' : 'paquetes movidos'} a ${result.carrier_display_name || targetCarrier}`, 'success');
+        } catch (err) {
+            toast(err.message || 'No se pudieron mover los paquetes. Intentá de nuevo.', 'error');
+        } finally {
+            setIsMovingBulk(false);
+        }
+    };
+
+    const renderCarrierPicker = (shipment, { grow = false } = {}) => {
+        const isMoving = movingShipmentId === shipment.id;
+        return (
+            <div className={`carrier-picker ${isMoving ? 'is-moving' : ''}`} style={grow ? { flex: 1 } : undefined}>
+                <span className="carrier-picker-icon" aria-hidden="true">↔</span>
+                <select
+                    aria-label={`Mover paquete a otro transportista. Actual: ${carriers.find(c => c.name === shipment.assigned_carrier)?.display_name || 'Sin asignar'}`}
+                    title="Mover paquete a otro transportista"
+                    disabled={isMoving}
+                    style={{ ...getCarrierSelectStyle(shipment.assigned_carrier), flex: 1, minWidth: 0 }}
+                    value={shipment.assigned_carrier || ''}
+                    onChange={(event) => handleCarrierChange(shipment.id, event.target.value, shipment.assigned_carrier)}
+                >
+                    <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
+                    {carriers.map(carrier => (
+                        <option key={carrier.name} value={carrier.name} style={{ color: "var(--text)" }}>{carrier.display_name}</option>
+                    ))}
+                </select>
+            </div>
+        );
+    };
+
     const renderSelectionToolbar = (items) => {
         const selectedCount = getSelectedCountFrom(items);
         const allSelected = areAllSelected(items);
+        const contextKey = getTransferContext(items);
+        const currentCarrier = contextKey !== '__mixed' && contextKey !== '__unassigned' ? contextKey : null;
+        const targetCarrier = carrierMoveTargets[contextKey] || '';
+        const availableTargets = carriers.filter(carrier => carrier.name !== currentCarrier);
         return (
-            <div className="card" style={{ marginBottom: '12px', padding: '12px 14px', background: 'var(--bg-secondary)' }}>
-                <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {selectedCount > 0 ? `${selectedCount} etiquetas seleccionadas` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
+            <div className={`shipment-selection-toolbar ${selectedCount ? 'has-selection' : ''}`}>
+                <div className="selection-toolbar-head">
+                    <div>
+                        <strong>{selectedCount > 0 ? `${selectedCount} ${selectedCount === 1 ? 'paquete seleccionado' : 'paquetes seleccionados'}` : 'Seleccioná los paquetes que querés mover'}</strong>
+                        <span>{selectedCount > 0 ? 'Elegí un transportista de destino' : 'Podés mover uno o varios paquetes al mismo tiempo'}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => toggleVisibleSelection(items)} disabled={!items.length}>
-                            {allSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
-                        </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => toggleVisibleSelection(items)} disabled={!items.length}>
+                        {allSelected ? 'Quitar selección' : 'Seleccionar todos'}
+                    </button>
+                </div>
+
+                {selectedCount > 0 && (
+                    <div className="carrier-transfer-workbench">
+                        <div className="carrier-transfer-direction" aria-hidden="true">
+                            <span>🚚</span><span>→</span>
+                        </div>
+                        <label className="carrier-transfer-field">
+                            <span>Transportista de destino</span>
+                            <select
+                                value={targetCarrier}
+                                onChange={(event) => setCarrierMoveTargets(prev => ({ ...prev, [contextKey]: event.target.value }))}
+                                disabled={isMovingBulk}
+                            >
+                                <option value="">Elegí un transportista</option>
+                                {availableTargets.map(carrier => <option key={carrier.name} value={carrier.name}>{carrier.display_name}</option>)}
+                            </select>
+                        </label>
+                        <LoadingButton
+                            isLoading={isMovingBulk}
+                            className="btn btn-primary btn-sm carrier-transfer-submit"
+                            disabled={!targetCarrier}
+                            onClick={() => handleBulkCarrierChange(items, contextKey)}
+                        >
+                            Mover {selectedCount === 1 ? 'paquete' : `${selectedCount} paquetes`}
+                        </LoadingButton>
+                    </div>
+                )}
+
+                <div className="selection-secondary-actions" aria-label="Otras acciones para los paquetes seleccionados">
+                    <span>Otras acciones</span>
+                    <div>
                         <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDownloadLabels(items)} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
-                            Descargar seleccionadas
+                            Descargar
                         </LoadingButton>
                         <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkPrintLabels(items)} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
-                            Imprimir seleccionadas
+                            Imprimir
                         </LoadingButton>
                         <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedCount} onClick={() => handleBulkDelete(items)} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                            Eliminar seleccionadas
+                            Eliminar
                         </LoadingButton>
                     </div>
                 </div>
@@ -450,16 +543,7 @@ export default function FlexSection() {
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <select
-                                                        style={getCarrierSelectStyle(s.assigned_carrier)}
-                                                        value={s.assigned_carrier || ''}
-                                                        onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                                    >
-                                                        <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                                        {carriers.map(c => (
-                                                            <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                                        ))}
-                                                    </select>
+                                                    {renderCarrierPicker(s)}
                                                 </td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -514,16 +598,7 @@ export default function FlexSection() {
                                             </div>
                                             <div className="mobile-card-row">
                                                 <span className="mobile-card-label">Transportista</span>
-                                                <select
-                                                    style={getCarrierSelectStyle(s.assigned_carrier)}
-                                                    value={s.assigned_carrier || ''}
-                                                    onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                                >
-                                                    <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                                    {carriers.map(c => (
-                                                        <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                                    ))}
-                                                </select>
+                                                {renderCarrierPicker(s)}
                                             </div>
                                         </div>
                                         <div className="mobile-card-actions">
@@ -610,16 +685,7 @@ export default function FlexSection() {
                                                 >
                                                     Descargar
                                                 </LoadingButton>
-                                                <select
-                                                    style={getCarrierSelectStyle(s.assigned_carrier)}
-                                                    value={s.assigned_carrier || ''}
-                                                    onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                                >
-                                                    <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                                    {carriers.map(c => (
-                                                        <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                                    ))}
-                                                </select>
+                                                {renderCarrierPicker(s)}
                                                 <LoadingButton
                                                     isLoading={deletingId === s.id}
                                                     className="btn btn-sm"
@@ -672,16 +738,7 @@ export default function FlexSection() {
                                         >
                                             Descargar
                                         </LoadingButton>
-                                        <select
-                                            style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
-                                            value={s.assigned_carrier || ''}
-                                            onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                        >
-                                            <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                            {carriers.map(c => (
-                                                <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                            ))}
-                                        </select>
+                                        {renderCarrierPicker(s, { grow: true })}
                                         <LoadingButton
                                             isLoading={deletingId === s.id}
                                             className="btn btn-sm"
@@ -734,16 +791,7 @@ export default function FlexSection() {
                                             >
                                                 Descargar
                                             </LoadingButton>
-                                            <select
-                                                style={getCarrierSelectStyle(s.assigned_carrier)}
-                                                value={s.assigned_carrier || ''}
-                                                onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                            >
-                                                <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                                {carriers.map(c => (
-                                                    <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                                ))}
-                                            </select>
+                                            {renderCarrierPicker(s)}
                                             <LoadingButton
                                                 isLoading={deletingId === s.id}
                                                 className="btn btn-sm"
@@ -796,16 +844,7 @@ export default function FlexSection() {
                                     >
                                         Descargar
                                     </LoadingButton>
-                                    <select
-                                        style={{ ...getCarrierSelectStyle(s.assigned_carrier), flex: 1 }}
-                                        value={s.assigned_carrier || ''}
-                                        onChange={(e) => handleCarrierChange(s.id, e.target.value)}
-                                    >
-                                        <option value="" style={{ color: "var(--text)" }}>Sin asignar</option>
-                                        {carriers.map(c => (
-                                            <option key={c.name} value={c.name} style={{ color: "var(--text)" }}>{c.display_name}</option>
-                                        ))}
-                                    </select>
+                                    {renderCarrierPicker(s, { grow: true })}
                                     <LoadingButton
                                         isLoading={deletingId === s.id}
                                         className="btn btn-sm"
