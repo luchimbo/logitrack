@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import styles from "./CarrierPortalClient.module.css";
 
 const STATUS_LABELS = { pendiente: "Pendientes", encontrado: "Encontrados", empaquetado: "Empaquetados", despachado: "Despachados", otros: "Otros" };
@@ -28,6 +29,9 @@ function Icon({ name }) {
   if (name === "refresh") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.8-4.2L3 9m0-5v5h5M4 13a8 8 0 0 0 14.8 4.2L21 15m0 5v-5h-5" /></svg>;
   if (name === "download") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 18v3h16v-3" /></svg>;
   if (name === "phone") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.8 9.3 3l1.8 4.8-2.3 1.6a16.5 16.5 0 0 0 5.7 5.7l1.6-2.3 4.8 1.8-.8 2.7c-.3 1.1-1.4 1.8-2.5 1.6C10.1 17.7 6.3 13.9 5.1 6.4 4.9 5.2 5.5 4.1 6.6 3.8Z" /></svg>;
+  if (name === "label") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4 12.6 5.4A2 2 0 0 0 11.2 5H5a1 1 0 0 0-1 1v6.2c0 .53.21 1.04.59 1.41l8 8a2 2 0 0 0 2.82 0l5.19-5.19a2 2 0 0 0 0-2.82ZM8.5 10.5H9" /></svg>;
+  if (name === "print") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V3h10v5M7 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-3M7 13h10v8H7Z" /></svg>;
+  if (name === "close") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6m-3-3v6M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" /></svg>;
 }
 
@@ -41,6 +45,8 @@ export default function CarrierPortalClient({ publicId }) {
   const [search, setSearch] = useState("");
   const [zone, setZone] = useState("");
   const [status, setStatus] = useState("");
+  const [label, setLabel] = useState(null);
+  const labelUrlRef = useRef(null);
 
   useEffect(() => {
     const match = window.location.hash.match(/(?:^#|[&#])k=([^&]+)/);
@@ -104,6 +110,58 @@ export default function CarrierPortalClient({ publicId }) {
     try { await navigator.clipboard.writeText(address); } catch { setError("No se pudo copiar la dirección."); }
   };
 
+  const revokeLabelUrl = useCallback(() => {
+    if (labelUrlRef.current) {
+      URL.revokeObjectURL(labelUrlRef.current);
+      labelUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => revokeLabelUrl, [revokeLabelUrl]);
+
+  const closeLabel = useCallback(() => {
+    revokeLabelUrl();
+    setLabel(null);
+  }, [revokeLabelUrl]);
+
+  const openLabel = useCallback(async (shipment) => {
+    revokeLabelUrl();
+    setLabel({ shipment, status: "loading", url: null, error: "" });
+    try {
+      const response = await fetch(`/api/public/carrier-portals/${encodeURIComponent(publicId)}/labels/${encodeURIComponent(String(shipment.id))}`, { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" });
+      if (!response.ok) throw new Error(response.status === 404 ? "Este paquete aún no tiene etiqueta disponible." : "No pudimos cargar la etiqueta.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      labelUrlRef.current = url;
+      setLabel({ shipment, status: "ready", url, error: "" });
+    } catch (err) {
+      revokeLabelUrl();
+      setLabel({ shipment, status: "error", url: null, error: err.message || "No pudimos cargar la etiqueta." });
+    }
+  }, [publicId, revokeLabelUrl, secret]);
+
+  const printLabel = useCallback(() => {
+    if (!label?.url) return;
+    const win = window.open("", "_blank", "width=1000,height=800");
+    if (!win) { setLabel((current) => ({ ...current, status: "error", error: "Navegador bloqueó la ventana de impresión." })); return; }
+    win.document.write(`<!doctype html><html><head><title>Etiqueta ${label.shipment.trackingNumber || label.shipment.id}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;height:auto}</style></head><body onload="setTimeout(function(){try{window.focus();window.print()}catch(e){}},350)"><img src="${label.url}" alt="Etiqueta" /></body></html>`);
+    win.document.close();
+  }, [label]);
+
+  useEffect(() => {
+    if (!label) return undefined;
+    const onKey = (event) => { if (event.key === "Escape") closeLabel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [label, closeLabel]);
+
+  useEffect(() => {
+    if (!label) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [label]);
+
   if (!secret && !loading) return <main className={styles.centered}><section className={styles.errorCard}><h1>Enlace incompleto</h1><p>Pedile al administrador que te comparta el enlace completo.</p></section></main>;
   if (loading && !data) return <main className={styles.centered}><div className={styles.loader} aria-label="Cargando operación" /></main>;
   if (error && !data) return <main className={styles.centered}><section className={styles.errorCard}><h1>Portal no disponible</h1><p>{error}</p><button type="button" onClick={() => load()}>Reintentar</button></section></main>;
@@ -134,9 +192,23 @@ export default function CarrierPortalClient({ publicId }) {
         <div className={styles.shipmentTop}><p className={styles.zone}>{shipment.partido}</p><span className={`${styles.status} ${styles[`status_${shipment.status}`]}`}>{STATUS_LABELS[shipment.status]}</span></div>
         <h3>{shipment.productName}</h3><p className={styles.sku}>{shipment.sku ? `SKU ${shipment.sku} · ` : ""}{shipment.quantity} {shipment.quantity === 1 ? "unidad" : "unidades"}</p>
         <dl><div><dt>Destinatario</dt><dd>{shipment.recipientName}</dd></div><div><dt>Dirección</dt><dd>{shipment.address}{shipment.reference ? ` · ${shipment.reference}` : ""}</dd></div><div><dt>Localidad</dt><dd>{[shipment.city, shipment.province, shipment.postalCode && `CP ${shipment.postalCode}`].filter(Boolean).join(" · ") || "No informada"}</dd></div>{shipment.trackingNumber && <div><dt>Tracking</dt><dd>{shipment.trackingNumber}</dd></div>}</dl>
-        <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button></footer>
+        <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button><button type="button" onClick={() => openLabel(shipment)}><Icon name="label" />Ver etiqueta</button></footer>
       </article>)}</div></section>;
     })}</section>
     {!filtered.length && <section className={styles.empty}><h2>No hay paquetes con estos filtros</h2><p>Probá cambiando la fecha o quitando algún filtro.</p></section>}
+    {label && createPortal(
+      <div className={styles.labelOverlay} role="dialog" aria-modal="true" aria-label={`Etiqueta de ${label.shipment.trackingNumber || label.shipment.id}`} onClick={(event) => { if (event.target === event.currentTarget) closeLabel(); }}>
+        <div className={styles.labelCard}>
+          <header><h2>Etiqueta{label.shipment.trackingNumber ? ` · ${label.shipment.trackingNumber}` : ""}</h2><button type="button" className={styles.labelClose} onClick={closeLabel}><Icon name="close" />Cerrar</button></header>
+          <div className={styles.labelBody}>
+            {label.status === "loading" && <div className={styles.labelSpinner} aria-label="Cargando etiqueta" />}
+            {label.status === "error" && <p className={styles.labelError} role="alert">{label.error}</p>}
+            {label.status === "ready" && label.url && <img src={label.url} alt={`Etiqueta del paquete ${label.shipment.trackingNumber || label.shipment.id}`} />}
+          </div>
+          {label.status === "ready" && <footer><button type="button" onClick={closeLabel}>Cerrar</button><button type="button" onClick={printLabel}><Icon name="print" />Imprimir</button></footer>}
+        </div>
+      </div>,
+      document.body
+    )}
   </main>;
 }

@@ -212,6 +212,17 @@ function pickFirstMetadata(...values) {
   return null;
 }
 
+const DISPATCH_DATE_RE = /^(?:0?[1-9]|[12]\d|3[01])(?:\s|-)(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/i;
+
+function sanitizeProductName(value) {
+  if (typeof value !== "string") return value;
+  const segments = value
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment && !DISPATCH_DATE_RE.test(segment));
+  return segments.length ? segments.join(" ") : null;
+}
+
 function parseShipmentFromRawBlock(rawBlock) {
   const block = stringOrNull(rawBlock, 40000);
   if (!block) return null;
@@ -419,7 +430,7 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
       sale_id: pickFirst(parsedShipment?.sale_id, item.sale_id),
       tracking_number: pickFirst(parsedShipment?.tracking_number, item.tracking_number),
       remitente_id: pickFirst(parsedShipment?.remitente_id, item.remitente_id),
-      product_name: pickFirstMetadata(parsedShipment?.product_name, item.product_name),
+      product_name: sanitizeProductName(pickFirstMetadata(parsedShipment?.product_name, item.product_name)),
       sku: pickFirstMetadata(parsedShipment?.sku, item.sku),
       color: pickFirst(parsedShipment?.color, item.color),
       voltage: pickFirst(parsedShipment?.voltage, item.voltage),
@@ -719,7 +730,7 @@ export async function POST(request) {
 
       const parsedMetadata = parseShipmentFromRawBlock(label.raw_block);
       const resolvedSku = pickFirstMetadata(parsedMetadata?.sku, label.sku) || "SIN-SKU";
-      const resolvedProductName = pickFirstMetadata(parsedMetadata?.product_name, label.product_name);
+      const resolvedProductName = sanitizeProductName(pickFirstMetadata(parsedMetadata?.product_name, label.product_name));
 
       return {
         ...label,

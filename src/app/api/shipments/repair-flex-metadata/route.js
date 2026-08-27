@@ -24,8 +24,9 @@ function parseStoredLabel(rawZpl) {
   }
 }
 
-// Repara únicamente el lote operativo del día actual y sólo campos incompletos.
-// No inserta filas ni altera envíos cuyos datos ya estén completos.
+// Repara el lote operativo de los últimos días y sólo campos incompletos o
+// contaminados. No inserta filas ni altera envíos cuyos datos ya estén completos.
+const REPAIR_WINDOW_DAYS = 7;
 export async function POST(request) {
   try {
     await ensureDb();
@@ -36,12 +37,13 @@ export async function POST(request) {
 
     const workspaceId = authResult.actor.workspaceId;
     const today = getArgentinaDateString();
+    const windowStart = getArgentinaDateString(new Date(Date.now() - (REPAIR_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1000));
     const result = await db.execute({
       sql: `SELECT s.id, s.sku, s.product_name, s.color, s.voltage, s.raw_zpl
             FROM shipments s
             JOIN daily_batches b ON b.id = s.batch_id AND b.workspace_id = s.workspace_id
             WHERE s.workspace_id = ?
-              AND b.date = ?
+              AND b.date >= ?
               AND LOWER(COALESCE(s.shipping_method, '')) = 'flex'
               AND s.raw_zpl IS NOT NULL
               AND TRIM(s.raw_zpl) != ''
@@ -50,7 +52,7 @@ export async function POST(request) {
                 OR s.product_name IS NULL OR TRIM(s.product_name) = '' OR UPPER(TRIM(s.product_name)) = 'SIN-SKU'
                 OR UPPER(TRIM(s.product_name)) GLOB '[0-3][0-9] [A-Z][A-Z][A-Z]'
               )`,
-      args: [workspaceId, today],
+      args: [workspaceId, windowStart],
     });
 
     let updated = 0;
@@ -85,7 +87,7 @@ export async function POST(request) {
       updated += 1;
     }
 
-    return NextResponse.json({ ok: true, date: today, candidates: result.rows?.length || 0, parsed, updated, unchanged });
+    return NextResponse.json({ ok: true, windowStart, date: today, candidates: result.rows?.length || 0, parsed, updated, unchanged });
   } catch (error) {
     console.error('Error repairing Flex metadata:', error);
     return NextResponse.json({ error: 'Failed to repair Flex metadata' }, { status: 500 });
