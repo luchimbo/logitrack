@@ -175,7 +175,7 @@ export default function CarrierPortalClient({ publicId }) {
     <p className={styles.updated}>Actualizado {formatUpdated(data.portal.refreshedAt)} · se refresca automáticamente</p>
     <nav className={styles.dateNav} aria-label="Elegir fecha">{dates.map((item) => <button type="button" key={item} className={date === item ? styles.activeDate : ""} onClick={() => setDate(item)}>{item === argentinaIso() ? "Hoy" : formatDate(item)}</button>)}</nav>
     <section className={styles.metrics} aria-label="Resumen operativo">
-      <div><strong>{data.summary.packages}</strong><span>Paquetes</span></div><div><strong>{data.summary.units}</strong><span>Unidades</span></div><div><strong>{data.summary.zones}</strong><span>Zonas</span></div><div><strong>{filtered.length}</strong><span>Visibles</span></div>
+      <div><strong>{data.summary.packages}</strong><span>Paquetes</span></div><div><strong>{data.summary.units}</strong><span>Unidades</span></div><div><strong>{data.summary.zones}</strong><span>Zonas</span></div>
     </section>
     <section className={styles.controls} aria-label="Filtros y descargas">
       <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar paquete, destinatario o zona" aria-label="Buscar paquetes" />
