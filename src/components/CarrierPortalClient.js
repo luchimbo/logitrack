@@ -4,9 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./CarrierPortalClient.module.css";
 
-const STATUS_LABELS = { pendiente: "Pendientes", encontrado: "Encontrados", empaquetado: "Empaquetados", despachado: "Despachados", otros: "Otros" };
-const STATUS_ORDER = ["pendiente", "encontrado", "empaquetado", "despachado", "otros"];
-
 function argentinaIso(offset = 0) {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
@@ -44,7 +41,6 @@ export default function CarrierPortalClient({ publicId }) {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [zone, setZone] = useState("");
-  const [status, setStatus] = useState("");
   const [label, setLabel] = useState(null);
   const labelUrlRef = useRef(null);
 
@@ -80,20 +76,14 @@ export default function CarrierPortalClient({ publicId }) {
     const query = search.trim().toLowerCase();
     return (data?.shipments || []).filter((shipment) => {
       if (zone && shipment.partido !== zone) return false;
-      if (status && shipment.status !== status) return false;
       return !query || [shipment.trackingNumber, shipment.orderId, shipment.productName, shipment.recipientName, shipment.address, shipment.city, shipment.partido].join(" ").toLowerCase().includes(query);
     });
-  }, [data, search, status, zone]);
-  const grouped = useMemo(() => filtered.reduce((groups, shipment) => {
-    (groups[shipment.status] ||= []).push(shipment);
-    return groups;
-  }, {}), [filtered]);
+  }, [data, search, zone]);
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => argentinaIso(index)), []);
 
   const download = async (format) => {
     const params = new URLSearchParams({ date, format });
     if (zone) params.set("zone", zone);
-    if (status) params.set("status", status);
     if (search.trim()) params.set("search", search.trim());
     const response = await fetch(`/api/public/carrier-portals/${encodeURIComponent(publicId)}?${params}`, { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" });
     if (!response.ok) { setError("No se pudo generar la descarga."); return; }
@@ -180,21 +170,16 @@ export default function CarrierPortalClient({ publicId }) {
     <section className={styles.controls} aria-label="Filtros y descargas">
       <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar paquete, destinatario o zona" aria-label="Buscar paquetes" />
       <select value={zone} onChange={(event) => setZone(event.target.value)} aria-label="Filtrar por zona"><option value="">Todas las zonas</option>{zones.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.packages}</option>)}</select>
-      <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por estado"><option value="">Todos los estados</option>{STATUS_ORDER.map((item) => <option key={item} value={item}>{STATUS_LABELS[item]}</option>)}</select>
       <div className={styles.exports}><button type="button" onClick={() => download("csv")}><Icon name="download" />CSV</button><button type="button" onClick={() => download("pdf")}><Icon name="download" />PDF</button></div>
     </section>
     {error && <p className={styles.inlineError} role="alert">{error}</p>}
     <section className={styles.zoneStrip} aria-label="Resumen por zona">{zones.map((item) => <span key={item.name}><b>{item.name}</b>{item.packages} paquetes · {item.units} u.</span>)}</section>
-    <section className={styles.list}>{STATUS_ORDER.map((currentStatus) => {
-      const shipments = grouped[currentStatus] || [];
-      if (!shipments.length) return null;
-      return <section className={styles.statusGroup} key={currentStatus}><header><h2>{STATUS_LABELS[currentStatus]}</h2><span>{shipments.length}</span></header><div>{shipments.map((shipment) => <article className={styles.shipment} key={shipment.id}>
-        <div className={styles.shipmentTop}><p className={styles.zone}>{shipment.partido}</p><span className={`${styles.status} ${styles[`status_${shipment.status}`]}`}>{STATUS_LABELS[shipment.status]}</span></div>
+    <section className={styles.list}><div>{filtered.map((shipment) => <article className={styles.shipment} key={shipment.id}>
+        <div className={styles.shipmentTop}><p className={styles.zone}>{shipment.partido}</p></div>
         <h3>{shipment.productName}</h3><p className={styles.sku}>{shipment.sku ? `SKU ${shipment.sku} · ` : ""}{shipment.quantity} {shipment.quantity === 1 ? "unidad" : "unidades"}</p>
         <dl><div><dt>Destinatario</dt><dd>{shipment.recipientName}</dd></div><div><dt>Dirección</dt><dd>{shipment.address}{shipment.reference ? ` · ${shipment.reference}` : ""}</dd></div><div><dt>Localidad</dt><dd>{[shipment.city, shipment.province, shipment.postalCode && `CP ${shipment.postalCode}`].filter(Boolean).join(" · ") || "No informada"}</dd></div>{shipment.trackingNumber && <div><dt>Tracking</dt><dd>{shipment.trackingNumber}</dd></div>}</dl>
         <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button><button type="button" onClick={() => openLabel(shipment)}><Icon name="label" />Ver etiqueta</button></footer>
-      </article>)}</div></section>;
-    })}</section>
+      </article>)}</div></section>
     {!filtered.length && <section className={styles.empty}><h2>No hay paquetes con estos filtros</h2><p>Probá cambiando la fecha o quitando algún filtro.</p></section>}
     {label && createPortal(
       <div className={styles.labelOverlay} role="dialog" aria-modal="true" aria-label={`Etiqueta de ${label.shipment.trackingNumber || label.shipment.id}`} onClick={(event) => { if (event.target === event.currentTarget) closeLabel(); }}>
