@@ -154,10 +154,10 @@ export default function FlexSection() {
     };
 
     const handleRepairMetadata = async () => {
-        if (!window.confirm('Se reprocesarán los ZPL de los envíos Flex de hoy que no tienen SKU, producto o muestran una fecha como producto. No se crearán envíos nuevos.')) return;
+        if (!window.confirm('Se reprocesarán los ZPL de los envíos Flex del último año que no tienen SKU, producto o muestran una fecha como producto. No se crearán envíos nuevos.')) return;
         setIsRepairingMetadata(true);
         try {
-            const result = await api('/shipments/repair-flex-metadata', { method: 'POST' });
+            const result = await api('/shipments/repair-flex-metadata?days=365', { method: 'POST' });
             toast(`SKU/producto reparados: ${result.updated || 0} de ${result.candidates || 0} envíos`, 'success');
             await loadData({ silent: true });
         } catch (err) {

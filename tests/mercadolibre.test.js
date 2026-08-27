@@ -8,6 +8,7 @@ import {
 } from '../src/lib/mercadolibreLogistics.js';
 import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
+import { isDispatchDateValue } from '../src/lib/dispatchDate.js';
 
 function flexLabel(fields) {
   return `^XA
@@ -38,6 +39,40 @@ test('Flex parser does not confuse a dispatch date with the product', () => {
 
   assert.equal(shipment.product_name, 'Micrófono condenser profesional');
   assert.equal(shipment.sku, 'MIC-01');
+});
+
+test('dispatch date guard flags all known date shapes, not just "DD MON"', () => {
+  assert.equal(isDispatchDateValue('27 AUG'), true);
+  assert.equal(isDispatchDateValue('27 AUG 26'), true);
+  assert.equal(isDispatchDateValue('27 AUG 2026'), true);
+  assert.equal(isDispatchDateValue('AUG 27'), true);
+  assert.equal(isDispatchDateValue('  27 aug  '), true);
+
+  assert.equal(isDispatchDateValue('MAY 30L'), false);
+  assert.equal(isDispatchDateValue('Micrófono condenser'), false);
+  assert.equal(isDispatchDateValue('SIN-SKU'), false);
+});
+
+test('Flex parser rejects a full stamped date (with year) as the product', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+ ^FO200,100^A0N,27,27^FB570,3,-1^FH^FD27 AUG 26^FS
+ ^FO48,118^A0N,30,30^FB600,3,-1^FH^FDEspátula de madera^FS
+ ^FO48,177^A0N,22,22^FB600,3,-1^FH^FDSKU: ESP-01^FS
+ `));
+
+  assert.equal(shipment.product_name, 'Espátula de madera');
+  assert.equal(shipment.sku, 'ESP-01');
+});
+
+test('Flex parser rejects a month-first date as the product', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+ ^FO200,100^A0N,27,27^FB570,3,-1^FH^FDAUG 27^FS
+ ^FO48,118^A0N,30,30^FB600,3,-1^FH^FDCargador USB doble^FS
+ ^FO48,177^A0N,22,22^FB600,3,-1^FH^FDSKU: CAR-DBL^FS
+ `));
+
+  assert.equal(shipment.product_name, 'Cargador USB doble');
+  assert.equal(shipment.sku, 'CAR-DBL');
 });
 
 test('Flex parser preserves multiple products and variants', () => {

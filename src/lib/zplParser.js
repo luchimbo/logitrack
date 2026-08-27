@@ -6,6 +6,8 @@
  *   - FLEX: Labels for Mercado Envíos Flex (own delivery / carrier pickup)
  */
 
+import { isDispatchDateValue } from "./dispatchDate.js";
+
 // Mapping common names to system IDs
 const PARTIDO_MAP = {
     "caba": "capital_federal",
@@ -475,13 +477,6 @@ function isMissingLabelValue(value) {
     return !normalized || normalized === "SIN-SKU" || normalized === "N/A";
 }
 
-// Las fechas de despacho (por ejemplo, "27 AUG") usan la misma tipografía que
-// el producto en algunas variantes de etiqueta Flex. Nunca deben persistirse
-// como nombre de producto.
-function isDispatchDateValue(value) {
-    const normalized = String(value || "").trim().toUpperCase();
-    return /^(?:0?[1-9]|[12]\d|3[01])(?:\s|-)(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.test(normalized);
-}
 
 function extractVariantValue(text, label) {
     const match = String(text || "").match(new RegExp(`${label}:\\s*([^|^]+?)(?=\\s*(?:\\||\\^|$))`, "i"));

@@ -5,6 +5,7 @@ import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
 import { assignCarrier } from "@/lib/zoneMapper";
 import { getArgentinaDateString } from "@/lib/dateUtils";
+import { DISPATCH_DATE_RE } from "@/lib/dispatchDate";
 
 const MAX_LABELS = 5000;
 const CHUNK_SIZE = 300;
@@ -211,8 +212,6 @@ function pickFirstMetadata(...values) {
   }
   return null;
 }
-
-const DISPATCH_DATE_RE = /^(?:0?[1-9]|[12]\d|3[01])(?:\s|-)(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/i;
 
 function sanitizeProductName(value) {
   if (typeof value !== "string") return value;
