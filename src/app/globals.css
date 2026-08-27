@@ -193,6 +193,8 @@ select option:checked{background-color:var(--accent-hover);color:#fff}
 .chart-bar-fill.danger{background:linear-gradient(90deg,#dc2626,var(--danger))}
 
 .carrier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+.carrier-columns{grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));align-items:start}
+.carrier-columns .carrier-disclosure{height:max-content;margin-bottom:0}
 .zipnova-orders-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
 .carrier-column{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface)}
 .carrier-header{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700}

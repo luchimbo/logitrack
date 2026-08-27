@@ -475,6 +475,14 @@ function isMissingLabelValue(value) {
     return !normalized || normalized === "SIN-SKU" || normalized === "N/A";
 }
 
+// Las fechas de despacho (por ejemplo, "27 AUG") usan la misma tipografía que
+// el producto en algunas variantes de etiqueta Flex. Nunca deben persistirse
+// como nombre de producto.
+function isDispatchDateValue(value) {
+    const normalized = String(value || "").trim().toUpperCase();
+    return /^(?:0?[1-9]|[12]\d|3[01])(?:\s|-)(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.test(normalized);
+}
+
 function extractVariantValue(text, label) {
     const match = String(text || "").match(new RegExp(`${label}:\\s*([^|^]+?)(?=\\s*(?:\\||\\^|$))`, "i"));
     return match ? match[1].trim() : null;
@@ -499,7 +507,7 @@ function extractFlexProductMetadata(content) {
 
     const isProductCandidate = (field) => {
         const text = field.text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim();
-        if (!text || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
+        if (!text || isDispatchDateValue(text) || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
         if (/^\d+$/.test(text) || /^(RESIDENCIAL|COMERCIAL)$/i.test(text)) return false;
         return field.fontHeight >= 25;
     };
@@ -552,7 +560,7 @@ function parseFlexLabel(content) {
     if (prodMatch) {
         let name = decodeZplHex(prodMatch[1].trim());
         name = name.replace(/\s*\|\s*\d+\s*u\.\s*$/, "");
-        shipment.product_name = name;
+        if (!isDispatchDateValue(name)) shipment.product_name = name;
     }
 
     const varMatch = content.match(/\^FO200,181\^A0N,24,24\^FB570,3,-1\^FH\^FD(.+?)\^FS/);

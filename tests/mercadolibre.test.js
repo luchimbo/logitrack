@@ -29,6 +29,17 @@ test('Flex parser extracts product metadata independently of label coordinates',
   assert.equal(shipment.voltage, '5V');
 });
 
+test('Flex parser does not confuse a dispatch date with the product', () => {
+  const [shipment] = parseZplFile(flexLabel(`
+^FO200,100^A0N,27,27^FB570,3,-1^FH^FD27 AUG^FS
+^FO48,118^A0N,30,30^FB600,3,-1^FH^FDMicrófono condenser profesional^FS
+^FO48,177^A0N,22,22^FB600,3,-1^FH^FDSKU: MIC-01^FS
+`));
+
+  assert.equal(shipment.product_name, 'Micrófono condenser profesional');
+  assert.equal(shipment.sku, 'MIC-01');
+});
+
 test('Flex parser preserves multiple products and variants', () => {
   const [shipment] = parseZplFile(flexLabel(`
 ^FO48,100^A0N,30,30^FB600,3,-1^FH^FDProducto Uno^FS

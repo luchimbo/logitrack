@@ -146,7 +146,7 @@ export default function FlexSection() {
     };
 
     const handleRepairMetadata = async () => {
-        if (!window.confirm('Se reprocesarán los ZPL de los envíos Flex de hoy que no tienen SKU o producto. No se crearán envíos nuevos.')) return;
+        if (!window.confirm('Se reprocesarán los ZPL de los envíos Flex de hoy que no tienen SKU, producto o muestran una fecha como producto. No se crearán envíos nuevos.')) return;
         setIsRepairingMetadata(true);
         try {
             const result = await api('/shipments/repair-flex-metadata', { method: 'POST' });
@@ -319,7 +319,7 @@ export default function FlexSection() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-sm" onClick={() => loadData()} disabled={loading}>🔎 Verificar</button>
-                    <LoadingButton className="btn btn-sm" isLoading={isRepairingMetadata} onClick={handleRepairMetadata} style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning)' }}>🔧 Reparar SKU</LoadingButton>
+                    <LoadingButton className="btn btn-sm" isLoading={isRepairingMetadata} onClick={handleRepairMetadata} style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning)' }}>🔧 Reparar productos</LoadingButton>
                     <button className="btn btn-primary btn-sm" onClick={handleReassign}>🔄 Reasignar por zonas</button>
                 </div>
             </div>
@@ -552,7 +552,7 @@ export default function FlexSection() {
             </div>}
 
             {/* Per-carrier tables */}
-            {activeView === 'carriers' && Object.entries(byCarrier).map(([carrier, items]) => {
+            {activeView === 'carriers' && <div className="carrier-grid carrier-columns">{Object.entries(byCarrier).map(([carrier, items]) => {
                 const carrierData = carriers.find(c => c.name === carrier);
 
                 // Zone breakdown by zone group (CABA, GBA 1, GBA 2, GBA 3)
@@ -696,7 +696,7 @@ export default function FlexSection() {
                         </div>
                     </details>
                 );
-            })}
+            })}</div>}
 
             {activeView === 'carriers' && unassigned.length > 0 && (
                 <details className="card carrier-disclosure" style={{ borderLeft: "3px solid var(--danger)" }} open>

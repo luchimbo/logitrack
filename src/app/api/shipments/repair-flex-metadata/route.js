@@ -10,6 +10,11 @@ function isMissingMetadata(value) {
   return !normalized || normalized === 'SIN-SKU' || normalized === 'N/A';
 }
 
+function isDispatchDateValue(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return /^(?:0?[1-9]|[12]\d|3[01])(?:\s|-)(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)$/.test(normalized);
+}
+
 function parseStoredLabel(rawZpl) {
   if (!rawZpl) return null;
   try {
@@ -43,6 +48,7 @@ export async function POST(request) {
               AND (
                 s.sku IS NULL OR TRIM(s.sku) = '' OR UPPER(TRIM(s.sku)) = 'SIN-SKU'
                 OR s.product_name IS NULL OR TRIM(s.product_name) = '' OR UPPER(TRIM(s.product_name)) = 'SIN-SKU'
+                OR UPPER(TRIM(s.product_name)) GLOB '[0-3][0-9] [A-Z][A-Z][A-Z]'
               )`,
       args: [workspaceId, today],
     });
@@ -59,7 +65,7 @@ export async function POST(request) {
       parsed += 1;
 
       const nextSku = isMissingMetadata(row.sku) && !isMissingMetadata(recovered.sku) ? recovered.sku : row.sku;
-      const nextProductName = isMissingMetadata(row.product_name) && !isMissingMetadata(recovered.product_name)
+      const nextProductName = (isMissingMetadata(row.product_name) || isDispatchDateValue(row.product_name)) && !isMissingMetadata(recovered.product_name)
         ? recovered.product_name
         : row.product_name;
       const nextColor = isMissingMetadata(row.color) && !isMissingMetadata(recovered.color) ? recovered.color : row.color;
