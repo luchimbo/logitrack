@@ -9,6 +9,9 @@ export default function UserManagementSection() {
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newRole, setNewRole] = useState("user");
+  const [adding, setAdding] = useState(false);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -50,17 +53,72 @@ export default function UserManagementSection() {
     }
   };
 
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setAdding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch("/api/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo agregar el usuario");
+      setSuccess("Usuario agregado. Se activará cuando se registre con ese email en /sign-up");
+      setNewEmail("");
+      setNewRole("user");
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || "Error inesperado");
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <section className="section">
       <div className="section-header">
         <h2 className="section-title">Gestión de Usuarios</h2>
-        <p className="section-subtitle">Registro libre por email con Clerk. Acá solo se gestionan los roles del workspace actual.</p>
+        <p className="section-subtitle">
+          Agregá usuarios por email y gestioná sus roles. Admin puede modificar; user tiene acceso de solo lectura.
+        </p>
       </div>
 
       <div className="card" style={{ marginBottom: "18px" }}>
-        <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.7 }}>
-          Los usuarios se registran solos desde <strong>/sign-up</strong>. Cada cuenta nueva crea su propio workspace <strong>Mi espacio</strong>.
-          Este panel administra el rol local dentro del workspace activo. La administración global vive en una app separada.
+        <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px" }}>Agregar usuario</h3>
+        <form onSubmit={handleAddUser} style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", alignItems: "end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label className="mobile-card-label" htmlFor="add-user-email">Email</label>
+            <input
+              id="add-user-email"
+              className="form-input"
+              type="email"
+              required
+              placeholder="usuario@empresa.com"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label className="mobile-card-label" htmlFor="add-user-role">Rol</label>
+            <select
+              id="add-user-role"
+              className="form-select"
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value)}
+            >
+              <option value="admin">admin</option>
+              <option value="user">user</option>
+            </select>
+          </div>
+          <button type="submit" className="btn" disabled={adding}>
+            {adding ? "Agregando..." : "Agregar"}
+          </button>
+        </form>
+        <p style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "10px", lineHeight: 1.6 }}>
+          El vínculo se activa cuando la persona se registra en <strong>/sign-up</strong> con ese email.
         </p>
       </div>
 
@@ -84,13 +142,16 @@ export default function UserManagementSection() {
             {users.map((u) => (
               <div key={u.id} className="mobile-card" style={{ display: "block" }}>
                 <div className="mobile-card-header">
-                  <div className="mobile-card-title">{u.email}</div>
+                  <div className="mobile-card-title">
+                    {u.email}
+                    {u.is_pending ? (
+                      <span className="badge" style={{ marginLeft: "8px", background: "var(--text-muted)", color: "var(--bg)", fontSize: "11px", padding: "2px 8px", borderRadius: "999px" }}>
+                        Pendiente de registro
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="mobile-card-body">
-                  <div className="mobile-card-row">
-                    <span className="mobile-card-label">Clerk ID</span>
-                    <span className="mobile-card-value">{u.clerk_user_id}</span>
-                  </div>
                   <div className="mobile-card-row">
                     <span className="mobile-card-label">Creado</span>
                     <span className="mobile-card-value">{u.created_at ? formatArgentinaDateTime(u.created_at) : "-"}</span>
@@ -99,12 +160,11 @@ export default function UserManagementSection() {
                     <span className="mobile-card-label">Rol</span>
                     <select
                       className="form-select"
-                      value={u.role || "user"}
+                      value={u.role === "owner" ? "admin" : (u.role || "user")}
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
                       disabled={savingId === String(u.id)}
                       style={{ maxWidth: "160px" }}
                     >
-                      <option value="owner">owner</option>
                       <option value="admin">admin</option>
                       <option value="user">user</option>
                     </select>
