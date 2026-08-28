@@ -75,6 +75,7 @@ export default function ZoneConfig() {
     const [savingCarrier, setSavingCarrier] = useState(false);
     const [savingZoneKey, setSavingZoneKey] = useState("");
     const [savingGroup, setSavingGroup] = useState("");
+    const [clearingAll, setClearingAll] = useState(false);
     const [portals, setPortals] = useState({});
     const [portalBusyId, setPortalBusyId] = useState(null);
     const isMobile = useIsMobile();
@@ -265,6 +266,30 @@ export default function ZoneConfig() {
         }
     };
 
+    const handleClearAllZones = async () => {
+        if (zones.length === 0) {
+            toast('No hay zonas asignadas', 'info');
+            return;
+        }
+        if (!confirm(`¿Seguro que querés QUITAR LAS ${zones.length} ZONAS ASIGNADAS? Esta acción no se puede deshacer.`)) return;
+        try {
+            setClearingAll(true);
+            for (const z of zones) {
+                const response = await fetch(`/api/zones/${z.id}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || 'Error eliminando zona');
+                }
+            }
+            setZones([]);
+            toast('Todas las zonas fueron liberadas', 'success');
+        } catch (err) {
+            toast('Error al eliminar zonas masivamente', 'error');
+        } finally {
+            setClearingAll(false);
+        }
+    };
+
 
     if (loading) {
         return (
@@ -360,7 +385,18 @@ export default function ZoneConfig() {
                 </div>}
             </div>
 
-            <h3 style={{ marginBottom: "16px", fontSize: "18px", fontWeight: 700 }}>📍 Asignación de Partidos</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>📍 Asignación de Partidos</h3>
+                <button
+                    className="btn btn-sm"
+                    style={{ color: "var(--danger)", background: "var(--danger-bg)", border: "1px solid var(--danger)", padding: "6px 14px", fontSize: "12px", fontWeight: 700, borderRadius: "8px", cursor: "pointer" }}
+                    disabled={clearingAll || zones.length === 0}
+                    onClick={handleClearAllZones}
+                    title="Quitar todas las zonas asignadas"
+                >
+                    {clearingAll ? 'Liberando...' : `🗑️ Quitar todas (${zones.length})`}
+                </button>
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
                 {ZONE_GROUPS.map(group => {
