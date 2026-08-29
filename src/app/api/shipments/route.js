@@ -5,6 +5,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
+import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 
 function parseJson(value, fallback) {
     try {
@@ -147,6 +148,10 @@ export async function PATCH(request) {
                 sql: "UPDATE shipments SET assigned_carrier = ? WHERE id = ? AND workspace_id = ?",
                 args: [assigned_carrier || null, id, workspaceId]
             });
+        }
+        if (assigned_carrier !== null) {
+            const flex = await db.execute({ sql: "SELECT shipping_method FROM shipments WHERE id = ? AND workspace_id = ?", args: [id, workspaceId] });
+            if (flex.rows[0]?.shipping_method === "flex") await bumpFlexPortalRevision(db, workspaceId);
         }
 
         return NextResponse.json({ success: true, id, status, assigned_carrier });

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getReadOnlyDb } from "@/lib/readOnlyDb";
 import { isValidCarrierPortalSecret } from "@/lib/carrierPortal";
 import { extractLabelDimensionsInches } from "@/lib/labelDimensions";
+import { getFlexPortalState } from "@/lib/flexPortal";
+import { getArgentinaDateString } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,8 @@ export async function GET(request, { params }) {
     });
     const link = linkResult.rows[0];
     if (!link || !isValidCarrierPortalSecret(link, getBearerToken(request))) return notFound();
+    const publication = await getFlexPortalState(db, link.workspace_id, getArgentinaDateString());
+    if (publication.state !== "live") return notFound();
     const shipmentResult = await db.execute({
       sql: `SELECT raw_zpl
             FROM shipments

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
+import { createCarrierPortalPublicId } from '@/lib/carrierPortal';
 
 export async function GET(request) {
     try {
@@ -58,7 +59,12 @@ export async function POST(request) {
                 sql: "INSERT INTO carriers (workspace_id, name, display_name, color) VALUES (?, ?, ?, ?)",
                 args: [workspaceId, cleanName, cleanDisplay, cleanColor]
             });
-            return NextResponse.json({ id: Number(result.lastInsertRowid), name: cleanName, display_name: cleanDisplay, color: cleanColor });
+            const id = Number(result.lastInsertRowid);
+            await db.execute({
+                sql: "INSERT INTO carrier_portal_links (workspace_id, carrier_id, public_id, active) VALUES (?, ?, ?, 1)",
+                args: [workspaceId, id, createCarrierPortalPublicId()],
+            });
+            return NextResponse.json({ id, name: cleanName, display_name: cleanDisplay, color: cleanColor });
         }
     } catch (error) {
         console.error("Error creating/updating carrier:", error);

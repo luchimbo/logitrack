@@ -89,8 +89,23 @@ export async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER NOT NULL UNIQUE,
       printing_setup_completed INTEGER DEFAULT 0,
+      flex_portal_cutoff_time TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS flex_portal_publications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      date DATE NOT NULL,
+      published_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      published_by_app_user_id INTEGER,
+      reason TEXT NOT NULL DEFAULT 'manual',
+      UNIQUE(workspace_id, date)
+    )`,
+    `CREATE TABLE IF NOT EXISTS flex_portal_revisions (
+      workspace_id INTEGER PRIMARY KEY,
+      revision INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS zone_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -568,6 +583,7 @@ export async function initDb() {
   await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
   await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
   await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+  await addColumnIfMissing("workspace_settings", "flex_portal_cutoff_time", "TEXT");
   await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
   await addColumnIfMissing("print_jobs", "integrity_verified", "INTEGER DEFAULT 0");
   await addColumnIfMissing("print_jobs", "integrity_input_blocks", "INTEGER DEFAULT 0");
@@ -612,6 +628,18 @@ export async function initDb() {
   await addColumnIfMissing("zipnova_collections", "workspace_id", "INTEGER");
   await addColumnIfMissing("zipnova_collections", "zipnova_collection_external_id", "TEXT");
   await addColumnIfMissing("zipnova_collections", "cutoff_label", "TEXT");
+
+  // Cada transportista debe tener un portal listo para compartir. Los links revocados
+  // ya existentes se preservan: solo se crean los que todavía no tienen registro.
+  try {
+    await exec(`INSERT INTO carrier_portal_links (workspace_id, carrier_id, public_id, active)
+      SELECT c.workspace_id, c.id, lower(hex(randomblob(24))), 1
+      FROM carriers c
+      WHERE c.workspace_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM carrier_portal_links l WHERE l.workspace_id = c.workspace_id AND l.carrier_id = c.id)`);
+  } catch (e) {
+    console.error("Migration error (carrier portal backfill):", e.message || e);
+  }
 
   try {
     await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");

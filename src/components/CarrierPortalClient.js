@@ -39,6 +39,8 @@ export default function CarrierPortalClient({ publicId }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [revision, setRevision] = useState(null);
+  const [online, setOnline] = useState(true);
   const [search, setSearch] = useState("");
   const [zone, setZone] = useState("");
   const [label, setLabel] = useState(null);
@@ -54,23 +56,26 @@ export default function CarrierPortalClient({ publicId }) {
     if (silent) setRefreshing(true); else setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/public/carrier-portals/${encodeURIComponent(publicId)}?date=${encodeURIComponent(date)}`, { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" });
+      const params = new URLSearchParams({ date }); if (silent && revision !== null) params.set("revision", String(revision));
+      const response = await fetch(`/api/public/carrier-portals/${encodeURIComponent(publicId)}?${params}`, { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" });
+      if (response.status === 304) return;
       if (!response.ok) throw new Error(response.status === 404 ? "Este enlace no está disponible." : "No pudimos cargar la operación.");
-      setData(await response.json());
+      const payload = await response.json(); setData(payload); setRevision(payload.publication?.revision ?? null); setOnline(true);
     } catch (err) {
-      setError(err.message || "No pudimos cargar la operación.");
+      setError(err.message || "No pudimos cargar la operación."); setOnline(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [date, publicId, secret]);
+  }, [date, publicId, revision, secret]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!secret) return undefined;
-    const interval = window.setInterval(() => load({ silent: true }), 60_000);
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") load({ silent: true }); }, 2_000);
     return () => window.clearInterval(interval);
   }, [load, secret]);
+  useEffect(() => { const sync = () => load({ silent: true }); window.addEventListener("focus", sync); window.addEventListener("online", sync); return () => { window.removeEventListener("focus", sync); window.removeEventListener("online", sync); }; }, [load]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -155,16 +160,17 @@ export default function CarrierPortalClient({ publicId }) {
   if (!secret && !loading) return <main className={styles.centered}><section className={styles.errorCard}><h1>Enlace incompleto</h1><p>Pedile al administrador que te comparta el enlace completo.</p></section></main>;
   if (loading && !data) return <main className={styles.centered}><div className={styles.loader} aria-label="Cargando operación" /></main>;
   if (error && !data) return <main className={styles.centered}><section className={styles.errorCard}><h1>Portal no disponible</h1><p>{error}</p><button type="button" onClick={() => load()}>Reintentar</button></section></main>;
+  if (!data) return <main className={styles.centered}><div className={styles.loader} aria-label="Cargando operación" /></main>;
 
   const zones = data?.zoneSummary || [];
   return <main className={styles.page} style={{ "--carrier": data?.portal?.carrierColor || "#0f766e" }}>
     <header className={styles.header}>
-      <div><p className={styles.kicker}>OPERACIÓN FLEX · SOLO LECTURA</p><h1>{data.portal.carrierName}</h1><p className={styles.subhead}>Paquetes asignados para tu recorrido.</p></div>
-      <button className={styles.refresh} type="button" onClick={() => load({ silent: true })} disabled={refreshing} aria-label="Actualizar operación"><Icon name="refresh" />{refreshing ? "Actualizando" : "Actualizar"}</button>
+      <div><p className={styles.kicker}>OPERACIÓN FLEX · SOLO LECTURA</p><h1>{data.portal?.carrierName || "Transportista"}</h1><p className={styles.subhead}>Paquetes asignados para tu recorrido.</p></div>
+      <span role="status" style={{ minHeight: 44, display: "inline-flex", alignItems: "center", padding: "0 14px", border: "1px solid #45525b", borderRadius: 999, background: "#1c2429", color: online ? "#8fd4c9" : "#f0b3ac", font: "700 12px ui-monospace,monospace" }}>{!online ? "Sin conexión" : refreshing ? "Sincronizando" : data?.publication?.state === "scheduled" ? `Disponible ${data.publication.cutoffTime}` : "En vivo"}</span>
     </header>
-    <p className={styles.updated}>Actualizado {formatUpdated(data.portal.refreshedAt)} · se refresca automáticamente</p>
+    <p className={styles.updated}>Actualizado {formatUpdated(data.portal?.refreshedAt)} · se refresca automáticamente</p>
     <nav className={styles.dateNav} aria-label="Elegir fecha">{dates.map((item) => <button type="button" key={item} className={date === item ? styles.activeDate : ""} onClick={() => setDate(item)}>{item === argentinaIso() ? "Hoy" : formatDate(item)}</button>)}</nav>
-    <section className={styles.metrics} aria-label="Resumen operativo">
+    {data?.publication?.state === "scheduled" ? <section style={{ margin: "26px 0", padding: 28, border: "1px solid #45525b", background: "#171e22", textAlign: "center" }}><h2>La operación todavía no está disponible</h2><p>Los paquetes de hoy aparecerán automáticamente a las {data.publication.cutoffTime}, hora Argentina.</p></section> : <><section className={styles.metrics} aria-label="Resumen operativo">
       <div><strong>{data.summary.packages}</strong><span>Paquetes</span></div><div><strong>{data.summary.units}</strong><span>Unidades</span></div><div><strong>{data.summary.zones}</strong><span>Zonas</span></div>
     </section>
     <section className={styles.controls} aria-label="Filtros y descargas">
@@ -180,7 +186,7 @@ export default function CarrierPortalClient({ publicId }) {
         <dl><div><dt>Destinatario</dt><dd>{shipment.recipientName}</dd></div><div><dt>Dirección</dt><dd>{shipment.address}{shipment.reference ? ` · ${shipment.reference}` : ""}</dd></div><div><dt>Localidad</dt><dd>{[shipment.city, shipment.province, shipment.postalCode && `CP ${shipment.postalCode}`].filter(Boolean).join(" · ") || "No informada"}</dd></div>{shipment.trackingNumber && <div><dt>Tracking</dt><dd>{shipment.trackingNumber}</dd></div>}</dl>
         <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button><button type="button" onClick={() => openLabel(shipment)}><Icon name="label" />Ver etiqueta</button></footer>
       </article>)}</div></section>
-    {!filtered.length && <section className={styles.empty}><h2>No hay paquetes con estos filtros</h2><p>Probá cambiando la fecha o quitando algún filtro.</p></section>}
+    {!filtered.length && <section className={styles.empty}><h2>No hay paquetes con estos filtros</h2><p>Probá cambiando la fecha o quitando algún filtro.</p></section>}</>}
     {label && createPortal(
       <div className={styles.labelOverlay} role="dialog" aria-modal="true" aria-label={`Etiqueta de ${label.shipment.trackingNumber || label.shipment.id}`} onClick={(event) => { if (event.target === event.currentTarget) closeLabel(); }}>
         <div className={styles.labelCard}>

@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { getReadOnlyDb } from "@/lib/readOnlyDb";
 import { isValidCarrierPortalSecret } from "@/lib/carrierPortal";
 import { getArgentinaDateString } from "@/lib/dateUtils";
+import { getFlexPortalState } from "@/lib/flexPortal";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +141,14 @@ export async function GET(request, { params }) {
     const searchParams = new URL(request.url).searchParams;
     const date = allowedDate(searchParams.get("date"));
     if (!date) return NextResponse.json({ error: "La fecha debe estar entre hoy y los últimos 6 días" }, { status: 400, headers: NO_STORE_HEADERS });
+    const publication = await getFlexPortalState(db, link.workspace_id, date);
+    const since = Number(searchParams.get("revision"));
+    if (Number.isFinite(since) && since === publication.revision && publication.state === "live") {
+      return new NextResponse(null, { status: 304, headers: NO_STORE_HEADERS });
+    }
+    if (publication.state === "scheduled") {
+      return NextResponse.json({ portal: { carrierName: link.display_name || link.name, carrierColor: link.color || "#0f766e", date, refreshedAt: new Date().toISOString() }, publication, summary: { packages: 0, units: 0, zones: 0, byStatus: {} }, zoneSummary: [], shipments: [] }, { headers: NO_STORE_HEADERS });
+    }
     const shipmentsResult = await db.execute({
       sql: `SELECT s.id, s.tracking_number, s.sale_id, s.product_name, s.sku, s.quantity, s.recipient_name,
               COALESCE(NULLIF(s.recipient_phone, ''), NULLIF(mo.recipient_phone, '')) AS recipient_phone,
@@ -151,7 +160,7 @@ export async function GET(request, { params }) {
             ORDER BY s.partido, s.city, s.recipient_name, s.id`,
       args: [link.workspace_id, link.name, date],
     });
-    const data = portalData(shipmentsResult.rows || [], link, date);
+    const data = { ...portalData(shipmentsResult.rows || [], link, date), publication };
     const shipments = filterShipments(data, searchParams);
     const format = searchParams.get("format") || "json";
     if (format === "csv") return new NextResponse(csvExport(data, shipments), { headers: { ...NO_STORE_HEADERS, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="portal-${date}.csv"` } });

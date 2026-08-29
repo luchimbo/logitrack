@@ -6,6 +6,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { getArgentinaDateString } from '@/lib/dateUtils';
+import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 
 function toDbValue(value) {
     if (value === undefined || value === null) return null;
@@ -172,6 +173,7 @@ export async function POST(request) {
             sql: "UPDATE daily_batches SET total_packages = (SELECT COUNT(*) FROM shipments WHERE workspace_id = ? AND batch_id = ?) WHERE id = ? AND workspace_id = ?",
             args: [workspaceId, batchId, batchId, workspaceId]
         });
+        if (allShipments.some((shipment) => shipment.shipping_method === 'flex')) await bumpFlexPortalRevision(db, workspaceId);
 
         const finalBatch = await db.execute({
             sql: "SELECT total_packages FROM daily_batches WHERE id = ? AND workspace_id = ?",
