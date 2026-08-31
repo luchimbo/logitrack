@@ -80,10 +80,19 @@ export default function CarrierPortalClient({ publicId }) {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (data?.shipments || []).filter((shipment) => {
-      if (zone && shipment.partido !== zone) return false;
+      if (zone && shipment.zoneGroup !== zone) return false;
       return !query || [shipment.trackingNumber, shipment.orderId, shipment.productName, shipment.recipientName, shipment.address, shipment.city, shipment.partido].join(" ").toLowerCase().includes(query);
     });
   }, [data, search, zone]);
+  const filteredByZone = useMemo(() => {
+    const groups = new Map();
+    for (const shipment of filtered) {
+      const list = groups.get(shipment.zoneGroup) || [];
+      list.push(shipment);
+      groups.set(shipment.zoneGroup, list);
+    }
+    return groups;
+  }, [filtered]);
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => argentinaIso(index)), []);
 
   const download = async (format) => {
@@ -180,12 +189,19 @@ export default function CarrierPortalClient({ publicId }) {
     </section>
     {error && <p className={styles.inlineError} role="alert">{error}</p>}
     <section className={styles.zoneStrip} aria-label="Resumen por zona">{zones.map((item) => <span key={item.name}><b>{item.name}</b>{item.packages} paquetes · {item.units} u.</span>)}</section>
-    <section className={styles.list}><div>{filtered.map((shipment) => <article className={styles.shipment} key={shipment.id}>
-        <div className={styles.shipmentTop}><p className={styles.zone}>{shipment.partido}</p></div>
-        <h3>{shipment.productName}</h3><p className={styles.sku}>{shipment.sku ? `SKU ${shipment.sku} · ` : ""}{shipment.quantity} {shipment.quantity === 1 ? "unidad" : "unidades"}</p>
-        <dl><div><dt>Destinatario</dt><dd>{shipment.recipientName}</dd></div><div><dt>Dirección</dt><dd>{shipment.address}{shipment.reference ? ` · ${shipment.reference}` : ""}</dd></div><div><dt>Localidad</dt><dd>{[shipment.city, shipment.province, shipment.postalCode && `CP ${shipment.postalCode}`].filter(Boolean).join(" · ") || "No informada"}</dd></div>{shipment.trackingNumber && <div><dt>Tracking</dt><dd>{shipment.trackingNumber}</dd></div>}</dl>
-        <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button><button type="button" onClick={() => openLabel(shipment)}><Icon name="label" />Ver etiqueta</button></footer>
-      </article>)}</div></section>
+    {zones.map((zoneItem) => {
+      const shipmentsInZone = filteredByZone.get(zoneItem.name) || [];
+      if (!shipmentsInZone.length) return null;
+      return <section className={styles.zoneSection} key={zoneItem.name} aria-label={`Paquetes en ${zoneItem.name}`}>
+        <header className={styles.zoneSectionHeader}><h2>{zoneItem.name}</h2><span>{shipmentsInZone.length} {shipmentsInZone.length === 1 ? "paquete" : "paquetes"}</span></header>
+        <div className={styles.list}><div>{shipmentsInZone.map((shipment) => <article className={styles.shipment} key={shipment.id}>
+            <div className={styles.shipmentTop}><p className={styles.zone}>{shipment.partido}</p></div>
+            <h3>{shipment.productName}</h3><p className={styles.sku}>{shipment.sku ? `SKU ${shipment.sku} · ` : ""}{shipment.quantity} {shipment.quantity === 1 ? "unidad" : "unidades"}</p>
+            <dl><div><dt>Destinatario</dt><dd>{shipment.recipientName}</dd></div><div><dt>Dirección</dt><dd>{shipment.address}{shipment.reference ? ` · ${shipment.reference}` : ""}</dd></div><div><dt>Localidad</dt><dd>{[shipment.city, shipment.province, shipment.postalCode && `CP ${shipment.postalCode}`].filter(Boolean).join(" · ") || "No informada"}</dd></div>{shipment.trackingNumber && <div><dt>Tracking</dt><dd>{shipment.trackingNumber}</dd></div>}</dl>
+            <footer>{shipment.recipientPhone ? <a href={`tel:${shipment.recipientPhone.replace(/\s/g, "")}`}><Icon name="phone" />Llamar</a> : <span>Teléfono no informado</span>}<button type="button" onClick={() => copyAddress([shipment.address, shipment.city, shipment.province, shipment.postalCode].filter(Boolean).join(", "))}>Copiar dirección</button><button type="button" onClick={() => openLabel(shipment)}><Icon name="label" />Ver etiqueta</button></footer>
+          </article>)}</div></div>
+      </section>;
+    })}
     {!filtered.length && <section className={styles.empty}><h2>No hay paquetes con estos filtros</h2><p>Probá cambiando la fecha o quitando algún filtro.</p></section>}</>}
     {label && createPortal(
       <div className={styles.labelOverlay} role="dialog" aria-modal="true" aria-label={`Etiqueta de ${label.shipment.trackingNumber || label.shipment.id}`} onClick={(event) => { if (event.target === event.currentTarget) closeLabel(); }}>

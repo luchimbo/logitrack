@@ -4,6 +4,7 @@ import { getReadOnlyDb } from "@/lib/readOnlyDb";
 import { isValidCarrierPortalSecret } from "@/lib/carrierPortal";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 import { getFlexPortalState } from "@/lib/flexPortal";
+import { zoneForPartido, ZONE_ORDER } from "@/lib/zoneGroups";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ function portalData(rows, link, date) {
     reference: row.reference || "",
     city: row.city || "",
     partido: row.partido || "Sin zona",
+    zoneGroup: zoneForPartido(row.partido) || "Sin zona",
     province: row.province || "",
     postalCode: row.postal_code || "",
     status: normalizeStatus(row.status),
@@ -61,15 +63,16 @@ function portalData(rows, link, date) {
   for (const shipment of shipments) {
     units += shipment.quantity;
     byStatus[shipment.status] += 1;
-    const current = zones.get(shipment.partido) || { name: shipment.partido, packages: 0, units: 0 };
+    const current = zones.get(shipment.zoneGroup) || { name: shipment.zoneGroup, packages: 0, units: 0 };
     current.packages += 1;
     current.units += shipment.quantity;
-    zones.set(shipment.partido, current);
+    zones.set(shipment.zoneGroup, current);
   }
+  const zoneRank = (name) => { const index = ZONE_ORDER.indexOf(name); return index === -1 ? ZONE_ORDER.length : index; };
   return {
     portal: { carrierName: link.display_name || link.name, carrierColor: link.color || "#0f766e", date, refreshedAt: new Date().toISOString() },
     summary: { packages: shipments.length, units, zones: zones.size, byStatus },
-    zoneSummary: [...zones.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
+    zoneSummary: [...zones.values()].sort((a, b) => zoneRank(a.name) - zoneRank(b.name) || a.name.localeCompare(b.name, "es")),
     shipments,
   };
 }
@@ -80,7 +83,7 @@ function filterShipments(data, params) {
   const search = String(params.get("search") || "").trim().toLowerCase();
   if (!zone && !status && !search) return data.shipments;
   return data.shipments.filter((shipment) => {
-    if (zone && shipment.partido.toLowerCase() !== zone) return false;
+    if (zone && shipment.zoneGroup.toLowerCase() !== zone) return false;
     if (status && shipment.status !== status) return false;
     if (!search) return true;
     return [shipment.trackingNumber, shipment.orderId, shipment.productName, shipment.recipientName, shipment.address, shipment.city, shipment.partido]
@@ -94,8 +97,8 @@ function csvValue(value) {
 }
 
 function csvExport(data, shipments) {
-  const header = ["Tracking", "Pedido", "Producto", "SKU", "Cantidad", "Destinatario", "Teléfono", "Dirección", "Referencia", "Localidad", "Partido", "Provincia", "CP", "Estado"];
-  const lines = shipments.map((s) => [s.trackingNumber, s.orderId, s.productName, s.sku, s.quantity, s.recipientName, s.recipientPhone, s.address, s.reference, s.city, s.partido, s.province, s.postalCode, s.status].map(csvValue).join(","));
+  const header = ["Tracking", "Pedido", "Producto", "SKU", "Cantidad", "Destinatario", "Teléfono", "Dirección", "Referencia", "Localidad", "Partido", "Zona", "Provincia", "CP", "Estado"];
+  const lines = shipments.map((s) => [s.trackingNumber, s.orderId, s.productName, s.sku, s.quantity, s.recipientName, s.recipientPhone, s.address, s.reference, s.city, s.partido, s.zoneGroup, s.province, s.postalCode, s.status].map(csvValue).join(","));
   return `\uFEFFPortal ${data.portal.carrierName} - ${data.portal.date}\n${header.join(",")}\n${lines.join("\n")}`;
 }
 
