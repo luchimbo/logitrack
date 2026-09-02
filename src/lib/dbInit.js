@@ -648,6 +648,9 @@ export async function initDb() {
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
     await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)");
     await exec("CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
   }

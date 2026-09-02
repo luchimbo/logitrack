@@ -16,7 +16,7 @@ import ZipnovaSection from "@/components/ZipnovaSection";
 import ZoneConfig from "@/components/ZoneConfig";
 import GoogleSheetsSection from "@/components/GoogleSheetsSection";
 import OperationToday from "@/components/OperationToday";
-import V2PrintJobsPage from "@/components/V2PrintJobsPage";
+import PackageHistorySection from "@/components/PackageHistorySection";
 
 export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
   switch (activeTab) {
@@ -28,7 +28,7 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "zoneConfig": return <ZoneConfig />;
     case "sheetSync": return currentUser ? <GoogleSheetsSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
     case "dashboard": return <Dashboard />;
-    case "printJobs": return <V2PrintJobsPage />;
+    case "printJobs": return <PackageHistorySection />;
     case "map": return <MapSection />;
     case "integrations": return currentUser ? <IntegrationsSection onNavigate={onNavigate} /> : <div>No autorizado</div>;
     case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;

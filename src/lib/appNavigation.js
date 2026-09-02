@@ -5,7 +5,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "pickingList", icon: "picking", label: "Lista de Picking" },
     { id: "flex", icon: "flex", label: "Logística Flex" },
     { id: "colecta", icon: "colecta", label: "Colecta" },
-    ...(hasOperationsPreview ? [{ id: "printJobs", icon: "print", label: "Historial de impresión" }] : []),
+    ...(hasOperationsPreview ? [{ id: "printJobs", icon: "colecta", label: "Historial de paquetes" }] : []),
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
     { id: "map", icon: "map", label: "Mapa" },
