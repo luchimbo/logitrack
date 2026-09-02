@@ -860,43 +860,4 @@ export async function initDb() {
     console.error("Tiendanube multi-store migration error:", e.message || e);
   }
 
-  // Seed critical sub-zones for La Matanza split
-  try {
-    const requiredMappings = [
-      { partido: "la_matanza_sur", carrier: "EntregoYa" },
-      { partido: "la_matanza_norte", carrier: "Hormiga" },
-    ];
-
-    for (const item of requiredMappings) {
-        const exists = await exec("SELECT id FROM zone_mappings WHERE partido = ? AND carrier_name = ? LIMIT 1", [item.partido, item.carrier]);
-
-      if (!exists.rows.length) {
-          await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", [item.partido, item.carrier]);
-        }
-      }
-
-    const villaRosaExists = await exec("SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1", ["villa_rosa"]);
-
-    if (!villaRosaExists.rows.length) {
-      const pilarCarrier = await exec("SELECT carrier_name FROM zone_mappings WHERE partido = ? ORDER BY id ASC LIMIT 1", ["pilar"]);
-
-      if (pilarCarrier.rows.length && pilarCarrier.rows[0].carrier_name) {
-        await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", ["villa_rosa", pilarCarrier.rows[0].carrier_name]);
-      }
-    }
-
-    const forcedEntregoYa = ["dique_lujan", "ingeniero_maschwitz", "la_plata", "campana", "zarate"];
-    for (const partido of forcedEntregoYa) {
-      await exec("UPDATE zone_mappings SET carrier_name = ? WHERE partido = ?", ["EntregoYa", partido]);
-
-      const exists = await exec("SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1", [partido]);
-
-      if (!exists.rows.length) {
-        await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", [partido, "EntregoYa"]);
-      }
-    }
-  } catch (e) {
-    console.error("Zone seed error:", e.message || e);
-  }
-
 }

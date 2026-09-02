@@ -428,16 +428,19 @@ export default function Dashboard() {
                     <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🚛 Por Transportista (Solo Flex)</h3>
                     {carrierEntries.length > 0 ? (
                         <div className="chart-bar-container">
-                            {carrierEntries.map(([carrier, count]) => (
-                                <div key={carrier} className="chart-bar-row">
-                                    <div className="chart-bar-label">{carrier}</div>
-                                    <div className="chart-bar-track">
-                                        <div className="chart-bar-fill accent" style={{ width: `${(count / maxCarrier * 100).toFixed(0)}%` }}>
-                                            {count}
+                            {carrierEntries.map(([carrier, count]) => {
+                                const isUnassigned = carrier === "Sin asignar (Flex)";
+                                return (
+                                    <div key={carrier} className="chart-bar-row">
+                                        <div className="chart-bar-label" style={isUnassigned ? { color: "var(--danger)", fontWeight: 700 } : undefined}>{isUnassigned ? `⚠️ ${carrier}` : carrier}</div>
+                                        <div className="chart-bar-track">
+                                            <div className={`chart-bar-fill ${isUnassigned ? "danger" : "accent"}`} style={{ width: `${(count / maxCarrier * 100).toFixed(0)}%` }}>
+                                                {count}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No hay envíos Flex en este período.</p>
