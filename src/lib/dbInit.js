@@ -533,11 +533,18 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_google_sheets_shipments_workspace ON google_sheets_shipments(workspace_id)`
   ];
 
-  for (const stmt of statements) {
-    try {
-      await exec(stmt);
-    } catch (e) {
-      console.error("DB Init Error:", e.message || e);
+  // Un solo viaje a la base en vez de uno por sentencia (la latencia por consulta domina el arranque en frío).
+  // Si el batch falla (es transaccional), se reintenta una por una para no perder el aislamiento de errores.
+  try {
+    await db.batch(statements, "write");
+  } catch (batchError) {
+    console.error("DB Init batch failed, retrying statement by statement:", batchError.message || batchError);
+    for (const stmt of statements) {
+      try {
+        await exec(stmt);
+      } catch (e) {
+        console.error("DB Init Error:", e.message || e);
+      }
     }
   }
 
@@ -564,12 +571,32 @@ export async function initDb() {
     }
   }
 
+  // Todas las columnas existentes en una sola consulta; evita un PRAGMA table_info por cada columna.
+  let columnsByTable = null;
+  try {
+    const allColumns = await exec(
+      "SELECT m.name AS tbl, p.name AS col FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type = 'table'"
+    );
+    columnsByTable = new Map();
+    for (const row of allColumns.rows) {
+      if (!columnsByTable.has(row.tbl)) columnsByTable.set(row.tbl, new Set());
+      columnsByTable.get(row.tbl).add(row.col);
+    }
+  } catch (e) {
+    console.error("Migration error (column inventory):", e.message || e);
+  }
+
   const addColumnIfMissing = async (tableName, columnName, sqlType) => {
     try {
-      const tableInfo = await exec(`PRAGMA table_info(${tableName})`);
-      const cols = tableInfo.rows.map((r) => r.name);
-      if (!cols.includes(columnName)) {
+      let cols = columnsByTable?.get(tableName);
+      if (!cols) {
+        const tableInfo = await exec(`PRAGMA table_info(${tableName})`);
+        cols = new Set(tableInfo.rows.map((r) => r.name));
+        columnsByTable?.set(tableName, cols);
+      }
+      if (!cols.has(columnName)) {
         await exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlType}`);
+        cols.add(columnName);
       }
     } catch (e) {
       console.error(`Migration error (${tableName}.${columnName}):`, e.message || e);
@@ -635,22 +662,24 @@ export async function initDb() {
     await exec(`INSERT INTO carrier_portal_links (workspace_id, carrier_id, public_id, active)
       SELECT c.workspace_id, c.id, lower(hex(randomblob(24))), 1
       FROM carriers c
-      WHERE c.workspace_id IS NOT NULL
+      WHERE c.workspace_id IS NOT NULL AND c.workspace_id <> 0
         AND NOT EXISTS (SELECT 1 FROM carrier_portal_links l WHERE l.workspace_id = c.workspace_id AND l.carrier_id = c.id)`);
   } catch (e) {
     console.error("Migration error (carrier portal backfill):", e.message || e);
   }
 
   try {
-    await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)");
-    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)");
+    await db.batch([
+      "CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)",
+      "CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)",
+      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)",
+      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)",
+      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)",
+      "CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)",
+      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)",
+      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)",
+      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)",
+    ], "write");
   } catch (e) {
     console.error("Index migration error:", e.message || e);
   }
