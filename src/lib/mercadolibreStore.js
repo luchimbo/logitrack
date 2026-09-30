@@ -324,7 +324,7 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   return totalSynced;
 }
 
-async function mapWithConcurrency(items, worker, concurrency = 8) {
+async function mapWithConcurrency(items, worker, concurrency = 12) {
   const results = new Array(items.length);
   let cursor = 0;
   const run = async () => {
@@ -346,11 +346,21 @@ export async function listLiveMercadoLibrePrintableOrders({ client, externalStor
 
   const summaries = [];
   const limit = 50;
-  for (let page = 0; page < maxPages; page += 1) {
-    const payload = await client.searchOrders({ sellerId, offset: page * limit, limit, q });
-    const orders = Array.isArray(payload?.results) ? payload.results : [];
-    summaries.push(...orders);
-    if (orders.length < limit) break;
+  const searchPage = (page) => client.searchOrders({ sellerId, offset: page * limit, limit, q });
+  const firstPayload = await searchPage(0);
+  const firstOrders = Array.isArray(firstPayload?.results) ? firstPayload.results : [];
+  summaries.push(...firstOrders);
+  if (firstOrders.length >= limit && maxPages > 1) {
+    // Las páginas siguientes se piden a la vez (cada una cuesta un viaje a Mercado Libre) y se
+    // consumen en orden; un error solo cuenta si esa página habría sido necesaria en el recorrido en serie.
+    const rest = await Promise.all(Array.from({ length: maxPages - 1 }, (_, index) => searchPage(index + 1)
+      .then((payload) => ({ payload }), (error) => ({ error }))));
+    for (const result of rest) {
+      if (result.error) throw result.error;
+      const orders = Array.isArray(result.payload?.results) ? result.payload.results : [];
+      summaries.push(...orders);
+      if (orders.length < limit) break;
+    }
   }
 
   const shipmentIds = [...new Set(summaries
