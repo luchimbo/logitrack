@@ -36,6 +36,9 @@ function getComparisonRange(period) {
     return null;
 }
 
+// Solo las columnas que usa summarizeShipments: evita traer raw_zpl (miles de bytes por envío) en cada consulta.
+const SUMMARY_FIELDS = ["quantity", "status", "shipping_method", "assigned_carrier", "province"];
+
 function summarizeShipments(shipments, period) {
     const total_packages = shipments.length;
     let total_units = 0;
@@ -90,10 +93,10 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
     let args;
 
     if (batchId) {
-        sql = "SELECT *, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?";
+        sql = `SELECT ${SUMMARY_FIELDS.join(", ")}, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?`;
         args = [workspaceId, batchId];
     } else {
-        sql = `SELECT s.*, b.date AS batch_date FROM shipments s
+        sql = `SELECT ${SUMMARY_FIELDS.map((c) => `s.${c}`).join(", ")}, b.date AS batch_date FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
         args = [workspaceId, workspaceId, range.from, range.to];
@@ -119,12 +122,17 @@ export async function GET(request) {
         const toDate = searchParams.get('to');
         const batch_id = searchParams.get('batch_id');
         const range = getDateRange(period, specificDate, fromDate, toDate);
-        const summary = await buildSummary(workspaceId, authResult.actor, range, period, batch_id);
+        const comparisonRange = getComparisonRange(period);
+        // Período actual y de comparación en paralelo: cada consulta paga la latencia de la base.
+        const [summary, previous] = await Promise.all([
+            buildSummary(workspaceId, authResult.actor, range, period, batch_id),
+            !batch_id && comparisonRange
+                ? buildSummary(workspaceId, authResult.actor, comparisonRange, period)
+                : null,
+        ]);
 
         let comparison = null;
-        const comparisonRange = getComparisonRange(period);
-        if (!batch_id && comparisonRange) {
-            const previous = await buildSummary(workspaceId, authResult.actor, comparisonRange, period);
+        if (previous) {
             const pct = (current, prev) => {
                 if (!prev) return current > 0 ? 100 : 0;
                 return Number((((current - prev) / prev) * 100).toFixed(1));
