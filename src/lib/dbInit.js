@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db, hasDbCredentials } from "./db";
 
 let _initialized = false;
@@ -533,47 +534,10 @@ export async function initDb() {
     `CREATE INDEX IF NOT EXISTS idx_google_sheets_shipments_workspace ON google_sheets_shipments(workspace_id)`
   ];
 
-  // Un solo viaje a la base en vez de uno por sentencia (la latencia por consulta domina el arranque en frío).
-  // Si el batch falla (es transaccional), se reintenta una por una para no perder el aislamiento de errores.
-  try {
-    await db.batch(statements, "write");
-  } catch (batchError) {
-    console.error("DB Init batch failed, retrying statement by statement:", batchError.message || batchError);
-    for (const stmt of statements) {
-      try {
-        await exec(stmt);
-      } catch (e) {
-        console.error("DB Init Error:", e.message || e);
-      }
-    }
-  }
-
-  // Migration: add lat and lng to shipments
-  try {
-    const tableInfo = await exec("PRAGMA table_info(shipments)");
-    const cols = tableInfo.rows.map(r => r.name);
-    if (!cols.includes('lat')) {
-      await exec("ALTER TABLE shipments ADD COLUMN lat FLOAT");
-      await exec("ALTER TABLE shipments ADD COLUMN lng FLOAT");
-      console.log("Migration: added lat and lng columns to shipments table");
-    }
-  } catch (e) {
-    console.error("Migration error (lat/lng):", e.message || e);
-  }
-
-  // Migration: add raw_block to print_job_items
-  try {
-    await exec("ALTER TABLE print_job_items ADD COLUMN raw_block TEXT");
-  } catch (e) {
-    const msg = String(e?.message || "").toLowerCase();
-    if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
-      console.error("Migration error (print_job_items.raw_block):", e.message || e);
-    }
-  }
-
-  // Todas las columnas existentes en una sola consulta; evita un PRAGMA table_info por cada columna.
+  // Inventario de columnas existentes en una sola consulta (se carga recién en el primer uso);
+  // evita un PRAGMA table_info por cada columna.
   let columnsByTable = null;
-  try {
+  const loadColumnInventory = async () => {
     const allColumns = await exec(
       "SELECT m.name AS tbl, p.name AS col FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type = 'table'"
     );
@@ -582,235 +546,202 @@ export async function initDb() {
       if (!columnsByTable.has(row.tbl)) columnsByTable.set(row.tbl, new Set());
       columnsByTable.get(row.tbl).add(row.col);
     }
-  } catch (e) {
-    console.error("Migration error (column inventory):", e.message || e);
-  }
+  };
 
   const addColumnIfMissing = async (tableName, columnName, sqlType) => {
     try {
-      let cols = columnsByTable?.get(tableName);
+      if (!columnsByTable) {
+        try {
+          await loadColumnInventory();
+        } catch (e) {
+          columnsByTable = new Map();
+          console.error("Migration error (column inventory):", e.message || e);
+        }
+      }
+      let cols = columnsByTable.get(tableName);
       if (!cols) {
         const tableInfo = await exec(`PRAGMA table_info(${tableName})`);
         cols = new Set(tableInfo.rows.map((r) => r.name));
-        columnsByTable?.set(tableName, cols);
+        columnsByTable.set(tableName, cols);
       }
       if (!cols.has(columnName)) {
         await exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlType}`);
         cols.add(columnName);
       }
     } catch (e) {
+      schemaFailed = true;
       console.error(`Migration error (${tableName}.${columnName}):`, e.message || e);
     }
   };
 
-  await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
-  await addColumnIfMissing("shipments", "raw_zpl", "TEXT");
-  await addColumnIfMissing("shipments", "recipient_phone", "TEXT");
-  await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
-  await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
-  await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
-  await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
-  await addColumnIfMissing("workspace_settings", "flex_portal_cutoff_time", "TEXT");
-  await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
-  await addColumnIfMissing("print_jobs", "integrity_verified", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("print_jobs", "integrity_input_blocks", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("print_jobs", "integrity_output_blocks", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("print_jobs", "parser_misses", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
-  await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
-  await addColumnIfMissing("app_users", "is_global_admin", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
-  await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
-  await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
-  await addColumnIfMissing("tiendanube_orders", "updated_at_external", "TEXT");
-  await addColumnIfMissing("tiendanube_orders", "dispatched_at_external", "TEXT");
-  await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
-  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
-  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
-  await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
-  await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
-  await addColumnIfMissing("shipments", "external_provider", "TEXT");
-  await addColumnIfMissing("shipments", "external_order_id", "TEXT");
-  await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
-  await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
-  await addColumnIfMissing("mercadolibre_orders", "label_printed_at", "DATETIME");
-  // ZPL de la etiqueta guardado al imprimir, para poder reimprimir aunque ML ya no la entregue
-  // (NOT_PRINTABLE_STATUS cuando el envío avanzó de estado).
-  await addColumnIfMissing("mercadolibre_orders", "printed_label_zpl", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
-  await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
-  await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "origin_id", "INTEGER");
-  await addColumnIfMissing("zipnova_shipments", "origin_name", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "origin_address", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "origin_city", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "origin_province", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "total_volume", "FLOAT DEFAULT 0");
-  await addColumnIfMissing("zipnova_shipments", "packages_json", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "collection_window_json", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "collection_key", "TEXT");
-  await addColumnIfMissing("zipnova_shipments", "label_pdf_downloaded_at", "DATETIME");
-  await addColumnIfMissing("zipnova_shipments", "label_zpl_downloaded_at", "DATETIME");
-  await addColumnIfMissing("zipnova_collections", "workspace_id", "INTEGER");
-  await addColumnIfMissing("zipnova_collections", "zipnova_collection_external_id", "TEXT");
-  await addColumnIfMissing("zipnova_collections", "cutoff_label", "TEXT");
-
-  // Cada transportista debe tener un portal listo para compartir. Los links revocados
-  // ya existentes se preservan: solo se crean los que todavía no tienen registro.
+  // Firma del esquema: el código de inicialización se ejecuta completo solo cuando cambia (p. ej. tras un
+  // despliegue). En los arranques en frío siguientes alcanza con una consulta para comprobarla; con una base
+  // remota de alta latencia cada viaje cuesta cientos de milisegundos.
+  const schemaSignature = createHash("sha256").update(initDb.toString()).digest("hex").slice(0, 32);
+  let schemaCurrent = false;
+  let schemaFailed = false;
   try {
-    await exec(`INSERT INTO carrier_portal_links (workspace_id, carrier_id, public_id, active)
-      SELECT c.workspace_id, c.id, lower(hex(randomblob(24))), 1
-      FROM carriers c
-      WHERE c.workspace_id IS NOT NULL AND c.workspace_id <> 0
-        AND NOT EXISTS (SELECT 1 FROM carrier_portal_links l WHERE l.workspace_id = c.workspace_id AND l.carrier_id = c.id)`);
-  } catch (e) {
-    console.error("Migration error (carrier portal backfill):", e.message || e);
-  }
-
-  try {
-    await db.batch([
-      "CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)",
-      "CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)",
-      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)",
-      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)",
-      "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)",
-      "CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)",
-      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)",
-      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)",
-      "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)",
+    const meta = await db.batch([
+      "CREATE TABLE IF NOT EXISTS _init_meta (key TEXT PRIMARY KEY, value TEXT)",
+      "SELECT value FROM _init_meta WHERE key = 'schema_signature'",
     ], "write");
+    schemaCurrent = meta[1].rows[0]?.value === schemaSignature;
   } catch (e) {
-    console.error("Index migration error:", e.message || e);
+    console.error("DB Init signature check failed:", e.message || e);
   }
 
-  try {
-    await exec("UPDATE tiendanube_orders SET dispatch_status = 'to_send' WHERE dispatch_status IS NULL OR TRIM(dispatch_status) = ''");
-  } catch (e) {
-    console.error("Dispatch status backfill error:", e.message || e);
-  }
-
-  // Backfill label_printed_at desde print_queue ya impresos
-  try {
-    await exec(`
-      UPDATE mercadolibre_orders
-      SET label_printed_at = (
-        SELECT MIN(pq.printed_at)
-        FROM print_queue pq, json_each(pq.shipment_ids_json) je
-        WHERE pq.status = 'printed'
-          AND pq.workspace_id = mercadolibre_orders.workspace_id
-          AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
-      )
-      WHERE label_printed_at IS NULL
-        AND shipment_row_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM print_queue pq, json_each(pq.shipment_ids_json) je
-          WHERE pq.status = 'printed'
-            AND pq.workspace_id = mercadolibre_orders.workspace_id
-            AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
-        )
-    `);
-  } catch (e) {
-    console.error("label_printed_at backfill error:", e.message || e);
-  }
-
-  let legacyWorkspaceId = null;
-  try {
-    const legacyWorkspace = await exec(
-      "SELECT id FROM workspaces WHERE slug = ? LIMIT 1",
-      ["legacy"]
-    );
-
-    if (legacyWorkspace.rows.length) {
-      legacyWorkspaceId = Number(legacyWorkspace.rows[0].id);
-    } else {
-      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["GeoModi", "legacy"]);
-      legacyWorkspaceId = Number(inserted.lastInsertRowid);
-    }
-
-    await exec("UPDATE workspaces SET name = ? WHERE id = ?", ["GeoModi", legacyWorkspaceId]);
-
-    await exec("INSERT OR IGNORE INTO workspace_settings (workspace_id, printing_setup_completed) VALUES (?, 0)", [legacyWorkspaceId]);
-  } catch (e) {
-    console.error("Workspace seed error:", e.message || e);
-  }
-
-  if (legacyWorkspaceId) {
+  if (!schemaCurrent) {
+    // Un solo viaje a la base en vez de uno por sentencia (la latencia por consulta domina el arranque en frío).
+    // Si el batch falla (es transaccional), se reintenta una por una para no perder el aislamiento de errores.
     try {
-      const globalAdmin = await exec("SELECT id FROM app_users WHERE lower(email) = lower(?) LIMIT 1", ["camilopcmidi@gmail.com"]);
-      if (globalAdmin.rows.length) {
-        const appUserId = Number(globalAdmin.rows[0].id);
-        await exec("UPDATE app_users SET is_global_admin = 1 WHERE id = ?", [appUserId]);
-        await exec(
-          `INSERT INTO workspace_members (workspace_id, app_user_id, role)
-           VALUES (?, ?, 'owner')
-           ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
-          [legacyWorkspaceId, appUserId]
-        );
+      await db.batch(statements, "write");
+    } catch (batchError) {
+      console.error("DB Init batch failed, retrying statement by statement:", batchError.message || batchError);
+      for (const stmt of statements) {
+        try {
+          await exec(stmt);
+        } catch (e) {
+          schemaFailed = true;
+          console.error("DB Init Error:", e.message || e);
+        }
       }
-
-      const tablesToBackfill = [
-        "shipments",
-        "daily_batches",
-        "zone_mappings",
-        "carriers",
-        "print_jobs",
-        "print_job_items",
-        "zipnova_shipments",
-      ];
-
-      for (const tableName of tablesToBackfill) {
-        await exec(`UPDATE ${tableName} SET workspace_id = ? WHERE workspace_id IS NULL`, [legacyWorkspaceId]);
-      }
-
-      await exec(`UPDATE print_job_items SET workspace_id = (
-          SELECT pj.workspace_id FROM print_jobs pj WHERE pj.id = print_job_items.print_job_id
-        ) WHERE workspace_id IS NULL AND print_job_id IS NOT NULL`);
-    } catch (e) {
-      console.error("Workspace backfill error:", e.message || e);
     }
-  }
 
-  // Migration: remove UNIQUE constraint on zone_mappings.partido
-  try {
-    // Try inserting a duplicate to test if UNIQUE still exists
-    // If the constraint exists, this will fail and we'll migrate
-    await exec("SELECT COUNT(*) as cnt FROM zone_mappings");
-    // Try the migration by checking table info
-    const tableInfo = await exec("PRAGMA table_info(zone_mappings)");
-    // Check if there's a unique index
-    const indexes = await exec("PRAGMA index_list(zone_mappings)");
-    const hasUnique = indexes.rows.some(r => r.unique === 1);
+    // Migration: add lat and lng to shipments
+    try {
+      const tableInfo = await exec("PRAGMA table_info(shipments)");
+      const cols = tableInfo.rows.map(r => r.name);
+      if (!cols.includes('lat')) {
+        await exec("ALTER TABLE shipments ADD COLUMN lat FLOAT");
+        await exec("ALTER TABLE shipments ADD COLUMN lng FLOAT");
+        console.log("Migration: added lat and lng columns to shipments table");
+      }
+    } catch (e) {
+      schemaFailed = true;
+      console.error("Migration error (lat/lng):", e.message || e);
+    }
 
-    if (hasUnique) {
-      await exec("DROP TABLE IF EXISTS zone_mappings_new");
-      await exec(`CREATE TABLE zone_mappings_new (
+    // Migration: add raw_block to print_job_items
+    try {
+      await exec("ALTER TABLE print_job_items ADD COLUMN raw_block TEXT");
+    } catch (e) {
+      const msg = String(e?.message || "").toLowerCase();
+      if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+        schemaFailed = true;
+        console.error("Migration error (print_job_items.raw_block):", e.message || e);
+      }
+    }
+
+    await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
+    await addColumnIfMissing("shipments", "raw_zpl", "TEXT");
+    await addColumnIfMissing("shipments", "recipient_phone", "TEXT");
+    await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
+    await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
+    await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
+    await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+    await addColumnIfMissing("workspace_settings", "flex_portal_cutoff_time", "TEXT");
+    await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
+    await addColumnIfMissing("print_jobs", "integrity_verified", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("print_jobs", "integrity_input_blocks", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("print_jobs", "integrity_output_blocks", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("print_jobs", "parser_misses", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
+    await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
+    await addColumnIfMissing("app_users", "is_global_admin", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
+    await addColumnIfMissing("tiendanube_orders", "updated_at_external", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "dispatched_at_external", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
+    await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
+    await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
+    await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
+    await addColumnIfMissing("shipments", "external_provider", "TEXT");
+    await addColumnIfMissing("shipments", "external_order_id", "TEXT");
+    await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
+    await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
+    await addColumnIfMissing("mercadolibre_orders", "label_printed_at", "DATETIME");
+    // ZPL de la etiqueta guardado al imprimir, para poder reimprimir aunque ML ya no la entregue
+    // (NOT_PRINTABLE_STATUS cuando el envío avanzó de estado).
+    await addColumnIfMissing("mercadolibre_orders", "printed_label_zpl", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
+    await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
+    await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "origin_id", "INTEGER");
+    await addColumnIfMissing("zipnova_shipments", "origin_name", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "origin_address", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "origin_city", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "origin_province", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "total_volume", "FLOAT DEFAULT 0");
+    await addColumnIfMissing("zipnova_shipments", "packages_json", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "collection_window_json", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "collection_key", "TEXT");
+    await addColumnIfMissing("zipnova_shipments", "label_pdf_downloaded_at", "DATETIME");
+    await addColumnIfMissing("zipnova_shipments", "label_zpl_downloaded_at", "DATETIME");
+    await addColumnIfMissing("zipnova_collections", "workspace_id", "INTEGER");
+    await addColumnIfMissing("zipnova_collections", "zipnova_collection_external_id", "TEXT");
+    await addColumnIfMissing("zipnova_collections", "cutoff_label", "TEXT");
+
+    try {
+      await db.batch([
+        "CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)",
+        "CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)",
+        "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)",
+        "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)",
+        "CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)",
+        "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)",
+        "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)",
+        "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)",
+      ], "write");
+    } catch (e) {
+      schemaFailed = true;
+      console.error("Index migration error:", e.message || e);
+    }
+
+    // Migration: remove UNIQUE constraint on zone_mappings.partido
+    try {
+      // Try inserting a duplicate to test if UNIQUE still exists
+      // If the constraint exists, this will fail and we'll migrate
+      await exec("SELECT COUNT(*) as cnt FROM zone_mappings");
+      // Try the migration by checking table info
+      const tableInfo = await exec("PRAGMA table_info(zone_mappings)");
+      // Check if there's a unique index
+      const indexes = await exec("PRAGMA index_list(zone_mappings)");
+      const hasUnique = indexes.rows.some(r => r.unique === 1);
+
+      if (hasUnique) {
+        await exec("DROP TABLE IF EXISTS zone_mappings_new");
+        await exec(`CREATE TABLE zone_mappings_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_id INTEGER,
         partido TEXT NOT NULL,
         carrier_name TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      await exec(`INSERT INTO zone_mappings_new (id, workspace_id, partido, carrier_name, created_at)
+        await exec(`INSERT INTO zone_mappings_new (id, workspace_id, partido, carrier_name, created_at)
         SELECT id, workspace_id, partido, carrier_name, created_at FROM zone_mappings`);
-      await exec("DROP TABLE zone_mappings");
-      await exec("ALTER TABLE zone_mappings_new RENAME TO zone_mappings");
-      console.log("Zone migration: removed UNIQUE constraint on partido");
+        await exec("DROP TABLE zone_mappings");
+        await exec("ALTER TABLE zone_mappings_new RENAME TO zone_mappings");
+        console.log("Zone migration: removed UNIQUE constraint on partido");
+      }
+    } catch (e) {
+      schemaFailed = true;
+      try { await exec("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
+      // Not critical — may already be migrated
     }
-  } catch (e) {
-    try { await exec("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
-    // Not critical — may already be migrated
-  }
 
-  // Migration: remove global UNIQUE constraint on carriers.name for workspace isolation
-  try {
-    const indexes = await exec("PRAGMA index_list(carriers)");
-    const hasUnique = indexes.rows.some((r) => r.unique === 1);
+    // Migration: remove global UNIQUE constraint on carriers.name for workspace isolation
+    try {
+      const indexes = await exec("PRAGMA index_list(carriers)");
+      const hasUnique = indexes.rows.some((r) => r.unique === 1);
 
-    if (hasUnique) {
-      await exec("DROP TABLE IF EXISTS carriers_new");
-      await exec(`CREATE TABLE carriers_new (
+      if (hasUnique) {
+        await exec("DROP TABLE IF EXISTS carriers_new");
+        await exec(`CREATE TABLE carriers_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_id INTEGER,
         name TEXT NOT NULL,
@@ -818,27 +749,28 @@ export async function initDb() {
         color TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      await exec(`INSERT INTO carriers_new (id, workspace_id, name, display_name, color, created_at)
+        await exec(`INSERT INTO carriers_new (id, workspace_id, name, display_name, color, created_at)
         SELECT id, workspace_id, name, display_name, color, created_at FROM carriers`);
-      await exec("DROP TABLE carriers");
-      await exec("ALTER TABLE carriers_new RENAME TO carriers");
-      console.log("Carrier migration: removed global UNIQUE constraint on name");
+        await exec("DROP TABLE carriers");
+        await exec("ALTER TABLE carriers_new RENAME TO carriers");
+        console.log("Carrier migration: removed global UNIQUE constraint on name");
+      }
+    } catch (e) {
+      schemaFailed = true;
+      try { await exec("DROP TABLE IF EXISTS carriers_new"); } catch (_) { }
     }
-  } catch (e) {
-    try { await exec("DROP TABLE IF EXISTS carriers_new"); } catch (_) { }
-  }
 
-  await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
-  await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+    await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
+    await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
 
-  // Migration: Tiendanube orders must allow the same external order id across multiple stores.
-  try {
-    const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
-    const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
+    // Migration: Tiendanube orders must allow the same external order id across multiple stores.
+    try {
+      const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
+      const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
 
-    if (hasLegacyUnique) {
-      await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
-      await exec(`CREATE TABLE tiendanube_orders_new (
+      if (hasLegacyUnique) {
+        await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
+        await exec(`CREATE TABLE tiendanube_orders_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_id INTEGER NOT NULL,
         integration_connection_id INTEGER,
@@ -868,7 +800,7 @@ export async function initDb() {
         synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      await exec(`INSERT INTO tiendanube_orders_new (
+        await exec(`INSERT INTO tiendanube_orders_new (
         id, workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status,
         payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatch_marked_by,
         shipping_method, shipping_carrier, is_zipnova, contact_name, contact_email, contact_phone,
@@ -881,15 +813,83 @@ export async function initDb() {
         shipping_address_json, products_json, subtotal, total, currency, created_at_external,
         updated_at_external, dispatched_at_external, synced_at, created_at
         FROM tiendanube_orders`);
-      await exec("DROP TABLE tiendanube_orders");
-      await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
-      await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
-      await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
-      console.log("Tiendanube migration: enabled multi-store order ids");
+        await exec("DROP TABLE tiendanube_orders");
+        await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
+        await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
+        await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
+        console.log("Tiendanube migration: enabled multi-store order ids");
+      }
+    } catch (e) {
+      schemaFailed = true;
+      try { await exec("DROP TABLE IF EXISTS tiendanube_orders_new"); } catch (_) { }
+      console.error("Tiendanube multi-store migration error:", e.message || e);
     }
-  } catch (e) {
-    try { await exec("DROP TABLE IF EXISTS tiendanube_orders_new"); } catch (_) { }
-    console.error("Tiendanube multi-store migration error:", e.message || e);
   }
 
+  // Datos que se reconcilian en cada arranque (no dependen del esquema): todo en un solo viaje.
+  const legacy = "(SELECT id FROM workspaces WHERE slug = 'legacy')";
+  const dataStatements = [
+    // Cada transportista debe tener un portal listo para compartir. Los links revocados
+    // ya existentes se preservan: solo se crean los que todavía no tienen registro.
+    `INSERT INTO carrier_portal_links (workspace_id, carrier_id, public_id, active)
+      SELECT c.workspace_id, c.id, lower(hex(randomblob(24))), 1
+      FROM carriers c
+      WHERE c.workspace_id IS NOT NULL AND c.workspace_id <> 0
+        AND NOT EXISTS (SELECT 1 FROM carrier_portal_links l WHERE l.workspace_id = c.workspace_id AND l.carrier_id = c.id)`,
+    "UPDATE tiendanube_orders SET dispatch_status = 'to_send' WHERE dispatch_status IS NULL OR TRIM(dispatch_status) = ''",
+    // Backfill label_printed_at desde print_queue ya impresos
+    `UPDATE mercadolibre_orders
+      SET label_printed_at = (
+        SELECT MIN(pq.printed_at)
+        FROM print_queue pq, json_each(pq.shipment_ids_json) je
+        WHERE pq.status = 'printed'
+          AND pq.workspace_id = mercadolibre_orders.workspace_id
+          AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
+      )
+      WHERE label_printed_at IS NULL
+        AND shipment_row_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM print_queue pq, json_each(pq.shipment_ids_json) je
+          WHERE pq.status = 'printed'
+            AND pq.workspace_id = mercadolibre_orders.workspace_id
+            AND CAST(je.value AS INTEGER) = mercadolibre_orders.shipment_row_id
+        )`,
+    // Workspace legacy y admin global
+    "INSERT INTO workspaces (name, slug) SELECT 'GeoModi', 'legacy' WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE slug = 'legacy')",
+    "UPDATE workspaces SET name = 'GeoModi' WHERE slug = 'legacy'",
+    "INSERT OR IGNORE INTO workspace_settings (workspace_id, printing_setup_completed) SELECT id, 0 FROM workspaces WHERE slug = 'legacy'",
+    { sql: "UPDATE app_users SET is_global_admin = 1 WHERE lower(email) = lower(?)", args: ["camilopcmidi@gmail.com"] },
+    {
+      sql: `INSERT INTO workspace_members (workspace_id, app_user_id, role)
+            SELECT w.id, u.id, 'owner' FROM workspaces w, app_users u
+            WHERE w.slug = 'legacy' AND lower(u.email) = lower(?)
+            ORDER BY u.id LIMIT 1
+            ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
+      args: ["camilopcmidi@gmail.com"],
+    },
+    ...["shipments", "daily_batches", "zone_mappings", "carriers", "print_jobs", "print_job_items", "zipnova_shipments"]
+      .map((tableName) => `UPDATE ${tableName} SET workspace_id = ${legacy} WHERE workspace_id IS NULL`),
+    `UPDATE print_job_items SET workspace_id = (
+        SELECT pj.workspace_id FROM print_jobs pj WHERE pj.id = print_job_items.print_job_id
+      ) WHERE workspace_id IS NULL AND print_job_id IS NOT NULL`,
+  ];
+  if (!schemaCurrent && !schemaFailed) {
+    dataStatements.push({
+      sql: "INSERT INTO _init_meta (key, value) VALUES ('schema_signature', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      args: [schemaSignature],
+    });
+  }
+  try {
+    await db.batch(dataStatements, "write");
+  } catch (batchError) {
+    console.error("DB Init data batch failed, retrying statement by statement:", batchError.message || batchError);
+    for (const stmt of dataStatements) {
+      try {
+        await db.execute(stmt);
+      } catch (e) {
+        console.error("DB Init data error:", e.message || e);
+      }
+    }
+  }
 }
