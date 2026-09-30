@@ -126,7 +126,7 @@ export default function AppShell({
           {currentUser && (
             <button
               onClick={onLogout}
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm desktop-only"
               style={{ whiteSpace: 'nowrap' }}
             >
               Cerrar sesión
