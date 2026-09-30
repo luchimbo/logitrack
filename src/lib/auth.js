@@ -6,12 +6,6 @@ import { logAudit } from "@/lib/audit";
 
 const DEFAULT_GLOBAL_ADMIN_EMAIL = "camilopcmidi@gmail.com";
 
-// Verificar configuración de Clerk
-const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-console.log("[Clerk Config] Publishable key exists:", !!clerkPublishableKey, "Length:", clerkPublishableKey?.length);
-console.log("[Clerk Config] Secret key exists:", !!clerkSecretKey, "Length:", clerkSecretKey?.length);
-
 function getJwtSecret() {
   const secret = String(process.env.JWT_SECRET || "").trim();
   if (!secret) return null;
@@ -100,21 +94,79 @@ async function ensureLegacyWorkspaceOwner(appUserId) {
   return workspaceId;
 }
 
+// Cache por instancia del usuario de Clerk: currentUser() es una llamada de red a Clerk en cada request.
+const CLERK_USER_CACHE_TTL_MS = 10 * 60 * 1000;
+const clerkUserCache = new Map();
+
+async function getClerkUserCached(userId) {
+  const cached = clerkUserCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.user;
+  const user = await currentUser();
+  if (user) {
+    if (clerkUserCache.size > 500) clerkUserCache.clear();
+    clerkUserCache.set(userId, { user, expiresAt: Date.now() + CLERK_USER_CACHE_TTL_MS });
+  }
+  return user;
+}
+
 async function bootstrapClerkUser() {
   await ensureDb();
 
   const clerkAuth = await auth();
-  console.log("[bootstrapClerkUser] clerkAuth:", clerkAuth);
   if (!clerkAuth?.userId) {
-    console.log("[bootstrapClerkUser] No userId found in clerkAuth");
     return null;
   }
 
-  const clerkUser = await currentUser();
-  console.log("[bootstrapClerkUser] clerkUser:", clerkUser ? "found" : "null", "email:", clerkUser?.primaryEmailAddress?.emailAddress);
+  const clerkUser = await getClerkUserCached(clerkAuth.userId);
   const email = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.[0]?.emailAddress || null;
   if (!email) {
     throw new Error("No se pudo resolver email de Clerk");
+  }
+
+  // Camino rápido: un usuario ya registrado se resuelve con una sola consulta (usuario + workspace + settings)
+  // en vez de tres viajes seguidos. Cualquier caso que requiera escribir (last_seen vencido, email o rol
+  // distintos, alta de workspace) sigue por el camino completo de abajo.
+  const fastPathAdmin = isGlobalAdminEmail(email);
+  const fast = await db.execute({
+    sql: `SELECT u.id, u.email, u.last_seen_at, u.onboarding_completed, u.is_global_admin,
+                 wm.workspace_id, wm.role, w.name AS workspace_name, w.slug AS workspace_slug,
+                 ws.printing_setup_completed,
+                 EXISTS (
+                   SELECT 1 FROM workspace_members lm
+                   JOIN workspaces lw ON lw.id = lm.workspace_id
+                   WHERE lm.app_user_id = u.id AND lw.slug = 'legacy' AND lm.role = 'owner'
+                 ) AS legacy_owner
+          FROM app_users u
+          JOIN workspace_members wm ON wm.id = (SELECT MIN(id) FROM workspace_members WHERE app_user_id = u.id)
+          JOIN workspaces w ON w.id = wm.workspace_id
+          LEFT JOIN workspace_settings ws ON ws.workspace_id = wm.workspace_id
+          WHERE u.clerk_user_id = ?
+          LIMIT 1`,
+    args: [clerkAuth.userId],
+  });
+  const fastRow = fast.rows[0];
+  if (
+    fastRow &&
+    !shouldRefreshLastSeen(fastRow.last_seen_at) &&
+    fastRow.email === email &&
+    (!fastPathAdmin || (Number(fastRow.is_global_admin || 0) === 1 && Number(fastRow.legacy_owner) === 1))
+  ) {
+    return {
+      authType: "clerk",
+      isAuthenticated: true,
+      isGlobalAdmin: fastPathAdmin || Number(fastRow.is_global_admin || 0) === 1,
+      id: `clerk:${clerkAuth.userId}`,
+      appUserId: Number(fastRow.id),
+      clerkUserId: clerkAuth.userId,
+      email,
+      username: email,
+      role: fastRow.role || "user",
+      workspaceId: Number(fastRow.workspace_id),
+      workspaceName: displayWorkspaceName(fastRow.workspace_name, fastRow.workspace_slug),
+      workspaceSlug: fastRow.workspace_slug,
+      printingSetupCompleted: Boolean(fastRow.printing_setup_completed),
+      onboardingCompleted: Boolean(fastRow.onboarding_completed),
+    };
   }
 
   let appUserResult = await db.execute({
@@ -167,7 +219,6 @@ async function bootstrapClerkUser() {
         args: [clerkAuth.userId, shouldBeGlobalAdmin ? 1 : 0, appUserId],
       });
       lastSeenTouched = true;
-      console.log("[bootstrapClerkUser] Updated existing user with new clerk_user_id:", appUserId);
     } else {
       const insertedUser = await db.execute({
         sql: "INSERT INTO app_users (clerk_user_id, email, last_seen_at, is_global_admin) VALUES (?, ?, CURRENT_TIMESTAMP, ?)",
@@ -282,20 +333,10 @@ async function getLegacyAdminFromRequest(request) {
 }
 
 export async function getCurrentActor(request) {
-  console.log("[getCurrentActor] Starting...");
   const legacy = await getLegacyAdminFromRequest(request);
-  console.log("[getCurrentActor] Legacy auth:", legacy ? "found" : "not found");
   if (legacy) return legacy;
 
-  try {
-    console.log("[getCurrentActor] Trying bootstrapClerkUser...");
-    const result = await bootstrapClerkUser();
-    console.log("[getCurrentActor] bootstrapClerkUser result:", result ? "success" : "null");
-    return result;
-  } catch (e) {
-    console.error("[getCurrentActor] Clerk auth bootstrap error:", e.message || e);
-    return null;
-  }
+  return bootstrapClerkUser();
 }
 
 export async function requireActor(request) {
