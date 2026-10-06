@@ -16,7 +16,7 @@ export default function TiendanubeOrderCard({ order, isExpanded, onToggle, selec
 
   return (
     <div className="mobile-card" style={{ display: 'block', marginBottom: 0, padding: '18px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+      <div className="order-card-head">
         <div style={{ minWidth: 0, display: 'flex', gap: '12px', alignItems: 'flex-start', flex: 1 }}>
           <input
             type="checkbox"
@@ -40,14 +40,14 @@ export default function TiendanubeOrderCard({ order, isExpanded, onToggle, selec
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+      <div className="order-card-actions">
         <span style={badgeStyle(operational.color)}>{operational.label}</span>
         <button type="button" className="btn btn-sm" onClick={onAction} disabled={updating} style={actionConfig.style}>
           {updating ? 'Guardando...' : actionConfig.label}
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', marginTop: '14px' }}>
+      <div className="order-card-meta">
         <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           <strong style={{ color: 'var(--text)' }}>Total:</strong> {formatOrderTotal(order.total, order.currency)}
         </div>

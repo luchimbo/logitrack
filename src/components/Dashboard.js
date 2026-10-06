@@ -9,6 +9,8 @@ import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
 import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
+import MobileSelectionBar from "./MobileSelectionBar";
+import SectionTitle from "./SectionTitle";
 
 export default function Dashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
@@ -234,7 +236,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <h1 className="section-title">📊 Dashboard</h1>
+                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
                 {renderPeriodPicker()}
             </div>
             <div className="spinner"></div>
@@ -246,7 +248,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <h1 className="section-title">📊 Dashboard</h1>
+                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
                 {renderPeriodPicker()}
             </div>
             <p style={{ color: "var(--danger)" }}>Error: {error}</p>
@@ -258,7 +260,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
+                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones del período</p>
                     {renderPeriodPicker()}
                 </div>
@@ -277,7 +279,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
+                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones</p>
                     {renderPeriodPicker()}
                 </div>
@@ -383,7 +385,7 @@ export default function Dashboard() {
     return (
         <div className="section active">
             <div className="section-header">
-                <h1 className="section-title">📊 Dashboard — {periodLabel()}</h1>
+                <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
                 <p className="section-subtitle">Resumen de operaciones del período</p>
                 {renderPeriodPicker()}
             </div>
@@ -744,6 +746,15 @@ export default function Dashboard() {
                     )}
                 </div>
             )}
+
+            <MobileSelectionBar count={selectedVisibleCount} label="envíos seleccionados" onClear={clearSelection}>
+                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                    Descargar etiquetas
+                </LoadingButton>
+                <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                    Eliminar envíos
+                </LoadingButton>
+            </MobileSelectionBar>
 
             <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>

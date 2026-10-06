@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClerk, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useConnectedProviders } from "@/hooks/useConnectedProviders";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { buildAppNavigation } from "@/lib/appNavigation";
+import { buildAppNavigation, buildMobileNavigation, resolveAppTab } from "@/lib/appNavigation";
 import AppSectionRenderer from "@/components/AppSectionRenderer";
 import AppShell from "@/components/AppShell";
 import OnboardingTour from "@/components/OnboardingTour";
@@ -20,14 +20,14 @@ export default function AppHome() {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navBadges, setNavBadges] = useState({});
+  const scrollPositions = useRef(new Map());
 
   const handleBadgeUpdate = useCallback((key, count) => {
     setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
   }, []);
-  const { currentUser, setCurrentUser, authChecked, authError, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
+  const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
   const workspaceSlug = currentUser?.workspaceSlug;
-  const effectiveActiveTab = workspaceSlug === "legacy" ? activeTab : (activeTab === "operationToday" ? "upload" : activeTab);
 
   // Auto-polling for Google Sheets shipments (GeoModi only)
   // Syncs every 5 minutes and updates the sidebar badge automatically
@@ -59,24 +59,6 @@ export default function AppHome() {
     return () => clearInterval(interval);
   }, [workspaceSlug, handleBadgeUpdate]);
 
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') setSidebarOpen(false);
-    };
-    
-    if (sidebarOpen) {
-      document.body.classList.add('sidebar-open');
-      window.addEventListener('keydown', handleEscape);
-    } else {
-      document.body.classList.remove('sidebar-open');
-    }
-    
-    return () => {
-      document.body.classList.remove('sidebar-open');
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [sidebarOpen]);
-
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
   const canManageUsers = canManageWorkspace;
 
@@ -92,14 +74,58 @@ export default function AppHome() {
     }
   };
 
-  const handleNavClick = (tabId) => {
-    setActiveTab(tabId);
+  const closeMobileNavigation = useCallback(() => setSidebarOpen(false), []);
+  const openMobileNavigation = useCallback(() => setSidebarOpen(true), []);
+
+  const navGroups = useMemo(
+    () => buildAppNavigation({ currentUser, canManageUsers, connectedProviders }),
+    [currentUser, canManageUsers, connectedProviders],
+  );
+  const effectiveActiveTab = resolveAppTab({ requestedTab: activeTab, currentUser, navGroups });
+  const mobileNavigation = useMemo(
+    () => buildMobileNavigation({ currentUser, navGroups }),
+    [currentUser, navGroups],
+  );
+
+  const syncTabUrl = useCallback((tabId, { replace = false } = {}) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tabId);
+    window.history[replace ? "replaceState" : "pushState"]({ tab: tabId }, "", url);
+  }, []);
+
+  const handleNavClick = useCallback((tabId, options = {}) => {
+    const nextTab = resolveAppTab({ requestedTab: tabId, currentUser, navGroups });
+    if (typeof window !== "undefined") scrollPositions.current.set(activeTab, window.scrollY);
+    setActiveTab(nextTab);
     setSidebarOpen(false);
-  };
+    if (typeof window !== "undefined" && nextTab !== activeTab) {
+      syncTabUrl(nextTab, options);
+      window.requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current.get(nextTab) || 0 }));
+    }
+  }, [activeTab, currentUser, navGroups, syncTabUrl]);
+
+  useEffect(() => {
+    if (!currentUser || !navGroups.length) return;
+    if (activeTab !== effectiveActiveTab) {
+      syncTabUrl(effectiveActiveTab, { replace: true });
+    }
+  }, [activeTab, currentUser, effectiveActiveTab, navGroups.length, syncTabUrl]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const handlePopState = () => {
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      const nextTab = resolveAppTab({ requestedTab, currentUser, navGroups });
+      scrollPositions.current.set(activeTab, window.scrollY);
+      setActiveTab(nextTab);
+      setSidebarOpen(false);
+      window.requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current.get(nextTab) || 0 }));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [activeTab, currentUser, navGroups]);
 
   const handleOnboardingClose = markOnboardingClosed;
-
-  const navGroups = buildAppNavigation({ currentUser, canManageUsers, connectedProviders });
 
   const navLinks = navGroups.flatMap((group) => group.items);
   const currentSection = navLinks.find(l => l.id === effectiveActiveTab);
@@ -117,12 +143,13 @@ export default function AppHome() {
 
   if (!currentUser) {
     if (isSignedIn) {
+      const serviceError = authErrorCode === "DATABASE_UNAVAILABLE" || authErrorCode === "SERVER_ERROR";
       return (
         <main className="main-content" style={{ marginLeft: 0 }}>
           <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', flexDirection: 'column', gap: '16px' }}>
             <div style={{ textAlign: 'center' }}>
-              <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>Error de autenticación</h2>
-              <p style={{ color: 'var(--text-muted)' }}>No se pudo sincronizar tu cuenta. Intentá de nuevo.</p>
+              <h2 style={{ color: 'var(--text)', marginBottom: '8px' }}>{serviceError ? 'Servicio temporalmente no disponible' : 'Error de autenticación'}</h2>
+              <p style={{ color: 'var(--text-muted)' }}>{serviceError ? 'Tu sesión está activa, pero no se pudo cargar tu cuenta.' : 'No se pudo sincronizar tu cuenta. Intentá de nuevo.'}</p>
               {authError && (
                 <div style={{ 
                   color: 'var(--danger)', 
@@ -140,10 +167,10 @@ export default function AppHome() {
               )}
             </div>
             <button 
-              onClick={handleLogout}
+              onClick={serviceError ? () => window.location.reload() : handleLogout}
               className="btn btn-primary"
             >
-              Cerrar sesión e intentar de nuevo
+              {serviceError ? 'Volver a intentar' : 'Cerrar sesión e intentar de nuevo'}
             </button>
           </div>
         </main>
@@ -160,10 +187,11 @@ export default function AppHome() {
         currentUser={currentUser}
         navBadges={navBadges}
         navGroups={navGroups}
-        onCloseSidebar={() => setSidebarOpen(false)}
+        mobileNavigation={mobileNavigation}
+        onCloseSidebar={closeMobileNavigation}
         onLogout={handleLogout}
         onNavigate={handleNavClick}
-        onOpenSidebar={() => setSidebarOpen(true)}
+        onOpenSidebar={openMobileNavigation}
         sectionTitle={sectionTitle}
         sidebarOpen={sidebarOpen}
       >

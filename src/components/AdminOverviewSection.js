@@ -145,7 +145,7 @@ export default function AdminOverviewSection() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 390px) minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+      <div className="admin-overview-layout">
         <div className="card">
           <div className="form-group" style={{ marginBottom: 14 }}>
             <input

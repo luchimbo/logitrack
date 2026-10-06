@@ -194,13 +194,13 @@ function OrderCard({
             checked={selected}
             onChange={onToggleSelected}
             aria-label={`Seleccionar venta ${order.id}`}
-            style={{ marginTop: "7px", width: "18px", height: "18px", accentColor: "var(--accent)" }}
+            style={{ marginTop: "3px", accentColor: "var(--accent)" }}
           />
           <div style={{ minWidth: 0 }}>
             <div className="mobile-card-title" style={{ fontSize: "20px", marginBottom: "4px" }}>Venta #{order.id}</div>
             <div style={{ fontWeight: 650 }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</div>
             <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "2px" }}>
-              {logisticLabel(order)} · Envio {order.shipmentId || "-"}
+              {logisticLabel(order)} · Envío {order.shipmentId || "-"}
             </div>
             <MercadoLibreShipmentMeta shipment={order} />
           </div>
@@ -214,11 +214,11 @@ function OrderCard({
         <div><strong style={{ color: "var(--text)" }}>Total:</strong> {formatMoney(order.total, order.currency)}</div>
         <div><strong style={{ color: "var(--text)" }}>Fecha:</strong> {order.createdAt ? formatArgentinaDate(order.createdAt) : "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Tracking:</strong> {order.trackingNumber || "-"}</div>
-        <div><strong style={{ color: "var(--text)" }}>Direccion:</strong> {addressLabel(order.address) || "-"}</div>
+        <div><strong style={{ color: "var(--text)" }}>Dirección:</strong> {addressLabel(order.address) || "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Productos:</strong> {totalUnits || 0} unid. {productNames ? `· ${productNames}` : ""}</div>
       </div>
 
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "14px" }}>
+      <div className="mobile-card-actions">
         <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || order.printability?.id === "not_ready"}>
           {importing ? "Importando..." : order.labelImportedAt ? "Reimportar etiqueta" : "Importar ZPL"}
         </button>
@@ -233,7 +233,7 @@ function OrderCard({
         <button type="button" className="btn btn-ghost btn-sm" onClick={onToggleHistory}>
           {historyOpen ? "Ocultar historial" : "Ver historial"}
         </button>
-        {order.shipmentRowId ? <span style={{ color: "var(--success)", fontSize: "12px", alignSelf: "center" }}>Operacion #{order.shipmentRowId}</span> : null}
+        {order.shipmentRowId ? <span style={{ color: "var(--success)", fontSize: "12px", alignSelf: "center" }}>Operación #{order.shipmentRowId}</span> : null}
       </div>
 
       {historyOpen ? <Timeline events={order.timeline || []} /> : null}

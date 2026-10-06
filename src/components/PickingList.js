@@ -5,6 +5,7 @@ import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
 import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import LoadingButton from "./LoadingButton";
+import SectionTitle from "./SectionTitle";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
@@ -40,7 +41,7 @@ export default function PickingList() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">📋 Lista de Picking</h1>
+                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
                 </div>
                 <div className="spinner"></div>
             </div>
@@ -50,7 +51,7 @@ export default function PickingList() {
     if (error) {
         return (
             <div className="section active">
-                <div className="section-header"><h1 className="section-title">📋 Lista de Picking</h1></div>
+                <div className="section-header"><SectionTitle icon="picking">Lista de picking</SectionTitle></div>
                 <p style={{ color: "var(--danger)" }}>Error: {error}</p>
             </div>
         );
@@ -60,7 +61,7 @@ export default function PickingList() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">📋 Lista de Picking</h1>
+                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
                     <p className="section-subtitle">Productos a buscar — divididos por método de envío</p>
                 </div>
                 <div className="empty-state">
@@ -255,7 +256,7 @@ export default function PickingList() {
             <div className="picking-hero">
                 <div>
                     <p className="picking-kicker">Operación diaria</p>
-                    <h1 className="section-title">Lista de Picking</h1>
+                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
                     <p className="section-subtitle">Productos a preparar, priorizados por unidades pendientes.</p>
                 </div>
                 <LoadingButton isLoading={isExportingPdf} spinnerSize="md" className="btn btn-primary" onClick={handleExportPdf}>

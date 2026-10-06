@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const STEPS = [
   {
@@ -35,9 +35,41 @@ const STEP_BY_TAB = STEPS.reduce((acc, step, index) => {
 
 export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
   const [hasStarted, setHasStarted] = useState(false);
+  const dialogRef = useRef(null);
   const step = hasStarted ? (STEP_BY_TAB[activeTab] ?? 1) : 0;
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
+    dialog?.querySelector('button')?.focus();
+    document.body.classList.add('mobile-nav-open');
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose(false);
+      if (event.key !== 'Tab' || !dialog) return;
+
+      const focusable = [...dialog.querySelectorAll(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.classList.remove('mobile-nav-open');
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [onClose]);
 
   const handleNext = () => {
     if (!hasStarted) {
@@ -70,12 +102,13 @@ export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(5, 8, 16, 0.72)', backdropFilter: 'blur(6px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-      <div className="card" style={{ width: '100%', maxWidth: '620px', padding: '28px' }}>
-        <div className="flex-between mb-md" style={{ alignItems: 'flex-start', gap: '16px' }}>
+    <div className="onboarding-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(false); }}>
+      <section ref={dialogRef} className="card onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <div className="onboarding-scroll">
+        <div className="onboarding-heading">
           <div>
-            <div style={{ color: 'var(--accent)', fontSize: '12px', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: '8px' }}>Tour guiado</div>
-            <h3 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '8px' }}>{current.title}</h3>
+            <div className="onboarding-kicker">Recorrido inicial</div>
+            <h3 id="onboarding-title">{current.title}</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.7 }}>{current.body}</p>
           </div>
           <div className="topbar-chip subtle">Página {step + 1} de {STEPS.length}</div>
@@ -95,10 +128,11 @@ export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
             </div>
           </div>
         </div>
+        </div>
 
-        <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
+        <div className="onboarding-actions">
           <button type="button" className="btn btn-ghost" onClick={() => onClose(false)}>Omitir por ahora</button>
-          <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+          <div>
             {step > 0 ? (
               <button type="button" className="btn btn-ghost" onClick={handleBack}>Atrás</button>
             ) : null}
@@ -107,7 +141,7 @@ export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
             </button>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

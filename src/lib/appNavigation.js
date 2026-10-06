@@ -37,3 +37,52 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
   }
   return navGroups;
 }
+
+export function getDefaultAppTab({ currentUser, navGroups = [] }) {
+  const preferred = currentUser?.workspaceSlug === "legacy" ? "operationToday" : "upload";
+  const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
+
+  if (availableIds.has(preferred)) return preferred;
+  return navGroups[0]?.items?.[0]?.id || "upload";
+}
+
+export function resolveAppTab({ requestedTab, currentUser, navGroups = [] }) {
+  const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
+  return availableIds.has(requestedTab)
+    ? requestedTab
+    : getDefaultAppTab({ currentUser, navGroups });
+}
+
+export function buildMobileNavigation({ currentUser, navGroups = [] }) {
+  const preferredIds = currentUser?.workspaceSlug === "legacy"
+    ? ["operationToday", "pickingList", "flex", "colecta"]
+    : ["upload", "pickingList", "flex", "colecta"];
+  const shortLabels = {
+    operationToday: "Hoy",
+    upload: "Cargar",
+    pickingList: "Picking",
+    flex: "Flex",
+    colecta: "Colecta",
+  };
+  const itemById = new Map(
+    navGroups.flatMap((group) => group.items).map((item) => [item.id, item]),
+  );
+
+  const primaryItems = preferredIds
+    .map((id) => itemById.get(id))
+    .filter(Boolean)
+    .map((item) => ({ ...item, label: shortLabels[item.id] || item.label }));
+  const primaryIds = new Set(primaryItems.map((item) => item.id));
+  const moreGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !primaryIds.has(item.id)),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  return { primaryItems, moreGroups };
+}
+
+export function isMobileMoreActive({ activeTab, primaryItems = [] }) {
+  return Boolean(activeTab) && !primaryItems.some((item) => item.id === activeTab);
+}

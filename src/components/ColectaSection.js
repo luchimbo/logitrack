@@ -9,6 +9,8 @@ import { resolveAtoRemitentes, accountForShipment } from "@/lib/accountDetection
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
+import MobileSelectionBar from "./MobileSelectionBar";
+import SectionTitle from "./SectionTitle";
 
 export default function ColectaSection() {
     const { getTodayQueryString, reloadBatches } = useBatch();
@@ -153,7 +155,7 @@ export default function ColectaSection() {
     if (loading && !shipments.length) {
         return (
             <div className="section active">
-                <div className="section-header"><h1 className="section-title">📦 Colecta</h1></div>
+                <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
                 <div className="spinner"></div>
             </div>
         );
@@ -162,7 +164,7 @@ export default function ColectaSection() {
     if (error) {
         return (
             <div className="section active">
-                <div className="section-header"><h1 className="section-title">📦 Colecta</h1></div>
+                <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
                 <p style={{ color: "var(--danger)" }}>Error: {error}</p>
             </div>
         );
@@ -173,7 +175,7 @@ export default function ColectaSection() {
             <div className="section active">
                 <div className="section-header flex-between">
                     <div>
-                        <h1 className="section-title">📦 Colecta</h1>
+                        <SectionTitle icon="colecta">Colecta</SectionTitle>
                         <p className="section-subtitle">Envíos para colecta tradicional</p>
                     </div>
                     {accountSelector}
@@ -190,7 +192,7 @@ export default function ColectaSection() {
         <div className="section active">
             <div className="section-header flex-between">
                 <div>
-                    <h1 className="section-title">📦 Colecta</h1>
+                    <SectionTitle icon="colecta">Colecta</SectionTitle>
                     <p className="section-subtitle">{shipments.length} envíos de colecta</p>
                 </div>
                 {accountSelector}
@@ -327,6 +329,7 @@ export default function ColectaSection() {
                                 <LoadingButton
                                     isLoading={deletingId === s.id}
                                     className="btn btn-sm"
+                                    aria-label={`Eliminar envío ${s.id}`}
                                     style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                     onClick={() => handleDeleteShipment(s.id)}
                                 >
@@ -337,6 +340,18 @@ export default function ColectaSection() {
                     ))}
                 </div>
             </div>
+
+            <MobileSelectionBar count={selectedVisibleCount} label="envíos seleccionados" onClear={clearSelection}>
+                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                    Descargar etiquetas
+                </LoadingButton>
+                <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" onClick={handleBulkPrintLabels} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
+                    Imprimir etiquetas
+                </LoadingButton>
+                <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                    Eliminar envíos
+                </LoadingButton>
+            </MobileSelectionBar>
 
             <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>

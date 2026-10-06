@@ -9,6 +9,8 @@ import { useShipmentLabelDownloads } from "@/hooks/useShipmentLabelDownloads";
 import { useShipmentSelection } from "@/hooks/useShipmentSelection";
 import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
+import MobileSelectionBar from "./MobileSelectionBar";
+import SectionTitle from "./SectionTitle";
 
 export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
@@ -228,7 +230,7 @@ export default function UploadSection() {
     return (
         <div id="section-upload" className="section active">
             <div className="section-header">
-                <h1 className="section-title">📦 Subir Etiquetas</h1>
+                <SectionTitle icon="upload">Subir etiquetas</SectionTitle>
                 <p className="section-subtitle">Arrastrá o seleccioná archivos ZPL/TXT, o un .rar con el archivo &quot;Etiquetas de Envío.txt&quot; adentro. Las etiquetas se procesan y entran directo a la operación del workspace actual.</p>
             </div>
 
@@ -354,7 +356,7 @@ export default function UploadSection() {
                                         <span style={{ fontWeight: 600 }}>Lote #{b.id}</span>
                                         <span style={{ color: 'var(--text-muted)' }}>· {b.total_packages} envíos</span>
                                         {b.filenames && <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>· {b.filenames}</span>}
-                                        <LoadingButton isLoading={deletingBatchId === b.id} onClick={() => handleDeleteBatch(b.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '12px', padding: '0 4px' }} title="Eliminar lote">🗑️</LoadingButton>
+                                        <LoadingButton isLoading={deletingBatchId === b.id} onClick={() => handleDeleteBatch(b.id)} className="icon-button" style={{ color: 'var(--danger)' }} title="Eliminar lote" aria-label={`Eliminar lote ${b.id}`}>🗑️</LoadingButton>
                                     </div>
                                 ))}
                             </div>
@@ -410,7 +412,7 @@ export default function UploadSection() {
                                                     >
                                                         Descargar
                                                     </LoadingButton>
-                                                    <LoadingButton isLoading={deletingId === s.id} onClick={() => handleDeleteShipment(s.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '14px' }} title="Eliminar envío">✕</LoadingButton>
+                                                    <LoadingButton isLoading={deletingId === s.id} onClick={() => handleDeleteShipment(s.id)} className="icon-button" style={{ color: 'var(--danger)' }} title="Eliminar envío" aria-label={`Eliminar envío ${s.id}`}>✕</LoadingButton>
                                                 </div>
                                             </td>
                                             </tr>
@@ -462,6 +464,7 @@ export default function UploadSection() {
                                             <LoadingButton 
                                                 isLoading={deletingId === s.id}
                                                 className="btn btn-sm" 
+                                                aria-label={`Eliminar envío ${s.id}`}
                                                 onClick={() => handleDeleteShipment(s.id)}
                                                 style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}
                                             >
@@ -479,6 +482,15 @@ export default function UploadSection() {
                     )}
                 </div>
             </div>
+
+            <MobileSelectionBar count={selectedShipmentIds.length} label="envíos seleccionados" onClear={clearSelection}>
+                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
+                    Descargar etiquetas
+                </LoadingButton>
+                <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                    Eliminar envíos
+                </LoadingButton>
+            </MobileSelectionBar>
 
             <LabelViewer shipmentId={viewingLabelId} onClose={() => setViewingLabelId(null)} />
         </div>

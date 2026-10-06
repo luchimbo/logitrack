@@ -1,22 +1,25 @@
 "use client";
 
-import AdminOverviewSection from "@/components/AdminOverviewSection";
-import ColectaSection from "@/components/ColectaSection";
-import Dashboard from "@/components/Dashboard";
-import FlexSection from "@/components/FlexSection";
-import IntegrationsSection from "@/components/IntegrationsSection";
-import MapSection from "@/components/MapSection";
-import MercadoLibreSection from "@/components/MercadoLibreSection";
-import PickingList from "@/components/PickingList";
-import ShopifySection from "@/components/ShopifySection";
-import TiendanubeSection from "@/components/TiendanubeSection";
-import UploadSection from "@/components/UploadSection";
-import UserManagementSection from "@/components/UserManagementSection";
-import ZipnovaSection from "@/components/ZipnovaSection";
-import ZoneConfig from "@/components/ZoneConfig";
-import GoogleSheetsSection from "@/components/GoogleSheetsSection";
-import OperationToday from "@/components/OperationToday";
-import PackageHistorySection from "@/components/PackageHistorySection";
+import dynamic from "next/dynamic";
+
+const loading = () => <div className="section-loading" role="status" aria-live="polite"><div className="spinner" /><span>Cargando sección…</span></div>;
+const AdminOverviewSection = dynamic(() => import("@/components/AdminOverviewSection"), { loading });
+const ColectaSection = dynamic(() => import("@/components/ColectaSection"), { loading });
+const Dashboard = dynamic(() => import("@/components/Dashboard"), { loading });
+const FlexSection = dynamic(() => import("@/components/FlexSection"), { loading });
+const IntegrationsSection = dynamic(() => import("@/components/IntegrationsSection"), { loading });
+const MapSection = dynamic(() => import("@/components/MapSection"), { loading });
+const MercadoLibreSection = dynamic(() => import("@/components/MercadoLibreSection"), { loading });
+const PickingList = dynamic(() => import("@/components/PickingList"), { loading });
+const ShopifySection = dynamic(() => import("@/components/ShopifySection"), { loading });
+const TiendanubeSection = dynamic(() => import("@/components/TiendanubeSection"), { loading });
+const UploadSection = dynamic(() => import("@/components/UploadSection"), { loading });
+const UserManagementSection = dynamic(() => import("@/components/UserManagementSection"), { loading });
+const ZipnovaSection = dynamic(() => import("@/components/ZipnovaSection"), { loading });
+const ZoneConfig = dynamic(() => import("@/components/ZoneConfig"), { loading });
+const GoogleSheetsSection = dynamic(() => import("@/components/GoogleSheetsSection"), { loading });
+const OperationToday = dynamic(() => import("@/components/OperationToday"), { loading });
+const PackageHistorySection = dynamic(() => import("@/components/PackageHistorySection"), { loading });
 
 export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
   switch (activeTab) {

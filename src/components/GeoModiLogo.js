@@ -21,6 +21,7 @@ export default function GeoModiLogo({ size = "md", withTagline = false, centered
       <Image
         src="/logoGeoModi.png"
         alt="GeoModi"
+        priority
         width={current.width}
         height={Math.round(current.width * 0.3)}
         style={{

@@ -25,11 +25,12 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('Auth me error:', error);
-    return NextResponse.json({ 
-      error: 'Error en el servidor', 
-      errorDetail: error.message || 'Unknown error',
-      errorCode: 'SERVER_ERROR',
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
+    const databaseUnavailable = error?.code === 'BLOCKED';
+    return NextResponse.json({
+      error: databaseUnavailable
+        ? 'La base de datos no está disponible. Intentá de nuevo más tarde.'
+        : 'No se pudo cargar tu cuenta. Intentá de nuevo más tarde.',
+      errorCode: databaseUnavailable ? 'DATABASE_UNAVAILABLE' : 'SERVER_ERROR',
+    }, { status: databaseUnavailable ? 503 : 500 });
   }
 }

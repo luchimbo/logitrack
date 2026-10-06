@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api, toast } from "@/lib/api";
+import SectionTitle from "./SectionTitle";
 import LoadingButton from "./LoadingButton";
 
 export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
@@ -180,7 +181,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
     <div className="section active">
       <div className="section-header flex-between" style={{ gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 className="section-title">📊 Envíos Planilla</h1>
+          <SectionTitle icon="dashboard">Envíos de planilla</SectionTitle>
           <p className="section-subtitle">Sincronización con planilla Google Sheets (Respuestas del Formulario)</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

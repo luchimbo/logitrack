@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
-import { useIsMobile } from "@/hooks/useMediaQuery";
+import SectionTitle from "./SectionTitle";
 
 const MapWithNoSSR = dynamic(() => import("./MapComponent"), {
   ssr: false,
@@ -24,7 +24,6 @@ function isWithinArgentina(lat, lng) {
 
 export default function MapSection() {
   const { getTodayQueryString } = useBatch();
-  const isMobile = useIsMobile();
   const [view, setView] = useState("flex");
   const [shipments, setShipments] = useState([]);
   const [displayedShipments, setDisplayedShipments] = useState([]);
@@ -120,7 +119,7 @@ export default function MapSection() {
     <div className="section active">
       <div className="section-header flex-between mb-0" style={{ gap: "16px", flexWrap: "wrap" }}>
         <div>
-          <h1 className="section-title">📍 Mapa de Entregas</h1>
+          <SectionTitle icon="map">Mapa de entregas</SectionTitle>
           <p className="section-subtitle">
             {view === "flex" ? "Flex para AMBA" : "Colecta para toda Argentina"}
             {mappedShipments.length > 0 ? ` · ${mappedShipments.length} envios ubicados` : " · Sin envios ubicados"}
@@ -171,7 +170,7 @@ export default function MapSection() {
         </button>
       </div>
 
-      <div style={{ height: isMobile ? "420px" : "640px", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+      <div className="map-canvas-shell">
         {loading && displayedShipments.length === 0 ? (
           <div className="spinner" style={{ margin: "20% auto" }}></div>
         ) : (

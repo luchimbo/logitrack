@@ -7,6 +7,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
   const [authChecked, setAuthChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [authErrorCode, setAuthErrorCode] = useState(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -17,6 +18,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
           setCurrentUser(null);
           setAuthChecked(true);
           setAuthError(errorData.errorDetail || errorData.error || `Error ${res.status}`);
+          setAuthErrorCode(errorData.errorCode || (res.status >= 500 ? "SERVER_ERROR" : "AUTH_FAILED"));
           if (!isSignedIn) {
             router.replace("/login");
           }
@@ -29,10 +31,12 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
         setShowOnboarding(Boolean(user && user.authType === 'clerk' && !user.isGlobalAdmin && !user.onboardingCompleted));
         setAuthChecked(true);
         setAuthError(null);
+        setAuthErrorCode(null);
       } catch (err) {
         setCurrentUser(null);
         setAuthChecked(true);
         setAuthError(err.message || "Error de autenticación");
+        setAuthErrorCode("SERVER_ERROR");
         if (!isSignedIn) {
           router.replace("/login");
         }
@@ -64,6 +68,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
     setCurrentUser,
     authChecked,
     authError,
+    authErrorCode,
     showOnboarding,
     setShowOnboarding,
     markOnboardingClosed,

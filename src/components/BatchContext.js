@@ -19,7 +19,7 @@ export function BatchProvider({ children }) {
     const [rangeTo, setRangeTo] = useState('');
 
     useEffect(() => {
-        if (pathname?.startsWith('/transportista')) return undefined;
+        if (!pathname?.startsWith('/app')) return undefined;
         async function fetchBatches() {
             try {
                 const data = await api("/batches");

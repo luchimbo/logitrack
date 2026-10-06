@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "@/lib/api";
 import TiendanubeOrderCard from "@/components/tiendanube/TiendanubeOrderCard";
 import TiendanubeOrderDetails from "@/components/tiendanube/TiendanubeOrderDetails";
+import MobileSelectionBar from "@/components/MobileSelectionBar";
 import { useTiendanubeOrders } from "@/hooks/useTiendanubeOrders";
 import {
   badgeStyle,
@@ -392,6 +393,29 @@ export default function TiendanubeSection({ currentUser }) {
               </div>
             </div>
           ) : null}
+
+          <MobileSelectionBar
+            count={selectedOrderIds.length}
+            label="pedidos"
+            onClear={() => setSelectedOrderIds([])}
+          >
+            <button
+              type="button"
+              className="btn btn-success btn-sm"
+              disabled={updatingDispatchStatus}
+              onClick={() => updateDispatchStatus('dispatched', selectedOrderIds)}
+            >
+              Marcar despachados
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={updatingDispatchStatus}
+              onClick={() => updateDispatchStatus('to_send', selectedOrderIds)}
+            >
+              Marcar por enviar
+            </button>
+          </MobileSelectionBar>
 
           {orderedOrders.length > 0 ? (
             <>
