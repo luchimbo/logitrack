@@ -1,0 +1,19 @@
+[Unit]
+Description=HTTPS for GeoModi libSQL
+After=network-online.target geomodi-libsql.service
+Wants=network-online.target
+Requires=geomodi-libsql.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/services/geomodi-libsql
+Environment=XDG_DATA_HOME=%h/services/geomodi-libsql/caddy-data
+Environment=XDG_CONFIG_HOME=%h/services/geomodi-libsql/caddy-config
+ExecStart=%h/services/geomodi-libsql/bin/caddy run --config %h/services/geomodi-libsql/Caddyfile --adapter caddyfile
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

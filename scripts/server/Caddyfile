@@ -1,0 +1,15 @@
+{
+    admin off
+    https_port 8443
+    auto_https disable_redirects
+}
+
+db.geomodi.ai {
+    tls {
+        issuer acme {
+            disable_http_challenge
+            alt_tlsalpn_port 8443
+        }
+    }
+    reverse_proxy 127.0.0.1:8088
+}
