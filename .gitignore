@@ -56,3 +56,15 @@ _legacy_backup/
 
 # local agent config
 PAQUETE-IMPRESION-V2/print-agent/config.json
+
+# Scripts locales con credenciales escritas en el código
+check-today.mjs
+verify-final.mjs
+verify-trackings.mjs
+
+# Logs, diagnósticos y paquetes generados
+logs/
+ultimo-error-carga.log
+GeoModi-Impresion-V2.zip
+GeoModi-Impresion-V2/**/config.json
+.claude/
