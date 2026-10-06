@@ -4,6 +4,7 @@ import { ensureDb } from "@/lib/ensureDb";
 import { requireWorkspaceAdmin } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { buildCarrierPortalUrl, createCarrierPortalPublicId } from "@/lib/carrierPortal";
+import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from "@/lib/globalCarrierConfig";
 
 function getOrigin(request) {
   return String(process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "");
@@ -35,10 +36,10 @@ function linkDto(link, origin) {
   };
 }
 
-async function getCarrier(workspaceId, carrierId) {
+async function getCarrier(carrierId) {
   const result = await db.execute({
     sql: "SELECT id, name, display_name, color FROM carriers WHERE id = ? AND workspace_id = ? LIMIT 1",
-    args: [Number(carrierId), workspaceId],
+    args: [Number(carrierId), GLOBAL_CARRIER_CONFIG_SCOPE],
   });
   return result.rows[0] || null;
 }
@@ -49,13 +50,14 @@ export async function GET(request) {
     const authResult = await requireWorkspaceAdmin(request);
     if (authResult.error) return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     const workspaceId = authResult.actor.workspaceId;
+    await ensureGlobalCarrierConfig();
     const result = await db.execute({
       sql: `SELECT c.id AS carrier_id, c.name, c.display_name, c.color,
               l.id, l.workspace_id, l.public_id, l.active, l.created_at, l.rotated_at, l.revoked_at
             FROM carriers c
-            LEFT JOIN carrier_portal_links l ON l.carrier_id = c.id AND l.workspace_id = c.workspace_id
+            LEFT JOIN carrier_portal_links l ON l.carrier_id = c.id AND l.workspace_id = ?
             WHERE c.workspace_id = ? ORDER BY c.name`,
-      args: [workspaceId],
+      args: [workspaceId, GLOBAL_CARRIER_CONFIG_SCOPE],
     });
     const origin = getOrigin(request);
     return NextResponse.json(result.rows.map((row) => ({
@@ -80,8 +82,9 @@ export async function POST(request) {
     const carrierId = Number(body.carrierId);
     if (!Number.isInteger(carrierId) || carrierId <= 0) return NextResponse.json({ error: "Transportista inválido" }, { status: 400 });
     const workspaceId = authResult.actor.workspaceId;
+    await ensureGlobalCarrierConfig();
     assertSigningConfigured();
-    const carrier = await getCarrier(workspaceId, carrierId);
+    const carrier = await getCarrier(carrierId);
     if (!carrier) return NextResponse.json({ error: "Transportista no encontrado" }, { status: 404 });
 
     const existing = await db.execute({ sql: "SELECT * FROM carrier_portal_links WHERE workspace_id = ? AND carrier_id = ? LIMIT 1", args: [workspaceId, carrierId] });
@@ -114,6 +117,7 @@ export async function PATCH(request) {
     const action = body.action;
     if (!Number.isInteger(carrierId) || !["rotate", "revoke"].includes(action)) return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
     const workspaceId = authResult.actor.workspaceId;
+    await ensureGlobalCarrierConfig();
     if (action === "rotate") assertSigningConfigured();
     const existing = await db.execute({ sql: "SELECT * FROM carrier_portal_links WHERE workspace_id = ? AND carrier_id = ? LIMIT 1", args: [workspaceId, carrierId] });
     const link = existing.rows[0];

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { normalizeName, getAllZones } from '@/lib/zoneMapper';
 import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
+import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
 
 export async function GET(request) {
     try {
@@ -9,7 +10,7 @@ export async function GET(request) {
         if (authResult.error) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
-        const zones = await getAllZones(authResult.actor.workspaceId);
+        const zones = await getAllZones();
         return NextResponse.json(zones);
     } catch (error) {
         console.error("Error fetching zones:", error);
@@ -23,7 +24,7 @@ export async function POST(request) {
         if (authResult.error) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
-        const workspaceId = authResult.actor.workspaceId;
+        await ensureGlobalCarrierConfig();
         const { searchParams } = new URL(request.url);
         const partido = searchParams.get('partido');
         const carrier_name = searchParams.get('carrier_name');
@@ -37,7 +38,7 @@ export async function POST(request) {
         // Check if this exact combo already exists
         const existing = await db.execute({
             sql: "SELECT id FROM zone_mappings WHERE workspace_id = ? AND partido = ? AND carrier_name = ?",
-            args: [workspaceId, normPartido, carrier_name]
+            args: [GLOBAL_CARRIER_CONFIG_SCOPE, normPartido, carrier_name]
         });
 
         if (existing.rows.length > 0) {
@@ -47,10 +48,14 @@ export async function POST(request) {
         // Insert new mapping (allow multiple carriers per partido)
         await db.execute({
             sql: "INSERT INTO zone_mappings (workspace_id, partido, carrier_name) VALUES (?, ?, ?)",
-            args: [workspaceId, normPartido, carrier_name]
+            args: [GLOBAL_CARRIER_CONFIG_SCOPE, normPartido, carrier_name]
         });
 
-        return NextResponse.json({ partido: normPartido, carrier_name });
+        const inserted = await db.execute({
+            sql: "SELECT id FROM zone_mappings WHERE workspace_id = ? AND partido = ? AND carrier_name = ? ORDER BY id DESC LIMIT 1",
+            args: [GLOBAL_CARRIER_CONFIG_SCOPE, normPartido, carrier_name]
+        });
+        return NextResponse.json({ id: inserted.rows[0]?.id, partido: normPartido, carrier_name });
     } catch (error) {
         console.error("Error creating zone:", error);
         return NextResponse.json({ error: "Failed to save zone" }, { status: 500 });

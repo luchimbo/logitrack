@@ -4,6 +4,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { deleteShipmentsByIds, normalizeShipmentIds } from '@/lib/shipmentDeletion';
+import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
 
 export async function PATCH(request) {
   try {
@@ -14,6 +15,7 @@ export async function PATCH(request) {
     }
 
     const actor = authResult.actor;
+    await ensureGlobalCarrierConfig();
     const { ids, assigned_carrier: assignedCarrier } = await request.json();
     const normalizedIds = normalizeShipmentIds(ids);
     const carrierName = String(assignedCarrier || '').trim();
@@ -27,7 +29,7 @@ export async function PATCH(request) {
 
     const carrierResult = await db.execute({
       sql: 'SELECT display_name FROM carriers WHERE workspace_id = ? AND name = ? LIMIT 1',
-      args: [actor.workspaceId, carrierName],
+      args: [GLOBAL_CARRIER_CONFIG_SCOPE, carrierName],
     });
     if (!carrierResult.rows.length) {
       return NextResponse.json({ error: 'El transportista de destino ya no está disponible' }, { status: 400 });

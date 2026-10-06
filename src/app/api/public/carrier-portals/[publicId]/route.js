@@ -135,7 +135,7 @@ export async function GET(request, { params }) {
     const db = getReadOnlyDb();
     const linkResult = await db.execute({
       sql: `SELECT l.id, l.workspace_id, l.carrier_id, l.public_id, l.active, c.name, c.display_name, c.color
-            FROM carrier_portal_links l JOIN carriers c ON c.id = l.carrier_id AND c.workspace_id = l.workspace_id
+            FROM carrier_portal_links l JOIN carriers c ON c.id = l.carrier_id
             WHERE l.public_id = ? AND l.active = 1 LIMIT 1`,
       args: [publicId],
     });

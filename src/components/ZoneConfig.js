@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useIsMobile } from "@/hooks/useMediaQuery";
+import SectionTitle from "./SectionTitle";
 
 const PARTIDOS = [
     // CABA
@@ -259,7 +260,7 @@ export default function ZoneConfig() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <h1 className="section-title">⚙️ Configuración de Zonas Flex</h1>
+                    <SectionTitle icon="zones">Configuración de zonas Flex</SectionTitle>
                 </div>
                 <div className="spinner"></div>
             </div>
@@ -276,7 +277,7 @@ export default function ZoneConfig() {
     return (
         <div className="section active">
             <div className="section-header">
-                <h1 className="section-title">⚙️ Configuración de Zonas Flex</h1>
+                <SectionTitle icon="zones">Configuración de zonas Flex</SectionTitle>
                 <p className="section-subtitle">Asigná transportistas a cada partido del AMBA</p>
             </div>
 
@@ -326,7 +327,7 @@ export default function ZoneConfig() {
                             <div key={c.id} style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--surface-hover)", padding: "8px 14px", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
                                 <div style={{ width: "14px", height: "14px", borderRadius: "3px", background: c.color || '#6366f1' }}></div>
                                 <span style={{ fontWeight: 600, fontSize: "13px" }}>{c.display_name || c.name}</span>
-                                <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px", fontSize: "11px", color: "var(--danger)" }} onClick={() => handleDeleteCarrier(c.id)} title="Eliminar">✏️/❌</button>
+                                <button className="icon-button" style={{ color: "var(--danger)" }} onClick={() => handleDeleteCarrier(c.id)} title="Eliminar transportista" aria-label={`Eliminar transportista ${c.display_name || c.name}`}>✕</button>
                             </div>
                         ))
                     )}

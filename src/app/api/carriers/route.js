@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
 import { createCarrierPortalPublicId } from '@/lib/carrierPortal';
+import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
 
 export async function GET(request) {
     try {
@@ -11,9 +12,10 @@ export async function GET(request) {
         if (authResult.error) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
+        await ensureGlobalCarrierConfig();
         const result = await db.execute({
             sql: "SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name",
-            args: [authResult.actor.workspaceId],
+            args: [GLOBAL_CARRIER_CONFIG_SCOPE],
         });
         return NextResponse.json(result.rows);
     } catch (error) {
@@ -30,6 +32,7 @@ export async function POST(request) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
         const workspaceId = authResult.actor.workspaceId;
+        await ensureGlobalCarrierConfig();
         const { searchParams } = new URL(request.url);
         const name = searchParams.get('name');
         const display_name = searchParams.get('display_name');
@@ -45,19 +48,19 @@ export async function POST(request) {
 
         const existing = await db.execute({
             sql: "SELECT id FROM carriers WHERE workspace_id = ? AND name = ?",
-            args: [workspaceId, cleanName]
+            args: [GLOBAL_CARRIER_CONFIG_SCOPE, cleanName]
         });
 
         if (existing.rows.length > 0) {
             await db.execute({
                 sql: "UPDATE carriers SET display_name = ?, color = ? WHERE workspace_id = ? AND name = ?",
-                args: [cleanDisplay, cleanColor, workspaceId, cleanName]
+                args: [cleanDisplay, cleanColor, GLOBAL_CARRIER_CONFIG_SCOPE, cleanName]
             });
             return NextResponse.json({ id: existing.rows[0].id, name: cleanName, display_name: cleanDisplay, color: cleanColor });
         } else {
             const result = await db.execute({
                 sql: "INSERT INTO carriers (workspace_id, name, display_name, color) VALUES (?, ?, ?, ?)",
-                args: [workspaceId, cleanName, cleanDisplay, cleanColor]
+                args: [GLOBAL_CARRIER_CONFIG_SCOPE, cleanName, cleanDisplay, cleanColor]
             });
             const id = Number(result.lastInsertRowid);
             await db.execute({

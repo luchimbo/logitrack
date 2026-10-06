@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { ensureDb } from "./ensureDb";
+import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from "./globalCarrierConfig";
 
 export function normalizeName(name) {
     if (!name) return "";
@@ -26,32 +27,27 @@ function canonicalPartido(normName) {
     return s;
 }
 
-export async function assignCarrier(partido, workspaceId = null) {
+export async function assignCarrier(partido) {
     if (!partido) return null;
     await ensureDb();
+    await ensureGlobalCarrierConfig();
     const normPartido = canonicalPartido(normalizeName(partido));
-    const result = workspaceId
-        ? await db.execute({
-            sql: "SELECT carrier_name FROM zone_mappings WHERE workspace_id = ? AND partido = ?",
-            args: [workspaceId, normPartido]
-        })
-        : await db.execute({
-            sql: "SELECT carrier_name FROM zone_mappings WHERE partido = ?",
-            args: [normPartido]
-        });
+    const result = await db.execute({
+        sql: "SELECT carrier_name FROM zone_mappings WHERE workspace_id = ? AND partido = ? ORDER BY id",
+        args: [GLOBAL_CARRIER_CONFIG_SCOPE, normPartido]
+    });
     if (result.rows.length > 0) {
         return result.rows[0].carrier_name;
     }
     return null;
 }
 
-export async function getAllZones(workspaceId = null) {
+export async function getAllZones() {
     await ensureDb();
-    const result = workspaceId
-        ? await db.execute({
-            sql: "SELECT id, partido, carrier_name, workspace_id FROM zone_mappings WHERE workspace_id = ? ORDER BY partido",
-            args: [workspaceId],
-        })
-        : await db.execute("SELECT id, partido, carrier_name, workspace_id FROM zone_mappings ORDER BY partido");
+    await ensureGlobalCarrierConfig();
+    const result = await db.execute({
+        sql: "SELECT id, partido, carrier_name, workspace_id FROM zone_mappings WHERE workspace_id = ? ORDER BY partido, id",
+        args: [GLOBAL_CARRIER_CONFIG_SCOPE],
+    });
     return result.rows;
 }
