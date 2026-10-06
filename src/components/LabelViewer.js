@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { toast } from "@/lib/api";
 import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 
 export default function LabelViewer({ shipmentId, onClose }) {
+    const dialogRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [imageUrl, setImageUrl] = useState(null);
@@ -50,10 +51,34 @@ export default function LabelViewer({ shipmentId, onClose }) {
         if (!shipmentId) return;
         const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
+        const previousFocus = document.activeElement;
+        const dialog = dialogRef.current;
+        dialog?.focus();
+        const handleKeyDown = (event) => {
+            if (event.key === "Escape") {
+                onClose();
+                return;
+            }
+            if (event.key !== "Tab" || !dialog) return;
+            const focusable = [...dialog.querySelectorAll("button:not([disabled]),a[href],[tabindex]:not([tabindex='-1'])")];
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
         return () => {
             document.body.style.overflow = originalOverflow;
+            document.removeEventListener("keydown", handleKeyDown);
+            if (previousFocus instanceof HTMLElement) previousFocus.focus();
         };
-    }, [shipmentId]);
+    }, [onClose, shipmentId]);
 
     const handleDownload = async () => {
         if (!shipmentId) return;
@@ -107,21 +132,21 @@ export default function LabelViewer({ shipmentId, onClose }) {
     if (!shipmentId) return null;
 
     return createPortal(
-        <div className="label-modal-overlay" onClick={onClose}>
-            <div className="label-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="label-modal-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+            <div ref={dialogRef} className="label-modal" role="dialog" aria-modal="true" aria-labelledby="label-modal-title" tabIndex={-1}>
                 <div className="label-modal-header">
-                    <h3>Vista previa de etiqueta</h3>
+                    <h3 id="label-modal-title">Vista previa de etiqueta</h3>
                     <button className="label-modal-close" onClick={onClose} aria-label="Cerrar vista previa">×</button>
                 </div>
                 <div className="label-modal-body">
                     {loading && (
-                        <div className="label-modal-loading">
+                        <div className="label-modal-loading" role="status" aria-live="polite">
                             <div className="spinner" style={{ width: "40px", height: "40px" }}></div>
                             <p>Cargando etiqueta...</p>
                         </div>
                     )}
                     {error && !loading && (
-                        <div className="label-modal-error">
+                        <div className="label-modal-error" role="alert">
                             <p>{error}</p>
                             <button className="btn btn-primary btn-sm" onClick={loadLabel}>Reintentar</button>
                         </div>

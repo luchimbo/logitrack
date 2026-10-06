@@ -5,6 +5,8 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { parseZplFile } from '@/lib/zplParser';
 import { isDispatchDateValue } from '@/lib/dispatchDate';
+import { isGenericFlexProductName, resolveGenericFlexProducts } from '@/lib/flexProductResolver';
+import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 
 function isMissingMetadata(value) {
   const normalized = String(value || '').trim().toUpperCase();
@@ -45,7 +47,7 @@ export async function POST(request) {
       : null;
 
     const sqlParts = [
-      `SELECT s.id, s.sku, s.product_name, s.color, s.voltage, s.raw_zpl
+      `SELECT s.id, s.tracking_number, s.sku, s.product_name, s.color, s.voltage, s.quantity, s.raw_zpl
             FROM shipments s
             JOIN daily_batches b ON b.id = s.batch_id AND b.workspace_id = s.workspace_id
             WHERE s.workspace_id = ?`,
@@ -60,11 +62,17 @@ export async function POST(request) {
               AND (
                 s.sku IS NULL OR TRIM(s.sku) = '' OR UPPER(TRIM(s.sku)) = 'SIN-SKU'
                 OR s.product_name IS NULL OR TRIM(s.product_name) = '' OR UPPER(TRIM(s.product_name)) = 'SIN-SKU'
+                OR LOWER(TRIM(s.product_name)) = 'unidad'
                 OR UPPER(TRIM(s.product_name)) GLOB '[0-3][0-9] [A-Z][A-Z][A-Z]*'
                 OR UPPER(TRIM(s.product_name)) GLOB '[A-Z][A-Z][A-Z] [0-3][0-9]'
               )`
     );
     const result = await db.execute({ sql: sqlParts.join(' '), args: sqlArgs });
+    const flexResolution = await resolveGenericFlexProducts({
+      workspaceId,
+      shipments: result.rows || [],
+      maxPages: 5,
+    });
 
     let updated = 0;
     let parsed = 0;
@@ -73,32 +81,41 @@ export async function POST(request) {
     for (const row of result.rows || []) {
       const recovered = parseStoredLabel(row.raw_zpl);
       if (recovered) parsed += 1;
+      const resolved = flexResolution.resolved.get(String(row.tracking_number || '').trim());
 
       const nextSku = isMissingMetadata(row.sku) && recovered && !isMissingMetadata(recovered.sku) ? recovered.sku : row.sku;
-      const nextProductName = isMissingMetadata(row.product_name) || isDispatchDateValue(row.product_name)
+      let nextProductName = isMissingMetadata(row.product_name) || isDispatchDateValue(row.product_name)
         ? (!isMissingMetadata(recovered?.product_name) ? recovered.product_name
           : !isMissingMetadata(row.sku) ? row.sku
           : null)
         : row.product_name;
+      let nextQuantity = row.quantity;
+      let resolvedSku = nextSku;
+      if (resolved && isGenericFlexProductName(row.product_name)) {
+        nextProductName = resolved.product_name;
+        resolvedSku = resolved.sku || nextSku;
+        nextQuantity = resolved.quantity;
+      }
       if (nextProductName !== row.product_name && isMissingMetadata(recovered?.product_name) && nextProductName === row.sku) skuFallbacks += 1;
       const nextColor = isMissingMetadata(row.color) && recovered && !isMissingMetadata(recovered.color) ? recovered.color : row.color;
       const nextVoltage = isMissingMetadata(row.voltage) && recovered && !isMissingMetadata(recovered.voltage) ? recovered.voltage : row.voltage;
 
-      if (nextSku === row.sku && nextProductName === row.product_name && nextColor === row.color && nextVoltage === row.voltage) {
+      if (resolvedSku === row.sku && nextProductName === row.product_name && nextQuantity === row.quantity && nextColor === row.color && nextVoltage === row.voltage) {
         unchanged += 1;
         continue;
       }
 
       await db.execute({
         sql: `UPDATE shipments
-              SET sku = ?, product_name = ?, color = ?, voltage = ?
+              SET sku = ?, product_name = ?, quantity = ?, color = ?, voltage = ?
               WHERE id = ? AND workspace_id = ?`,
-        args: [nextSku, nextProductName, nextColor, nextVoltage, row.id, workspaceId],
+        args: [resolvedSku, nextProductName, nextQuantity, nextColor, nextVoltage, row.id, workspaceId],
       });
       updated += 1;
     }
 
-    return NextResponse.json({ ok: true, windowStart, date: today, candidates: result.rows?.length || 0, parsed, updated, skuFallbacks, unchanged });
+    if (updated) await bumpFlexPortalRevision(db, workspaceId);
+    return NextResponse.json({ ok: true, windowStart, date: today, candidates: result.rows?.length || 0, parsed, updated, resolved: flexResolution.resolved.size, unresolved: flexResolution.unresolved.length, syncErrors: flexResolution.syncErrors, skuFallbacks, unchanged });
   } catch (error) {
     console.error('Error repairing Flex metadata:', error);
     return NextResponse.json({ error: 'Failed to repair Flex metadata' }, { status: 500 });

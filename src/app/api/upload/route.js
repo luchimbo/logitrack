@@ -7,6 +7,7 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { bumpFlexPortalRevision } from '@/lib/flexPortal';
+import { resolveGenericFlexProducts } from '@/lib/flexProductResolver';
 
 function toDbValue(value) {
     if (value === undefined || value === null) return null;
@@ -54,6 +55,21 @@ export async function POST(request) {
                 }
             }
             allShipments.push(...parsed);
+        }
+
+        // Algunas etiquetas Flex imprimen el texto genérico "Unidad". Antes de
+        // guardarlas, buscamos la orden por tracking (nunca por SKU) en ML.
+        const flexResolution = await resolveGenericFlexProducts({
+            workspaceId,
+            shipments: allShipments,
+            maxPages: 5,
+        });
+        for (const shipment of allShipments) {
+            const metadata = flexResolution.resolved.get(String(shipment.tracking_number || '').trim());
+            // Las etiquetas aún no tienen id: usamos el tracking para aplicar el
+            // resultado de la resolución sin relajar la coincidencia en ML.
+            if (!metadata) continue;
+            Object.assign(shipment, metadata);
         }
 
         // Daily batch management
@@ -208,6 +224,11 @@ export async function POST(request) {
             total_without_zpl: withoutZpl,
             total_in_batch: finalBatch.rows[0].total_packages,
             filenames: filenames,
+            flex_metadata: {
+                resolved: flexResolution.resolved.size,
+                unresolved: flexResolution.unresolved.length,
+                sync_errors: flexResolution.syncErrors,
+            },
         });
 
     } catch (error) {
