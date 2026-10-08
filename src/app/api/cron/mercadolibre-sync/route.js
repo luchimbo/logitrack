@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
+import { retryMercadoLibreNotifications } from '@/lib/mercadolibreNotificationProcessor';
+import { ensureDb } from '@/lib/ensureDb';
 
 // El cron debe poder completar todas las cuentas aunque la API de ML esté lenta.
 export const maxDuration = 300;
@@ -10,6 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   // Vercel Cron envía Authorization: Bearer ${CRON_SECRET} si la env está definida.
   const secret = process.env.CRON_SECRET;
+  if (!secret) return NextResponse.json({ error: 'CRON_SECRET no configurado' }, { status: 503 });
   if (secret) {
     const auth = request.headers.get('authorization') || '';
     if (auth !== `Bearer ${secret}`) {
@@ -21,6 +24,8 @@ export async function GET(request) {
   let totalSynced = 0;
 
   try {
+    await ensureDb();
+    const notifications = await retryMercadoLibreNotifications();
     const connections = await listAllActiveIntegrationConnections({ provider: 'mercadolibre' });
     const syncConnection = async (connection) => {
       try {
@@ -51,7 +56,7 @@ export async function GET(request) {
       if (result.ok) totalSynced += result.synced;
     }
 
-    return NextResponse.json({ ok: true, connections: connections.length, totalSynced, results });
+    return NextResponse.json({ ok: true, connections: connections.length, totalSynced, notifications, results });
   } catch (error) {
     console.error('Cron ML sync fatal error:', error);
     return NextResponse.json({ error: error.message || 'Cron sync failed' }, { status: 500 });

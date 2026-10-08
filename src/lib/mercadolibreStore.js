@@ -4,6 +4,7 @@ import { assignCarrier } from '@/lib/zoneMapper';
 import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
+import { captureFinancialShipment } from '@/lib/financeStore';
 
 function json(value, fallback) {
   try {
@@ -161,9 +162,23 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
   if (!normalized.orderId) return;
   const resolvedConnectionId = connectionId ? Number(connectionId) : null;
   const existing = await db.execute({
-    sql: `SELECT id, label_imported_at, shipment_row_id FROM mercadolibre_orders WHERE integration_connection_id = ? AND order_id = ? LIMIT 1`,
-    args: [resolvedConnectionId, normalized.orderId],
+    sql: `SELECT * FROM mercadolibre_orders WHERE workspace_id = ? AND integration_connection_id = ? AND order_id = ? LIMIT 1`,
+    args: [workspaceId, resolvedConnectionId, normalized.orderId],
   });
+  if (existing.rows.length && !payload.shipment) throw new Error('No se pudo consultar el envío; se conservan los datos anteriores');
+  if (existing.rows.length) {
+    const previous = existing.rows[0];
+    if (!payload.leadTime && !payload.shipment?.lead_time) normalized.leadTimeJson = previous.lead_time_json || '{}';
+    if (!payload.carrier) normalized.carrierJson = previous.carrier_json || 'null';
+    if (!payload.history?.length) normalized.historyJson = previous.history_json || '[]';
+  }
+  if (existing.rows.length && payload.light) {
+    const previous = existing.rows[0];
+    normalized.leadTimeJson = previous.lead_time_json || '{}';
+    normalized.delaysJson = previous.delays_json || 'null';
+    normalized.carrierJson = previous.carrier_json || 'null';
+    normalized.historyJson = previous.history_json || '[]';
+  }
   const values = [
     workspaceId,
     resolvedConnectionId,
@@ -210,6 +225,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
         WHERE id = ?`,
       args: [...values, Number(existing.rows[0].id)],
     });
+    await captureFinancialShipment({ workspaceId, connectionId: resolvedConnectionId, ...payload });
     return;
   }
 
@@ -223,6 +239,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: values,
   });
+  await captureFinancialShipment({ workspaceId, connectionId: resolvedConnectionId, ...payload });
 }
 
 async function getFlexConfigCached(client, { siteId, userId, cache }) {
@@ -246,12 +263,14 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   let delays = null;
   let carrier = null;
   let history = [];
+  let costs = null;
   if (shipmentId) {
     // Resiliente: un fallo puntual de ML (429/5xx/red) no debe abortar el sync masivo. Si no
     // se puede traer el shipment, guardamos igual la orden con los datos del search.
     shipment = await client.getShipment(shipmentId).catch(() => null);
+    if (shipment && ['cross_docking', 'xd_drop_off', 'drop_off', 'pickup'].includes(shipment.logistic?.type)) costs = await client.getShipmentCosts(shipmentId).catch(() => null);
     if (light) {
-      return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
+      return { order, shipment, costs, shipmentItems, leadTime, delays, carrier, history, light: true };
     }
     shipmentItems = await client.getShipmentItems(shipmentId).catch(() => []);
     leadTime = await client.getShipmentLeadTime(shipmentId).catch(() => null);
@@ -268,7 +287,7 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
       if (assignment || flexConfig) carrier = { ...(carrier || {}), flex_assignment: assignment, flex_config: flexConfig };
     }
   }
-  return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
+  return { order, shipment, costs, shipmentItems, leadTime, delays, carrier, history };
 }
 
 // Sincroniza UNA orden con su detalle COMPLETO (shipment, items, lead_time, delays, carrier,

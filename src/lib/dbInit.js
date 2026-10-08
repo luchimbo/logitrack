@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { db, hasDbCredentials } from "./db";
+import { financeStatements } from './financeSchema.js';
 
 let _initialized = false;
 
@@ -17,6 +18,7 @@ export async function initDb() {
   _initialized = true;
 
   const statements = [
+    ...financeStatements,
     `CREATE TABLE IF NOT EXISTS shipments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       batch_id INTEGER,
@@ -577,7 +579,7 @@ export async function initDb() {
   // Firma del esquema: el código de inicialización se ejecuta completo solo cuando cambia (p. ej. tras un
   // despliegue). En los arranques en frío siguientes alcanza con una consulta para comprobarla; con una base
   // remota de alta latencia cada viaje cuesta cientos de milisegundos.
-  const schemaSignature = createHash("sha256").update(initDb.toString()).digest("hex").slice(0, 32);
+  const schemaSignature = createHash("sha256").update(initDb.toString() + JSON.stringify(financeStatements)).digest("hex").slice(0, 32);
   let schemaCurrent = false;
   let schemaFailed = false;
   try {

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/demo-finance",
   "/privacidad(.*)",
   "/terminos(.*)",
   "/soporte(.*)",
@@ -21,6 +22,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/shopify(.*)",
   "/api/webhooks/tiendanube(.*)",
   "/api/webhooks/mercadolibre(.*)",
+  "/api/cron/mercadolibre-sync",
   "/connect/mercadolibre(.*)",
   "/api/connect/mercadolibre(.*)",
   "/api/v2/print-jobs/intake(.*)",
@@ -28,7 +30,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/v2/print-jobs/recover(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const authenticatedMiddleware = clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) return NextResponse.next();
 
   const { userId } = await auth();
@@ -40,6 +42,11 @@ export default clerkMiddleware(async (auth, req) => {
 
   return NextResponse.redirect(new URL("/login", req.url));
 });
+
+export default function proxy(request, event) {
+  if (process.env.NODE_ENV === 'development' && process.env.LOCAL_FINANCE_DEMO === '1' && request.nextUrl.pathname === '/demo-finance') return NextResponse.next();
+  return authenticatedMiddleware(request, event);
+}
 
 export const config = {
   matcher: [

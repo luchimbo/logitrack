@@ -7,6 +7,8 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "colecta", icon: "colecta", label: "Colecta" },
     ...(hasOperationsPreview ? [{ id: "printJobs", icon: "colecta", label: "Historial de paquetes" }] : []),
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },
+    { id: "finance", icon: "dashboard", label: "Ventas y costos" },
+    { id: "deliveryTracking", icon: "colecta", label: "Control de entregas" },
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
     { id: "map", icon: "map", label: "Mapa" },
   ];
@@ -17,7 +19,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
 
   const navGroups = [
     { title: "Operación", items: operacionItems },
-    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }] },
+    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }, { id: "carrierRates", icon: "zones", label: "Tarifas transportistas" }] },
     { title: "Integraciones", items: [{ id: "integrations", icon: "integrations", label: "Conectar" }] },
   ];
 

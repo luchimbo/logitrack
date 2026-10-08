@@ -33,6 +33,9 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  if (process.env.NODE_ENV === 'development' && process.env.LOCAL_FINANCE_DEMO === '1') {
+    return <html lang="es"><body><BatchProvider>{children}</BatchProvider></body></html>;
+  }
   return (
     <html lang="es">
       <body>
