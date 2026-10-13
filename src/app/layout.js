@@ -42,10 +42,11 @@ export default function RootLayout({ children }) {
             variables: {
               colorPrimary: "#818cf8",
               colorBackground: "#1a1f2e",
-              colorInputBackground: "#111827",
-              colorInputText: "#f1f5f9",
-              colorText: "#f1f5f9",
-              colorTextSecondary: "#94a3b8",
+              colorInput: "#111827",
+              colorInputForeground: "#f1f5f9",
+              colorForeground: "#f1f5f9",
+              colorMutedForeground: "#94a3b8",
+              colorNeutral: "#f1f5f9",
               borderRadius: "12px",
             },
             elements: {

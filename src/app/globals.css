@@ -504,6 +504,7 @@ body.sidebar-open{overflow:hidden}
 .cl-formFieldAction,.cl-rootBox a[aria-label="Clerk logo"]{min-height:44px!important;display:inline-flex!important;align-items:center!important}
 .flex-publication-panel input,.flex-board-toolbar input,.flex-board-toolbar select,.flex-board-card select,.flex-lane header button,.carrier-transfer-field select,.carrier-transfer-submit{min-height:44px;height:44px}
 .clerk-input{color:var(--text)!important}
+.clerk-input:-webkit-autofill,.clerk-input:-webkit-autofill:hover,.clerk-input:-webkit-autofill:focus{-webkit-text-fill-color:var(--text)!important;caret-color:var(--text);-webkit-box-shadow:0 0 0 1000px #111827 inset!important;box-shadow:0 0 0 1000px #111827 inset!important;transition:background-color 9999s ease-out 0s}
 .clerk-input::placeholder{color:var(--text-secondary)!important;opacity:1!important}
 .clerk-footer-link{min-height:44px;display:inline-flex;align-items:center}
 .map-canvas-shell{height:640px;border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
