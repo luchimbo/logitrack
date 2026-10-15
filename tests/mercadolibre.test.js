@@ -8,7 +8,7 @@ import {
 } from '../src/lib/mercadolibreLogistics.js';
 import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
-import { isDispatchDateValue } from '../src/lib/dispatchDate.js';
+import { isDispatchDateValue, isLabelScheduleValue } from '../src/lib/dispatchDate.js';
 
 function flexLabel(fields) {
   return `^XA
@@ -39,6 +39,30 @@ test('Flex parser does not confuse a dispatch date with the product', () => {
 
   assert.equal(shipment.product_name, 'Micrófono condenser profesional');
   assert.equal(shipment.sku, 'MIC-01');
+});
+
+test('Flex parser ignores the "hasta las 21 hs" delivery window as product', () => {
+  // Etiqueta real (14 OCT): producto en ^FB570,6 y SKU en y=262, justo debajo de la franja horaria.
+  const [shipment] = parseZplFile(flexLabel(`
+^FO10,210^A0N,25,25^FB150,1,0,C^FDUnidad^FS
+^FO200,100^A0N,27,27^FB570,6,-1^FH^FDControlador Y Teclado Arturia Minilab 25 Black Midi Usb Store^FS
+^FO200,262^A0N,24,24^FB570,1,-1^FH^FDSKU: ZTO121^FS
+^FO400,195^A0N,48,48^FB400,1,0,C^FD14 OCT^FS
+^FO400,260^A0N,40,40^FB400,1,0,C^FDhasta las 21 hs^FS
+`));
+
+  assert.equal(shipment.product_name, 'Controlador Y Teclado Arturia Minilab 25 Black Midi Usb Store');
+  assert.equal(shipment.sku, 'ZTO121');
+  assert.equal(shipment.dispatch_date, '14 OCT');
+});
+
+test('delivery window texts are never product names', () => {
+  for (const value of ['hasta las 21 hs', 'Hasta las 21hs', 'hasta 21:00', 'de 9 a 21 hs', 'entre 14:00 y 18:00 hs', 'desde las 8 hs']) {
+    assert.equal(isLabelScheduleValue(value), true, value);
+  }
+  for (const value of ['Pedal De 3 Vias', 'Cable 21 hs Kit', 'Teclado 61 Teclas']) {
+    assert.equal(isLabelScheduleValue(value), false, value);
+  }
 });
 
 test('dispatch date guard flags all known date shapes, not just "DD MON"', () => {
@@ -137,6 +161,69 @@ test('ready_to_ship + ready_to_print is printable', () => {
 
   assert.equal(result.packageState.id, 'ready_to_print');
   assert.equal(result.printability.id, 'printable');
+});
+
+test('Flex next-day label in buffering is "En proceso" with the hour it unlocks', () => {
+  const result = deriveMercadoLibreLogistics({
+    shipmentId: '1010',
+    shipmentStatus: 'ready_to_ship',
+    shipmentSubstatus: 'buffered',
+    logisticType: 'self_service',
+    leadTime: { buffering: { date: '2026-10-15T20:00:00.000-03:00' } },
+    now: new Date('2026-10-15T10:00:00.000-03:00'),
+  });
+
+  assert.equal(result.packageState.id, 'buffered');
+  assert.equal(result.printability.id, 'buffered');
+  assert.equal(result.printability.canPrint, false);
+  assert.equal(result.printability.availableLabel, '15/10 20:00');
+  assert.match(result.printability.reason, /se imprime desde 15\/10 20:00/);
+  assert.equal(result.dispatchState, 'pending');
+});
+
+test('future buffering date holds the label even if the substatus is empty', () => {
+  const result = deriveMercadoLibreLogistics({
+    shipmentId: '1011',
+    shipmentStatus: 'ready_to_ship',
+    shipmentSubstatus: '',
+    leadTime: { buffering: { date: '2026-10-15T20:00:00.000-03:00' } },
+    now: new Date('2026-10-15T19:59:00.000-03:00'),
+  });
+
+  assert.equal(result.printability.id, 'buffered');
+});
+
+test('label is printable once ML releases it from buffering', () => {
+  const released = deriveMercadoLibreLogistics({
+    shipmentId: '1012',
+    shipmentStatus: 'ready_to_ship',
+    shipmentSubstatus: 'ready_to_print',
+    leadTime: { buffering: { date: '2026-10-15T20:00:00.000-03:00' } },
+    now: new Date('2026-10-15T10:00:00.000-03:00'),
+  });
+  assert.equal(released.printability.id, 'printable');
+
+  const sameDay = deriveMercadoLibreLogistics({
+    shipmentId: '1013',
+    shipmentStatus: 'ready_to_ship',
+    shipmentSubstatus: '',
+    leadTime: { buffering: { date: null } },
+  });
+  assert.equal(sameDay.printability.id, 'printable');
+});
+
+test('buffered past its hour asks to sync instead of printing', () => {
+  const result = deriveMercadoLibreLogistics({
+    shipmentId: '1014',
+    shipmentStatus: 'ready_to_ship',
+    shipmentSubstatus: 'buffered',
+    leadTime: { buffering: { date: '2026-10-15T20:00:00.000-03:00' } },
+    now: new Date('2026-10-15T21:00:00.000-03:00'),
+  });
+
+  assert.equal(result.printability.id, 'buffered');
+  assert.equal(result.printability.stale, true);
+  assert.match(result.printability.reason, /sincroniz/);
 });
 
 test('ready_to_ship + ready_for_pickup is ready to dispatch', () => {

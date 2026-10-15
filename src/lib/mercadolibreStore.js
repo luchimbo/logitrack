@@ -382,6 +382,9 @@ export async function listLiveMercadoLibrePrintableOrders({ client, externalStor
     }));
 }
 
+// Etiqueta Flex "En proceso": ML la retiene hasta lead_time.buffering.date (20 h del día previo).
+const BUFFERED_PENDING_SQL = `(LOWER(COALESCE(mo.shipment_substatus, '')) IN ('buffered','buffering') OR COALESCE(julianday(json_extract(mo.lead_time_json, '$.buffering.date')), 0) > julianday('now'))`;
+
 export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', limit = 500 } = {}) {
   await ensureDb();
   const conditions = ['mo.workspace_id = ?'];
@@ -395,7 +398,7 @@ export async function listStoredMercadoLibreOrders({ workspaceId, connectionId =
     args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   if (view === 'ready') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship'`);
-  if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print')))`);
+  if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print') AND NOT ${BUFFERED_PENDING_SQL}))`);
   if (view === 'no_label') conditions.push(`mo.label_imported_at IS NULL AND NOT (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print', 'printed'))`);
   if (view === 'flex') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) = 'self_service'`);
   if (view === 'colecta') conditions.push(`LOWER(COALESCE(mo.logistic_type, '')) != 'self_service'`);
@@ -630,10 +633,12 @@ export async function importMercadoLibreLabels({ workspaceId, client, orders = [
   await ensureDb();
   const pendingOrders = (Array.isArray(orders) ? orders : [])
     .filter((order) => order?.shipmentId)
-    .filter((order) => !order.shipmentRowId);
+    .filter((order) => !order.shipmentRowId)
+    .filter((order) => order.printability?.id !== 'buffered');
+  // Las etiquetas Flex "En proceso" ML todavía no las entrega: pedirlas haría fallar todo el lote.
   const skipped = (Array.isArray(orders) ? orders : [])
-    .filter((order) => !order?.shipmentId)
-    .map((order) => skippedOrder(order, 'La orden no tiene shipment_id'));
+    .filter((order) => !order?.shipmentId || (!order.shipmentRowId && order.printability?.id === 'buffered'))
+    .map((order) => skippedOrder(order, order?.shipmentId ? order.printability.reason : 'La orden no tiene shipment_id'));
   const imported = [];
 
   for (let i = 0; i < pendingOrders.length; i += 50) {

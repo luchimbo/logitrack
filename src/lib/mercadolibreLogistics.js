@@ -17,10 +17,15 @@ const SCANNED_SUBSTATUSES = new Set([
 const PRINTABLE_SUBSTATUSES = new Set(['ready_to_print', 'printed']);
 const PRINTED_SUBSTATUSES = new Set(['printed', 'ready_for_pickup']);
 const PREPARING_SUBSTATUSES = new Set(['waiting_for_label_generation', 'regenerating', 'invoice_pending']);
+// Desde el 25/09/2026 ML retiene la etiqueta Flex de entrega al día siguiente ("En proceso")
+// hasta las 20 h del día previo: el envío está en ready_to_ship/buffered y
+// lead_time.buffering.date indica desde cuándo se puede imprimir.
+const BUFFERED_SUBSTATUSES = new Set(['buffered', 'buffering']);
 
 const STATE_META = {
   preparing: { id: 'preparing', label: 'En preparacion', color: '#60a5fa' },
   ready_to_print: { id: 'ready_to_print', label: 'Lista para imprimir', color: '#f97316' },
+  buffered: { id: 'buffered', label: 'En proceso', color: '#a855f7' },
   ready_to_ship: { id: 'ready_to_ship', label: 'Lista para despachar', color: '#f97316' },
   in_transit: { id: 'in_transit', label: 'En transito', color: '#22c55e' },
   delivered: { id: 'delivered', label: 'Entregado', color: '#22c55e' },
@@ -34,6 +39,7 @@ const PRINTABILITY_META = {
   imported: { id: 'imported', label: 'Etiqueta descargada', color: '#22c55e', canImport: false, canPrint: true },
   printed: { id: 'printed', label: 'Etiqueta impresa', color: '#059669', canImport: true, canPrint: false },
   printable: { id: 'printable', label: 'Lista para imprimir', color: '#f97316', canImport: true, canPrint: false },
+  buffered: { id: 'buffered', label: 'En proceso', color: '#a855f7', canImport: false, canPrint: false },
   not_ready: { id: 'not_ready', label: 'ML aún no generó etiqueta', color: '#64748b', canImport: false, canPrint: false },
   unavailable: { id: 'unavailable', label: 'Sin envío asignado', color: '#64748b', canImport: false, canPrint: false },
   error: { id: 'error', label: 'Revisar envío', color: '#ef4444', canImport: false, canPrint: false },
@@ -54,6 +60,7 @@ const STATUS_LABELS = {
 const SUBSTATUS_LABELS = {
   ready_to_print: 'Etiqueta disponible',
   printed: 'Etiqueta impresa',
+  buffered: 'En proceso',
   waiting_for_label_generation: 'Generando etiqueta',
   picked_up: 'Retirado por transportista',
   authorized_by_carrier: 'Autorizado por transportista',
@@ -210,7 +217,39 @@ export function deriveCutoffDetail({ logisticType = '', shippingMethod = '', lea
   };
 }
 
-export function derivePackageState({ shipmentStatus = '', shipmentSubstatus = '', delays = null } = {}) {
+function formatAvailableAt(date) {
+  const parts = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('day')}/${get('month')} ${get('hour')}:${get('minute')}`;
+}
+
+// Etiqueta Flex retenida por ML ("En proceso"). Devuelve null si la etiqueta no está retenida.
+export function deriveLabelBuffering({ shipmentStatus = '', shipmentSubstatus = '', leadTime = null, now = new Date() } = {}) {
+  const status = lower(shipmentStatus);
+  const substatus = lower(shipmentSubstatus);
+  if (status !== 'ready_to_ship' || PRINTABLE_SUBSTATUSES.has(substatus) || PRINTED_SUBSTATUSES.has(substatus)) return null;
+  const rawDate = firstString(leadTime?.buffering?.date);
+  const parsed = rawDate ? new Date(rawDate) : null;
+  const availableAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  const pending = availableAt ? availableAt.getTime() > now.getTime() : false;
+  if (!BUFFERED_SUBSTATUSES.has(substatus) && !pending) return null;
+  return {
+    availableAt: availableAt ? availableAt.toISOString() : '',
+    availableLabel: availableAt ? formatAvailableAt(availableAt) : '',
+    // ML todavía dice buffered pero ya pasó la hora: falta sincronizar para ver la etiqueta.
+    stale: Boolean(availableAt) && !pending,
+  };
+}
+
+function bufferedReason(buffering) {
+  if (!buffering?.availableLabel) return 'En proceso: ML habilita la etiqueta a las 20 h del día previo';
+  if (buffering.stale) return `En proceso: habilitada desde ${buffering.availableLabel}, sincronizá`;
+  return `En proceso: se imprime desde ${buffering.availableLabel}`;
+}
+
+export function derivePackageState({ shipmentStatus = '', shipmentSubstatus = '', delays = null, leadTime = null, now } = {}) {
   const status = lower(shipmentStatus);
   const substatus = lower(shipmentSubstatus);
 
@@ -220,12 +259,13 @@ export function derivePackageState({ shipmentStatus = '', shipmentSubstatus = ''
   if (hasDelay(delays, substatus)) return asState('delayed');
   if (IN_TRANSIT_STATUSES.has(status) || SCANNED_SUBSTATUSES.has(substatus)) return asState('in_transit');
   if (status === 'ready_to_ship' && PRINTABLE_SUBSTATUSES.has(substatus)) return asState('ready_to_print');
+  if (deriveLabelBuffering({ shipmentStatus, shipmentSubstatus, leadTime, now })) return asState('buffered');
   if (status === 'ready_to_ship') return asState('ready_to_ship');
   if (status === 'handling' || PREPARING_SUBSTATUSES.has(substatus)) return asState('preparing');
   return asState('pending');
 }
 
-export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipmentSubstatus = '', logisticType = '', labelImportedAt = '', labelPrintedAt = '', shipmentRowId = null } = {}) {
+export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipmentSubstatus = '', logisticType = '', labelImportedAt = '', labelPrintedAt = '', shipmentRowId = null, leadTime = null, now } = {}) {
   const status = lower(shipmentStatus);
   const substatus = lower(shipmentSubstatus);
   const type = lower(logisticType);
@@ -239,6 +279,8 @@ export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipm
   // Ya impresa (en Geomodi o marcada por ML): pasa a "para despachar", pero se puede reimprimir.
   if (labelPrintedAt || PRINTED_SUBSTATUSES.has(substatus)) return asPrintability('printed');
   if (labelImportedAt || shipmentRowId) return asPrintability('imported');
+  const buffering = deriveLabelBuffering({ shipmentStatus, shipmentSubstatus, leadTime, now });
+  if (buffering) return { ...asPrintability('buffered', bufferedReason(buffering)), ...buffering };
   // ready_to_ship => ML ya genero la etiqueta y se puede descargar (salvo Mercado Full, que lo gestiona ML)
   if (status === 'ready_to_ship') {
     if (type === 'fulfillment') return asPrintability('not_ready', 'Gestiona Mercado Full');

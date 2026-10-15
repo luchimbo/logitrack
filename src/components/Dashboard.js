@@ -377,6 +377,7 @@ export default function Dashboard() {
         const scannedStatuses = new Set(['shipped', 'delivered', 'in_transit']);
         const scannedSubs = new Set(['picked_up', 'in_hub', 'in_transit', 'out_for_delivery', 'deliver_attempt', 'me2_in_transit', 'me2_picked_up']);
         if (scannedStatuses.has(status) || scannedSubs.has(sub)) return { label: 'Escaneado', color: '#22c55e' };
+        if (status === 'ready_to_ship' && s.ml_printability?.id === 'buffered') return { label: 'En proceso', color: '#a855f7' };
         if (status === 'ready_to_ship') return { label: 'Sin escanear', color: '#f97316' };
         if (status) return { label: 'Pendiente ML', color: '#64748b' };
         return null;

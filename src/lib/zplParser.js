@@ -6,7 +6,7 @@
  *   - FLEX: Labels for Mercado Envíos Flex (own delivery / carrier pickup)
  */
 
-import { isDispatchDateValue } from "./dispatchDate.js";
+import { isLabelScheduleValue } from "./dispatchDate.js";
 
 // Mapping common names to system IDs
 const PARTIDO_MAP = {
@@ -502,7 +502,7 @@ function extractFlexProductMetadata(content) {
 
     const isProductCandidate = (field) => {
         const text = field.text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim();
-        if (!text || isDispatchDateValue(text) || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
+        if (!text || isLabelScheduleValue(text) || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
         if (/^\d+$/.test(text) || /^(RESIDENCIAL|COMERCIAL)$/i.test(text)) return false;
         return field.fontHeight >= 25;
     };
@@ -520,6 +520,7 @@ function extractFlexProductMetadata(content) {
         color: joinValues(colors, ", "),
         voltage: joinValues(voltages, ", "),
         product_name: joinValues(productNames),
+        productCount: productNames.length,
     };
 }
 
@@ -551,14 +552,14 @@ function parseFlexLabel(content) {
     const qtyMatch = content.match(/\^FB160,1,0,C\^FD(\d+)\^FS/);
     if (qtyMatch) shipment.quantity = parseInt(qtyMatch[1], 10);
 
-    const prodMatch = content.match(/\^FO200,100\^A0N,27,27\^FB570,3,-1\^FH\^FD(.+?)\^FS/);
+    const prodMatch = content.match(/\^FO200,100\^A0N,27,27\^FB570,\d+,-1\^FH\^FD(.+?)\^FS/);
     if (prodMatch) {
         let name = decodeZplHex(prodMatch[1].trim());
         name = name.replace(/\s*\|\s*\d+\s*u\.\s*$/, "");
-        if (!isDispatchDateValue(name)) shipment.product_name = name;
+        if (!isLabelScheduleValue(name)) shipment.product_name = name;
     }
 
-    const varMatch = content.match(/\^FO200,181\^A0N,24,24\^FB570,3,-1\^FH\^FD(.+?)\^FS/);
+    const varMatch = content.match(/\^FO200,\d+\^A0N,24,24\^FB570,\d+,-1\^FH\^FD(.+?)\^FS/);
     if (varMatch) {
         const varText = decodeZplHex(varMatch[1].trim());
         const skuM = varText.match(/SKU:\s*(\S+)/);
@@ -570,6 +571,13 @@ function parseFlexLabel(content) {
     }
 
     const metadata = extractFlexProductMetadata(content);
+    // Pack con varios productos: los campos fijos solo leen el primero.
+    if (metadata.productCount > 1) {
+        shipment.product_name = metadata.product_name;
+        shipment.sku = metadata.sku || shipment.sku;
+        shipment.color = metadata.color || shipment.color;
+        shipment.voltage = metadata.voltage || shipment.voltage;
+    }
     if (isMissingLabelValue(shipment.sku)) shipment.sku = metadata.sku;
     if (isMissingLabelValue(shipment.product_name)) shipment.product_name = metadata.product_name;
     if (isMissingLabelValue(shipment.color)) shipment.color = metadata.color;

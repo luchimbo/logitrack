@@ -4,7 +4,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { parseZplFile } from '@/lib/zplParser';
-import { isDispatchDateValue } from '@/lib/dispatchDate';
+import { isLabelScheduleValue } from '@/lib/dispatchDate';
 import { isGenericFlexProductName, resolveGenericFlexProducts } from '@/lib/flexProductResolver';
 import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 
@@ -63,6 +63,9 @@ export async function POST(request) {
                 s.sku IS NULL OR TRIM(s.sku) = '' OR UPPER(TRIM(s.sku)) = 'SIN-SKU'
                 OR s.product_name IS NULL OR TRIM(s.product_name) = '' OR UPPER(TRIM(s.product_name)) = 'SIN-SKU'
                 OR LOWER(TRIM(s.product_name)) = 'unidad'
+                OR LOWER(TRIM(s.product_name)) LIKE 'hasta %'
+                OR LOWER(TRIM(s.product_name)) LIKE 'desde %'
+                OR LOWER(TRIM(s.product_name)) LIKE 'entre %'
                 OR UPPER(TRIM(s.product_name)) GLOB '[0-3][0-9] [A-Z][A-Z][A-Z]*'
                 OR UPPER(TRIM(s.product_name)) GLOB '[A-Z][A-Z][A-Z] [0-3][0-9]'
               )`
@@ -84,7 +87,7 @@ export async function POST(request) {
       const resolved = flexResolution.resolved.get(String(row.tracking_number || '').trim());
 
       const nextSku = isMissingMetadata(row.sku) && recovered && !isMissingMetadata(recovered.sku) ? recovered.sku : row.sku;
-      let nextProductName = isMissingMetadata(row.product_name) || isDispatchDateValue(row.product_name)
+      let nextProductName = isMissingMetadata(row.product_name) || isLabelScheduleValue(row.product_name)
         ? (!isMissingMetadata(recovered?.product_name) ? recovered.product_name
           : !isMissingMetadata(row.sku) ? row.sku
           : null)

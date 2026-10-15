@@ -92,7 +92,7 @@ function dispatchCardRow({ label, value, color, filterValue, cardFilter, onToggl
 
 function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) {
   const onToggle = (value) => setCardFilter((prev) => prev === value ? null : value);
-  const active = cardFilter === kind || cardFilter === `${kind}_dispatch`;
+  const active = cardFilter === kind || cardFilter === `${kind}_dispatch` || cardFilter === `${kind}_buffered`;
   return (
     <div style={{ background: "var(--bg-secondary)", border: active ? "2px solid var(--accent)" : "1px solid var(--border)", borderRadius: "var(--radius)", padding: "14px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", padding: "0 8px" }}>
@@ -108,6 +108,7 @@ function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) 
       )}
       {dispatchCardRow({ label: "Etiquetas por imprimir", value: summary.toPrint, color: "#f97316", filterValue: kind, cardFilter, onToggle })}
       {dispatchCardRow({ label: "Listas para despachar", value: summary.toDispatch, color: "#059669", filterValue: `${kind}_dispatch`, cardFilter, onToggle })}
+      {summary.buffered > 0 && dispatchCardRow({ label: "En proceso (se imprimen desde las 20 h)", value: summary.buffered, color: "#a855f7", filterValue: `${kind}_buffered`, cardFilter, onToggle })}
       {summary.rescheduled > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", padding: "6px 8px" }}>
           <span>Reprogramadas</span>
@@ -170,7 +171,7 @@ function OrderCard({
         <div style={{ display: "flex", gap: "6px" }}>
           {!order.shipmentRowId && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)}
-              disabled={isLoading || !order.shipmentId || order.printability?.id === "not_ready"} style={{ fontSize: "11px", padding: "4px 8px" }}>
+              disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)} style={{ fontSize: "11px", padding: "4px 8px" }}>
               {importing ? "..." : "Importar"}
             </button>
           )}
@@ -219,7 +220,7 @@ function OrderCard({
       </div>
 
       <div className="mobile-card-actions">
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || order.printability?.id === "not_ready"}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)}>
           {importing ? "Importando..." : order.labelImportedAt ? "Reimportar etiqueta" : "Importar ZPL"}
         </button>
         {canPrint ? (
@@ -250,6 +251,7 @@ const STATE_BORDER = {
   canceled: "#94a3b8",
   problem: "#ef4444",
   preparing: "#60a5fa",
+  buffered: "#a855f7",
   pending: "#cbd5e1",
 };
 
@@ -260,7 +262,7 @@ function sortByUrgency(orders) {
     if (o.printability?.id === "printable") return 0;
     if (state === "ready_to_ship" || state === "ready_to_print") return cutoff ? 1 : 2;
     if (state === "delayed") return 3;
-    if (state === "preparing") return 4;
+    if (state === "preparing" || state === "buffered") return 4;
     if (state === "in_transit") return 5;
     if (state === "delivered") return 6;
     return 7;
@@ -350,6 +352,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         toPrint: flexPending.filter(isPrintableToday).length,
         toDispatch: orders.filter((o) => isFlex(o) && isToDispatchToday(o)).length,
         rescheduled: orders.filter((o) => isFlex(o) && isToday(o) && isResched(o)).length,
+        buffered: orders.filter((o) => isFlex(o) && isToday(o) && o.printability?.id === "buffered").length,
       },
       colecta: {
         total: colectaPending.length,
@@ -367,8 +370,9 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (cardFilter === "flex") return sortedOrders.filter((o) => method(o, true) && isPrintableToday(o));
     if (cardFilter === "colecta_dispatch") return sortedOrders.filter((o) => method(o, false) && isToDispatchToday(o));
     if (cardFilter === "flex_dispatch") return sortedOrders.filter((o) => method(o, true) && isToDispatchToday(o));
+    if (cardFilter === "flex_buffered") return sortedOrders.filter((o) => method(o, true) && isToday(o) && o.printability?.id === "buffered");
     return sortedOrders;
-  }, [sortedOrders, cardFilter, isPrintableToday, isToDispatchToday]);
+  }, [sortedOrders, cardFilter, isPrintableToday, isToDispatchToday, isToday]);
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
@@ -841,7 +845,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                   {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${visibleOrders.length} ventas visibles`}
                   {cardFilter ? (
                     <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "8px", fontSize: "12px" }} onClick={() => setCardFilter(null)}>
-                      ✕ Quitar filtro {cardFilter === "flex" ? "Flex" : "Colecta"}
+                      ✕ Quitar filtro {cardFilter.startsWith("flex") ? "Flex" : "Colecta"}
                     </button>
                   ) : null}
                 </div>

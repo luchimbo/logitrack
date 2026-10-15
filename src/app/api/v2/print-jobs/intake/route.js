@@ -5,7 +5,7 @@ import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
 import { assignCarrier } from "@/lib/zoneMapper";
 import { getArgentinaDateString } from "@/lib/dateUtils";
-import { DISPATCH_DATE_RE } from "@/lib/dispatchDate";
+import { isLabelScheduleValue } from "@/lib/dispatchDate";
 
 const MAX_LABELS = 5000;
 const CHUNK_SIZE = 300;
@@ -218,7 +218,7 @@ function sanitizeProductName(value) {
   const segments = value
     .split("|")
     .map((segment) => segment.trim())
-    .filter((segment) => segment && !DISPATCH_DATE_RE.test(segment));
+    .filter((segment) => segment && !isLabelScheduleValue(segment));
   return segments.length ? segments.join(" ") : null;
 }
 
