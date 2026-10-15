@@ -1,16 +1,18 @@
 import { db } from "./db.js";
-import { isLabelScheduleValue } from "./dispatchDate.js";
+import { isNonProductLabelValue } from "./dispatchDate.js";
 import { parseZplFile } from "./zplParser.js";
 import { bumpFlexPortalRevision } from "./flexPortal.js";
 
-// Las etiquetas Flex nuevas imprimen la franja de entrega ("hasta las 21 hs") justo arriba del
-// SKU, y el parser viejo la guardaba como producto. Esto vuelve a leer la etiqueta guardada y
-// corrige el producto. Es idempotente: una vez corregidos, la consulta ya no los encuentra.
+// Las etiquetas Flex nuevas traen el producto en un recuadro de 5-6 líneas que el parser viejo
+// no reconocía: guardaba como producto la franja de entrega ("hasta las 21 hs") o la leyenda
+// "Unidad". Esto vuelve a leer la etiqueta guardada y corrige el producto. Es idempotente: una
+// vez corregidos, la consulta ya no los encuentra.
 export const SCHEDULE_PRODUCT_SQL = `(LOWER(TRIM(product_name)) LIKE 'hasta %'
   OR LOWER(TRIM(product_name)) LIKE 'desde %'
   OR LOWER(TRIM(product_name)) LIKE 'entre %'
   OR LOWER(TRIM(product_name)) LIKE 'antes de %'
-  OR LOWER(TRIM(product_name)) LIKE 'de %hs%')`;
+  OR LOWER(TRIM(product_name)) LIKE 'de %hs%'
+  OR LOWER(TRIM(product_name)) IN ('unidad', 'unidades'))`;
 
 function isMissing(value) {
   const normalized = String(value || "").trim().toUpperCase();
@@ -32,7 +34,7 @@ function reparse(rawZpl) {
 function recoveredProduct(row, rawZpl) {
   const recovered = reparse(rawZpl);
   const name = recovered?.product_name;
-  if (!isMissing(name) && !isLabelScheduleValue(name)) return { name, recovered };
+  if (!isMissing(name) && !isNonProductLabelValue(name)) return { name, recovered };
   // Sin etiqueta legible: el SKU identifica mejor el producto que la franja horaria.
   if (!isMissing(row.sku)) return { name: row.sku, recovered };
   return null;
@@ -51,7 +53,7 @@ export async function repairScheduleProductNames({ workspaceId = null } = {}) {
     args: scopeArgs,
   });
   for (const row of shipmentRows.rows || []) {
-    if (!isLabelScheduleValue(row.product_name)) continue;
+    if (!isNonProductLabelValue(row.product_name)) continue;
     const fix = recoveredProduct(row, row.raw_zpl);
     if (!fix) continue;
     const { recovered } = fix;
@@ -75,7 +77,7 @@ export async function repairScheduleProductNames({ workspaceId = null } = {}) {
     args: scopeArgs,
   });
   for (const row of itemRows.rows || []) {
-    if (!isLabelScheduleValue(row.product_name)) continue;
+    if (!isNonProductLabelValue(row.product_name)) continue;
     const fix = recoveredProduct(row, row.raw_block);
     if (!fix) continue;
     await db.execute({ sql: "UPDATE print_job_items SET product_name = ? WHERE id = ?", args: [fix.name, row.id] });

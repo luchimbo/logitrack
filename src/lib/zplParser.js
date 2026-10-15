@@ -6,7 +6,7 @@
  *   - FLEX: Labels for Mercado Envíos Flex (own delivery / carrier pickup)
  */
 
-import { isLabelScheduleValue } from "./dispatchDate.js";
+import { isNonProductLabelValue } from "./dispatchDate.js";
 
 // Mapping common names to system IDs
 const PARTIDO_MAP = {
@@ -502,7 +502,7 @@ function extractFlexProductMetadata(content) {
 
     const isProductCandidate = (field) => {
         const text = field.text.replace(/\s*\|\s*\d+\s*u\.\s*$/i, "").trim();
-        if (!text || isLabelScheduleValue(text) || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
+        if (!text || isNonProductLabelValue(text) || /(?:SKU|Color|Voltaje|Venta ID|Pack ID|Destinatario|Direccion|Referencia|CP|Envio|Env[ií]o Flex)/i.test(text)) return false;
         if (/^\d+$/.test(text) || /^(RESIDENCIAL|COMERCIAL)$/i.test(text)) return false;
         return field.fontHeight >= 25;
     };
@@ -556,7 +556,7 @@ function parseFlexLabel(content) {
     if (prodMatch) {
         let name = decodeZplHex(prodMatch[1].trim());
         name = name.replace(/\s*\|\s*\d+\s*u\.\s*$/, "");
-        if (!isLabelScheduleValue(name)) shipment.product_name = name;
+        if (!isNonProductLabelValue(name)) shipment.product_name = name;
     }
 
     const varMatch = content.match(/\^FO200,\d+\^A0N,24,24\^FB570,\d+,-1\^FH\^FD(.+?)\^FS/);

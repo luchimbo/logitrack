@@ -22,3 +22,11 @@ export const isDeliveryWindowValue = (value) =>
 // Fecha o franja de entrega: textos de la etiqueta que nunca son el nombre del producto.
 export const isLabelScheduleValue = (value) =>
   isDispatchDateValue(value) || isDeliveryWindowValue(value);
+
+// Leyenda bajo la cantidad ("1 Unidad", "2 Unidades") en las etiquetas Flex.
+export const isUnitsCaptionValue = (value) =>
+  /^unidad(?:es)?$/i.test(String(value || '').trim());
+
+// Textos fijos de la etiqueta que nunca son el nombre del producto.
+export const isNonProductLabelValue = (value) =>
+  isLabelScheduleValue(value) || isUnitsCaptionValue(value);

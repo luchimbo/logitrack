@@ -8,7 +8,7 @@ import {
 } from '../src/lib/mercadolibreLogistics.js';
 import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
-import { isDispatchDateValue, isLabelScheduleValue } from '../src/lib/dispatchDate.js';
+import { isDispatchDateValue, isLabelScheduleValue, isNonProductLabelValue } from '../src/lib/dispatchDate.js';
 
 function flexLabel(fields) {
   return `^XA
@@ -54,6 +54,28 @@ test('Flex parser ignores the "hasta las 21 hs" delivery window as product', () 
   assert.equal(shipment.product_name, 'Controlador Y Teclado Arturia Minilab 25 Black Midi Usb Store');
   assert.equal(shipment.sku, 'ZTO121');
   assert.equal(shipment.dispatch_date, '14 OCT');
+});
+
+test('Flex parser never takes the "Unidad" caption as product', () => {
+  // Etiqueta real (ZTO019): recuadro de producto de 5 líneas y leyenda "Unidad" bajo la cantidad.
+  const [shipment] = parseZplFile(flexLabel(`
+^FO10,130^A0N,70,70^FB160,1,0,C^FD1^FS
+^FO10,210^A0N,25,25^FB150,1,0,C^FDUnidad^FS
+^FO200,100^A0N,27,27^FB570,5,-1^FH^FDPlaca Interfaz De Audio Usb 24 Bits Arturia Minifuse 1 White Color Blanco^FS
+^FO200,235^A0N,24,24^FB570,3,-1^FH^FDColor: Blanco  | Voltaje: 5V  | SKU: ZTO019^FS
+`));
+  assert.equal(shipment.product_name, 'Placa Interfaz De Audio Usb 24 Bits Arturia Minifuse 1 White Color Blanco');
+  assert.equal(shipment.sku, 'ZTO019');
+
+  // Aunque el producto venga en coordenadas que el parser no conoce, "Unidad" no es candidato.
+  const [moved] = parseZplFile(flexLabel(`
+^FO10,210^A0N,25,25^FB150,1,0,C^FDUnidades^FS
+^FO48,118^A0N,30,30^FB600,3,-1^FH^FDCable Midi 2 Metros^FS
+^FO48,235^A0N,22,22^FB600,3,-1^FH^FDSKU: FZC020^FS
+`));
+  assert.equal(moved.product_name, 'Cable Midi 2 Metros');
+  assert.equal(isNonProductLabelValue('Unidad'), true);
+  assert.equal(isNonProductLabelValue('Unidad Central De Audio'), false);
 });
 
 test('delivery window texts are never product names', () => {

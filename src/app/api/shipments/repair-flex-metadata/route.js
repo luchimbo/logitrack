@@ -4,7 +4,7 @@ import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { parseZplFile } from '@/lib/zplParser';
-import { isLabelScheduleValue } from '@/lib/dispatchDate';
+import { isNonProductLabelValue } from '@/lib/dispatchDate';
 import { isGenericFlexProductName, resolveGenericFlexProducts } from '@/lib/flexProductResolver';
 import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 
@@ -87,7 +87,7 @@ export async function POST(request) {
       const resolved = flexResolution.resolved.get(String(row.tracking_number || '').trim());
 
       const nextSku = isMissingMetadata(row.sku) && recovered && !isMissingMetadata(recovered.sku) ? recovered.sku : row.sku;
-      let nextProductName = isMissingMetadata(row.product_name) || isLabelScheduleValue(row.product_name)
+      let nextProductName = isMissingMetadata(row.product_name) || isNonProductLabelValue(row.product_name)
         ? (!isMissingMetadata(recovered?.product_name) ? recovered.product_name
           : !isMissingMetadata(row.sku) ? row.sku
           : null)
