@@ -50,6 +50,8 @@
     '.cte-btn[disabled]{opacity:.6;cursor:wait}.cte-msg{font-size:13px;margin:6px 0 0}.cte-msg.err{color:#b91c1c}',
     '.cte-inline{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px;background:#fff;color:#111827}',
     '.cte-product{margin:16px 0}.cte-product .cte-sub{margin:2px 0 10px}',
+    '.cte-applied{display:grid;gap:2px;background:#dcfce7;color:#166534;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}',
+    '.cte-applied b{font-size:15px}',
     '.cte-inline .cte-title{font-size:16px}.cte-inline .cte-card{grid-template-columns:56px 1fr;padding:8px}.cte-inline .cte-img{width:56px;height:56px}',
   ].join('');
   var style = document.createElement('style');
@@ -140,10 +142,48 @@
         return addToCart(form);
       })
       .then(function () {
-        store.set('cte-added', '1');
+        rememberAccepted(offer, id);
         // 3) El carrito muestra el descuento recalculado por Tiendanube.
         window.location.href = '/comprar/';
       });
+  }
+
+  // Aceptaciones de esta sesión: el tema muestra el descuento sólo en los totales, no en cada producto.
+  function readAccepted() {
+    try { var list = JSON.parse(store.get('cte-accepted') || '[]'); return Array.isArray(list) ? list : []; } catch (e) { return []; }
+  }
+  function rememberAccepted(offer, id) {
+    var list = readAccepted().filter(function (a) { return !(a.cartId === String(id) && a.variantId === String(offer.variantId)); });
+    list.push({ cartId: String(id), variantId: String(offer.variantId), name: offer.name, savings: offer.savings });
+    store.set('cte-accepted', JSON.stringify(list.slice(-10)));
+  }
+  function acceptedInCart() {
+    var id = cartId(), inCart = {};
+    cartItems().forEach(function (i) { inCart[String(i.variant_id || i.id)] = true; });
+    return readAccepted().filter(function (a) { return a.cartId === id && inCart[a.variantId]; });
+  }
+  // Monto que muestra Tiendanube en el renglón «Completá tu equipo» de los totales, si está.
+  function appliedAmount() {
+    var nodes = document.querySelectorAll('body *');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.closest('.cte-inline, .cte-overlay') || el.children.length > 3) continue;
+      var text = el.textContent || '';
+      if (text.length > 120 || text.indexOf('Completá tu equipo') < 0) continue;
+      var row = el.parentNode && el.parentNode.textContent || text;
+      var m = row.match(/-\s*\$\s*[\d.,]+/);
+      if (m) return m[0].replace(/\s+/g, '');
+    }
+    return '';
+  }
+  function appliedNotice() {
+    var accepted = acceptedInCart();
+    if (!accepted.length) return '';
+    var amount = appliedAmount();
+    var total = accepted.reduce(function (sum, a) { return sum + (Number(a.savings) || 0); }, 0);
+    var names = accepted.map(function (a) { return esc(a.name); }).join(', ');
+    return '<div class="cte-applied" role="status"><b>✓ Descuento especial aplicado: ' + (amount || ('-' + money(total))) + '</b>' +
+      '<span>En ' + names + '. Lo ves en el renglón «Completá tu equipo» del total.</span></div>';
   }
 
   function closeModal() {
@@ -186,13 +226,16 @@
 
   function renderInline(offers) {
     var target = inlineTarget();
-    var old = document.querySelector('.cte-inline');
+    // No tocar el bloque de la página de producto, que también usa .cte-inline.
+    var old = document.querySelector('.cte-inline:not(.cte-product)');
     if (old) old.parentNode.removeChild(old);
-    if (!target || !offers.length) return;
+    var notice = target ? appliedNotice() : '';
+    if (!target || (!offers.length && !notice)) return;
     var box = document.createElement('section');
     box.className = 'cte-inline';
     box.setAttribute('aria-label', 'Agregá estos productos con descuento especial');
-    box.innerHTML = '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' + offers.map(function (o) { return card(o); }).join('') + '</div>';
+    box.innerHTML = notice + (offers.length ? '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' +
+      offers.map(function (o) { return card(o); }).join('') + '</div>' : '');
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
   }
