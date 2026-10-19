@@ -56,6 +56,8 @@
     '.cte-btn[disabled]{opacity:.6;cursor:wait}.cte-msg{font-size:13px;margin:6px 0 0}.cte-msg.err{color:#b91c1c}',
     '.cte-inline{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px;background:#fff;color:#111827}',
     '.cte-product{margin:16px 0}.cte-product .cte-sub{margin:2px 0 10px}',
+    '.cte-native{border:0;padding:0;margin:0 0 24px;background:transparent;color:inherit}.cte-native .cte-card{padding-top:12px}',
+    '.cte-native .cte-applied{margin-bottom:16px}.cte-native .cte-msg{margin-top:6px}.cte-native .cte-msg.err{color:#b91c1c}',
     '.cte-applied{display:grid;gap:2px;background:#dcfce7;color:#166534;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}',
     '.cte-applied b{font-size:15px}',
     '.cte-strike{color:#9ca3af;font-weight:400;margin-right:4px}.cte-final{color:#166534;font-weight:700}',
@@ -105,6 +107,22 @@
       if (navigator.sendBeacon) navigator.sendBeacon(API + 'seen', new Blob([body], { type: 'text/plain' }));
       else fetch(API + 'seen', { method: 'POST', body: body, credentials: 'omit', keepalive: true, headers: { 'Content-Type': 'text/plain' } });
     } catch (e) { /* el informe no debe afectar la compra */ }
+  }
+
+  // Mismo renglón que los productos del carrito del tema (grilla, tipografía, precio tachado y botón).
+  function nativeRow(o) {
+    return '<div class="cte-card row align-items-md-center" data-variant="' + esc(o.variantId) + '">' +
+      '<div class="col-3 col-md-1">' + (o.image ? '<img class="img-fluid" alt="" loading="lazy" src="' + esc(o.image) + '">' : '') + '</div>' +
+      '<div class="col-9 col-md-11 pl-0 pl-md-3"><div class="row align-items-md-center">' +
+        '<h6 class="col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') +
+          '<div class="mt-2"><span class="d-inline-block label label-accent label-small font-smallest mb-1">-' + esc(o.pct) + '% · Ahorrás ' + money(o.savings) + '</span></div>' +
+          (o.reason ? '<div class="font-small opacity-50">' + esc(o.reason) + '</div>' : '') + '</h6>' +
+        '<div class="col-6 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
+          '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
+        '<div class="col-6 col-md-4"><button type="button" class="cte-btn btn btn-primary btn-small btn-block">Agregar con descuento</button>' +
+          '<p class="cte-msg font-small mb-0" role="status"></p></div>' +
+      '</div></div>' +
+      '<div class="col-12"><div class="divider"></div></div></div>';
   }
 
   function card(o, label) {
@@ -266,6 +284,7 @@
         var unit = item.unit_price / 100, full = unit * qty;
         var discount = Math.round(unit * covered * a.pct) / 100;
         var badge = '<span class="cte-line-badge">Descuento especial -' + a.pct + '%</span>';
+        if (nativeLine(row, { unit: unit, full: full, discount: discount, pct: a.pct, allCovered: covered === qty })) { done[item.item_id] = true; return; }
         var unitEl = row.querySelector('.js-cart-item-unit-price');
         setCell(unitEl, covered === qty
           ? '<s class="cte-strike">' + money(unit) + '</s> <span class="cte-final">' + money(unit - unit * a.pct / 100) + '</span>' + badge
@@ -277,6 +296,7 @@
       // Si el descuento dejó de aplicar (se quitó el principal), volver a los precios del tema.
       Array.prototype.forEach.call(document.querySelectorAll('.js-cart-item'), function (row) {
         if (done[row.getAttribute('data-item-id')]) return;
+        restoreNative(row);
         restoreCell(row.querySelector('.js-cart-item-unit-price'));
         restoreCell(row.querySelector('.js-cart-item-subtotal'));
       });
@@ -285,6 +305,48 @@
       if (cartObserver && cartForm) cartObserver.observe(cartForm, { childList: true, subtree: true, characterData: true });
     }
   }
+  // Temas con precio tachado nativo (Amazonas): mostrar el descuento con sus propios elementos.
+  function showCompare(container, percent, compareText) {
+    if (!container) return false;
+    if (!container.hasAttribute('data-cte-style')) container.setAttribute('data-cte-style', container.getAttribute('style') || '');
+    container.style.display = '';
+    var pctEl = container.querySelector('.text-accent'), cmp = container.querySelector('.price-compare');
+    if (pctEl) pctEl.textContent = '-' + percent + '%';
+    if (cmp) cmp.textContent = compareText;
+    return true;
+  }
+  function setText(el, text) {
+    if (!el) return;
+    if (!el.hasAttribute('data-cte-text')) el.setAttribute('data-cte-text', el.textContent);
+    el.textContent = text;
+  }
+  function nativeLine(row, d) {
+    var unitBox = row.querySelector('.js-cart-item-unit-price-compare-price-container');
+    var subBox = row.querySelector('.js-cart-item-subtotal-compare-price-container');
+    if (!unitBox && !subBox) return false;
+    if (d.allCovered) {
+      showCompare(unitBox, d.pct, money(d.unit));
+      setText(row.querySelector('.js-cart-item-unit-price'), money(d.unit - d.unit * d.pct / 100));
+    }
+    showCompare(subBox, Math.round(d.discount / d.full * 1000) / 10, money(d.full));
+    setText(row.querySelector('.js-cart-item-subtotal'), money(d.full - d.discount));
+    var label = row.querySelector('.js-cart-item-promotion-label');
+    if (label) {
+      if (!label.hasAttribute('data-cte-style')) label.setAttribute('data-cte-style', label.getAttribute('style') || '');
+      label.style.cssText = '';
+      setText(label, 'Descuento especial -' + d.pct + '%');
+    }
+    return true;
+  }
+  function restoreNative(row) {
+    Array.prototype.forEach.call(row.querySelectorAll('[data-cte-style]'), function (el) {
+      el.setAttribute('style', el.getAttribute('data-cte-style')); el.removeAttribute('data-cte-style');
+    });
+    Array.prototype.forEach.call(row.querySelectorAll('[data-cte-text]'), function (el) {
+      el.textContent = el.getAttribute('data-cte-text'); el.removeAttribute('data-cte-text');
+    });
+  }
+
   // El tema reescribe precios y totales al cambiar cantidades: volver a aplicar después.
   var linesTimer = null;
   function watchCart() {
@@ -340,6 +402,8 @@
 
   function renderInline(offers) {
     var target = inlineTarget();
+    // En la página del carrito (Amazonas) se usa el renglón del tema; en el carrito lateral, las tarjetas.
+    var native = Boolean(target && target.parent.tagName === 'FORM');
     // No tocar el bloque de la página de producto, que también usa .cte-inline.
     var old = document.querySelector('.cte-inline:not(.cte-product)');
     if (old) old.parentNode.removeChild(old);
@@ -348,8 +412,12 @@
     var box = document.createElement('section');
     box.className = 'cte-inline';
     box.setAttribute('aria-label', 'Agregá estos productos con descuento especial');
-    box.innerHTML = notice + (offers.length ? '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' +
-      offers.map(function (o) { return card(o); }).join('') + '</div>' : '');
+    if (native) box.className = 'cte-inline cte-native';
+    box.innerHTML = notice + (offers.length ? (native
+      ? '<h5 class="cte-native-title h4-md font-weight-normal mb-3">Agregá estos productos con descuento especial</h5><div class="cte-native-list">' +
+        offers.map(nativeRow).join('') + '</div>'
+      : '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' +
+        offers.map(function (o) { return card(o); }).join('') + '</div>') : '');
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
     if (offers.length) reportSeen('cart', offers);
