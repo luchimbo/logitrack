@@ -57,7 +57,8 @@ export default function proxy(req, event) {
   if (/^\/api\/cross-selling\/demo-callback\/[a-f0-9]{64}$/.test(req.nextUrl.pathname)) return NextResponse.next();
   // Módulo «Completá tu equipo» de la demo: firma en la URL o validación de origen y carrito en el handler.
   if (/^\/api\/cross-selling\/offer-callback\/[a-f0-9]{32}$/.test(req.nextUrl.pathname)) return NextResponse.next();
-  if (/^\/api\/cross-selling\/storefront\/(offers|accept)$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  if (/^\/api\/cross-selling\/storefront\/(offers|accept|seen)$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  if (req.nextUrl.pathname === "/api/cross-selling/report") return NextResponse.next();
   return clerkGuard(req, event);
 }
 

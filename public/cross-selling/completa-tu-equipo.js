@@ -93,6 +93,20 @@
       .catch(function () { return hit || []; });
   }
 
+  // Informe: avisar una vez por página y bloque qué ofertas (reglas) se mostraron.
+  var seen = {};
+  function reportSeen(surface, offers) {
+    var rules = offers.map(function (o) { return o.ruleId; }).filter(Boolean);
+    var key = surface + ':' + offers.map(function (o) { return o.variantId; }).join(',');
+    if (!rules.length || seen[key]) return;
+    seen[key] = true;
+    var body = JSON.stringify({ store: STORE, surface: surface, rules: rules });
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon(API + 'seen', new Blob([body], { type: 'text/plain' }));
+      else fetch(API + 'seen', { method: 'POST', body: body, credentials: 'omit', keepalive: true, headers: { 'Content-Type': 'text/plain' } });
+    } catch (e) { /* el informe no debe afectar la compra */ }
+  }
+
   function card(o, label) {
     return '<div class="cte-card" data-variant="' + esc(o.variantId) + '">' +
       (o.image ? '<img class="cte-img" alt="" loading="lazy" src="' + esc(o.image) + '">' : '<div class="cte-img"></div>') +
@@ -306,6 +320,7 @@
     document.addEventListener('keydown', onKey);
     document.body.appendChild(overlay);
     bind(overlay, offers);
+    reportSeen('modal', offers);
     var first = overlay.querySelector('.cte-btn');
     if (first) first.focus();
   }
@@ -337,6 +352,7 @@
       offers.map(function (o) { return card(o); }).join('') + '</div>' : '');
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
+    if (offers.length) reportSeen('cart', offers);
   }
 
   // Página de producto: ofertas para el producto que se está viendo, debajo del botón de compra.
@@ -368,6 +384,7 @@
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
         form.parentNode.insertBefore(box, form.nextSibling);
         bind(box, offers, acceptWithProduct);
+        reportSeen('product', offers);
       };
       requestOffers(variant + ':0:1', draw).then(draw);
     }, productPending === null ? 0 : 200);

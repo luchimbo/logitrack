@@ -51,5 +51,21 @@ export function createOfferStore({ url, token, storeId, fetchImpl = fetch }) {
     const [value] = await pipeline([['GET', key('evt', cartId)]], 3000);
     return value ? parse(value) : null;
   }
-  return { acceptances, saveAcceptance, saveEvent, lastEvent };
+  // Contadores diarios para el informe: vistas y aceptaciones por regla (400 días).
+  const statsKey = (day) => `cs:stats:${storeId}:${day}`;
+  async function countStats(day, fields) {
+    const commands = Object.entries(fields).filter(([, n]) => n > 0).map(([field, n]) => ['HINCRBY', statsKey(day), field, String(n)]);
+    if (!commands.length) return;
+    await pipeline([...commands, ['EXPIRE', statsKey(day), String(400 * 24 * 60 * 60)]], 3000);
+  }
+  async function readStats(days) {
+    if (!days.length) return [];
+    const results = await pipeline(days.map((d) => ['HGETALL', statsKey(d)]), 5000);
+    return results.map((flat) => {
+      const out = {};
+      for (let i = 1; i < (flat || []).length; i += 2) out[flat[i - 1]] = Number(flat[i]);
+      return out;
+    });
+  }
+  return { acceptances, saveAcceptance, saveEvent, lastEvent, countStats, readStats };
 }

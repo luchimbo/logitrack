@@ -83,7 +83,7 @@ export function storefrontOffers(snapshot, catalog, items, rawCatalog = []) {
   const values = new Map(rawCatalog.flatMap((p) => (p.variants || []).map((v) => [String(v.id), (v.values || []).map((x) => x?.es ?? Object.values(x || {})[0] ?? '')])));
   return onlineRecommendations(snapshot, catalog, cart).filter((o) => o.descuentoPct > 0).slice(0, 3).map((o) => {
     const trigger = lines.find((l) => reglaSeDispara(rules.get(o.reglaId), [l], catalog.productsById));
-    return { variantId: o.variantId, productId: o.tnProductId, name: o.nombre, image: o.imagen, variant: o.variante,
+    return { variantId: o.variantId, ruleId: o.reglaId, productId: o.tnProductId, name: o.nombre, image: o.imagen, variant: o.variante,
       values: values.get(o.variantId) || [], price: o.precioFinal, discountedPrice: o.precioConDescuento,
       savings: round2(o.precioFinal - o.precioConDescuento), pct: o.descuentoPct, reason: o.motivo,
       triggerLineId: trigger?.lineId || null };
@@ -100,7 +100,7 @@ export function buildAcceptance({ snapshot, catalog, callbackCart, cartId, trigg
   const items = products.map((p) => ({ lineId: String(p.id), variantId: String(p.variantId), quantity: p.quantity }));
   const offer = storefrontOffers(snapshot, catalog, items).find((o) => o.variantId === String(accessoryVariant));
   if (!offer || offer.triggerLineId !== String(triggerLineId)) fail('La oferta ya no está disponible para este carrito');
-  return { cartId: String(cartId), triggerVariant: String(trigger.variantId), accessoryVariant: offer.variantId,
+  return { cartId: String(cartId), ruleId: String(offer.ruleId || ''), triggerVariant: String(trigger.variantId), accessoryVariant: offer.variantId,
     pct: offer.pct, minPriceCents: Math.round(offer.price * 100), expiresAt: now + ACCEPTANCE_TTL_MS };
 }
 
