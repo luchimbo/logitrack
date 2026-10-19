@@ -47,6 +47,8 @@ export function getDefaultAppTab({ currentUser, navGroups = [] }) {
 }
 
 export function resolveAppTab({ requestedTab, currentUser, navGroups = [] }) {
+  // Permitir la configuración inicial y el regreso de OAuth sin conexión previa.
+  if (currentUser && ["tiendanube", "shopify", "mercadolibre", "zipnova"].includes(requestedTab)) return requestedTab;
   const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
   return availableIds.has(requestedTab)
     ? requestedTab

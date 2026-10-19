@@ -66,3 +66,13 @@ test("More is active only for destinations outside the four primary tabs", () =>
   assert.equal(isMobileMoreActive({ activeTab: "upload", primaryItems }), false);
   assert.equal(isMobileMoreActive({ activeTab: "dashboard", primaryItems }), true);
 });
+
+test("la primera conexión y OAuth abren el módulo sin una conexión previa", () => {
+  const currentUser = { workspaceSlug: "mi-tienda", role: "owner" };
+  const navGroups = navigationFor(currentUser);
+  for (const provider of ["tiendanube", "shopify", "mercadolibre", "zipnova"]) {
+    assert.equal(resolveAppTab({ requestedTab: provider, currentUser, navGroups }), provider);
+  }
+  assert.equal(resolveAppTab({ requestedTab: "adminOverview", currentUser, navGroups }), "upload");
+  assert.equal(resolveAppTab({ requestedTab: "tiendanube", currentUser: null, navGroups }), "upload");
+});

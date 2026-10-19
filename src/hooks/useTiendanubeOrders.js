@@ -138,6 +138,7 @@ export function useTiendanubeOrders() {
       setWarning(data.webhookWarning || 'Integración con Tiendanube conectada correctamente. Los cambios nuevos van a entrar por webhook.');
       setPendingStoreId('');
       await loadStatus();
+      window.dispatchEvent(new Event('integrations-changed'));
     } catch (err) {
       setError(err.message || 'Error inesperado');
       setWarning('');
@@ -160,7 +161,7 @@ export function useTiendanubeOrders() {
     }
 
     if (tiendanubeError) {
-      setError(decodeURIComponent(tiendanubeError));
+      setError(tiendanubeError);
       window.history.replaceState({}, '', window.location.pathname + '?tab=tiendanube');
       setVerifyAfterOauth(false);
       setPendingStoreId('');

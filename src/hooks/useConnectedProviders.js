@@ -21,6 +21,8 @@ export function useConnectedProviders(currentUser) {
     };
 
     loadIntegrations();
+    window.addEventListener('integrations-changed', loadIntegrations);
+    return () => window.removeEventListener('integrations-changed', loadIntegrations);
   }, [currentUser]);
 
   return connectedProviders;

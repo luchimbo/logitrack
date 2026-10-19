@@ -1,7 +1,17 @@
 "use client";
 
 import { SignUp } from "@clerk/nextjs";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { safeAppReturn, loginPath } from "@/lib/oauthNavigation";
 import GeoModiLogo from "@/components/GeoModiLogo";
+
+function SignupForm() {
+  const params = useSearchParams();
+  const returnTo = safeAppReturn(params.get("returnTo"));
+  return <SignUp routing="path" path="/sign-up" signInUrl={loginPath(returnTo)}
+    fallbackRedirectUrl={returnTo} forceRedirectUrl={returnTo} />;
+}
 
 export default function SignUpPage() {
   return (
@@ -23,13 +33,7 @@ export default function SignUpPage() {
         </div>
 
         <div className="clerk-auth-shell" style={{ display: "flex", justifyContent: "center" }}>
-          <SignUp
-            routing="path"
-            path="/sign-up"
-            signInUrl="/login"
-            fallbackRedirectUrl="/app"
-            forceRedirectUrl="/app"
-          />
+          <Suspense fallback={<p>Cargando registro…</p>}><SignupForm /></Suspense>
         </div>
 
         <style jsx global>{`
