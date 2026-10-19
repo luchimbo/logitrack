@@ -119,7 +119,7 @@
           (o.reason ? '<div class="font-small opacity-50">' + esc(o.reason) + '</div>' : '') + '</h6>' +
         '<div class="col-6 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
           '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
-        '<div class="col-6 col-md-4"><button type="button" class="cte-accept btn btn-primary btn-small btn-block">Agregar con descuento</button>' +
+        '<div class="col-6 col-md-4"><button type="button" class="cte-accept btn btn-primary btn-block">Agregar con descuento</button>' +
           '<p class="cte-row-msg font-small mb-0" role="status"></p></div>' +
       '</div></div>' +
       '<div class="col-12"><div class="divider"></div></div></div>';
