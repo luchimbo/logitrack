@@ -12,6 +12,11 @@ export async function GET(request) {
     .filter(([v, l, q]) => /^\d{1,15}$/.test(v) && /^\d{1,15}$/.test(l) && /^\d{1,4}$/.test(q))
     .map(([variantId, lineId, quantity]) => ({ variantId, lineId, quantity: Number(quantity) }));
   if (!items.length) return Response.json({ offers: [] }, { headers });
-  try { return Response.json({ offers: await offersForStorefront(storeId, items) }, { headers }); }
+  // Página de producto (línea 0): la respuesta es igual para todos los clientes y sólo tiene
+  // precios públicos. Se cachea en el CDN un minuto (y se sirve vencida mientras se renueva).
+  const productView = items.every((i) => i.lineId === '0');
+  const cacheHeaders = productView ? { ...headers, 'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'public, max-age=30, s-maxage=60, stale-while-revalidate=600' } : headers;
+  try { return Response.json({ offers: await offersForStorefront(storeId, items) }, { headers: cacheHeaders }); }
   catch (error) { return storefrontError(error, headers); }
 }

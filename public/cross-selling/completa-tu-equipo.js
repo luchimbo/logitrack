@@ -7,6 +7,12 @@
   var STORE = window.LS && LS.store ? String(LS.store.id) : '';
   if (STORES.indexOf(STORE) < 0 || window.__completaTuEquipo) return;
   window.__completaTuEquipo = true;
+  // Abrir la conexión con la API apenas carga el script, antes de la primera consulta.
+  try {
+    var hint = document.createElement('link');
+    hint.rel = 'preconnect'; hint.href = 'https://www.geomodi.ai'; hint.crossOrigin = 'anonymous';
+    document.head.appendChild(hint);
+  } catch (e) { /* sin preconexión */ }
 
   var money = function (n) {
     try { return '$' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -60,17 +66,31 @@
   style.textContent = css;
   document.head.appendChild(style);
 
-  function fetchOffers() {
+  function fetchOffers(onCached) {
     var items = cartItems();
     if (!items.length) return Promise.resolve([]);
-    return requestOffers(items.slice(0, 40).map(function (i) { return (i.variant_id || i.id) + ':' + i.item_id + ':' + (i.quantity || 1); }).join(','));
+    return requestOffers(items.slice(0, 40).map(function (i) { return (i.variant_id || i.id) + ':' + i.item_id + ':' + (i.quantity || 1); }).join(','), onCached);
   }
 
-  function requestOffers(q) {
+  // Las ofertas ya consultadas se dibujan al instante (hasta 2 min) y se renuevan por detrás.
+  var OFFERS_TTL_MS = 120000;
+  function cachedOffers(q) {
+    try {
+      var hit = JSON.parse(store.get('cte-offers:' + STORE + ':' + q) || 'null');
+      return hit && Date.now() - hit.at < OFFERS_TTL_MS && Array.isArray(hit.offers) ? hit.offers : null;
+    } catch (e) { return null; }
+  }
+  function requestOffers(q, onCached) {
+    var hit = cachedOffers(q);
+    if (hit && onCached) onCached(hit);
     return fetch(API + 'offers?store=' + STORE + '&items=' + encodeURIComponent(q), { credentials: 'omit' })
       .then(function (r) { return r.ok ? r.json() : { offers: [] }; })
-      .then(function (d) { return Array.isArray(d.offers) ? d.offers : []; })
-      .catch(function () { return []; });
+      .then(function (d) {
+        var offers = Array.isArray(d.offers) ? d.offers : [];
+        store.set('cte-offers:' + STORE + ':' + q, JSON.stringify({ at: Date.now(), offers: offers }));
+        return offers;
+      })
+      .catch(function () { return hit || []; });
   }
 
   function card(o, label) {
@@ -337,7 +357,7 @@
       var old = document.querySelector('.cte-product');
       if (!variant) { if (old) old.parentNode.removeChild(old); return; }
       // Línea 0: el producto todavía no está en el carrito; sólo decide qué se muestra.
-      requestOffers(variant + ':0:1').then(function (offers) {
+      var draw = function (offers) {
         var prev = document.querySelector('.cte-product');
         if (prev) prev.parentNode.removeChild(prev);
         if (!offers.length) return;
@@ -348,20 +368,26 @@
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
         form.parentNode.insertBefore(box, form.nextSibling);
         bind(box, offers, acceptWithProduct);
-      });
-    }, 300);
+      };
+      requestOffers(variant + ':0:1', draw).then(draw);
+    }, productPending === null ? 0 : 200);
   }
 
   var pending = null;
   function refresh(openModal) {
     clearTimeout(pending);
     pending = setTimeout(function () {
-      fetchOffers().then(function (offers) {
+      var shown = false;
+      fetchOffers(function (cached) {
+        // Copia de esta sesión: dibujar ya; la respuesta nueva la reemplaza.
+        renderInline(cached); decorateLines();
+        if (openModal && cached.length) { showModal(cached); shown = true; }
+      }).then(function (offers) {
         renderInline(offers);
         decorateLines();
-        if (openModal && offers.length) showModal(offers);
+        if (openModal && offers.length && !shown) showModal(offers);
       });
-    }, 400);
+    }, openModal ? 50 : 0);
   }
 
   if (typeof LS.on === 'function') LS.on('productAddedToCart', function () { refresh(true); });

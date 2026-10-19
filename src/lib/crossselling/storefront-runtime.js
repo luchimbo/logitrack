@@ -25,6 +25,17 @@ async function init() {
     'CREATE INDEX IF NOT EXISTS crossselling_offer_events_cart ON crossselling_offer_events(cart_id, id)',
   ], 'write').catch((e) => { initialized = null; throw e; }));
 }
+// Las vistas de la tienda leen el estado de memoria hasta 15 s; los cambios del interruptor
+// llegan a las demás instancias en ese plazo. Las acciones de administración leen siempre la base.
+const STATE_TTL_MS = 15_000;
+const stateCache = new Map();
+async function cachedState(storeId) {
+  const hit = stateCache.get(storeId);
+  if (hit && Date.now() - hit.at < STATE_TTL_MS) return hit.value;
+  const value = await readState(storeId);
+  stateCache.set(storeId, { at: Date.now(), value });
+  return value;
+}
 async function readState(storeId) {
   await init();
   const { rows } = await db.execute({ sql: 'SELECT * FROM crossselling_offer_state WHERE store_id=?', args: [storeId] });
@@ -32,6 +43,7 @@ async function readState(storeId) {
 }
 async function saveState(storeId, state) {
   await init();
+  stateCache.delete(storeId);
   const { storeId: _omit, ...data } = state;
   await db.execute({ sql: `INSERT INTO crossselling_offer_state VALUES(?,?,?) ON CONFLICT(store_id) DO UPDATE SET state_json=excluded.state_json
     WHERE crossselling_offer_state.workspace_id=excluded.workspace_id`, args: [storeId, state.workspaceId, JSON.stringify(data)] });
@@ -57,16 +69,30 @@ export async function callbackAcceptances(state, cartId) {
   return [...state.acceptances, ...await store.acceptances(String(cartId))];
 }
 
-// La configuración publicada cambia poco: evitar leerla en cada vista de la tienda.
+// La configuración publicada cambia poco y es grande (catálogo de TN): se sirve de memoria y,
+// pasado un minuto, se renueva en segundo plano sin hacer esperar a la tienda.
+const PUBLICATION_FRESH_MS = 60_000;
+const PUBLICATION_MAX_STALE_MS = 30 * 60_000;
 const publications = new Map();
-async function publication(storeId) {
-  const cached = publications.get(storeId);
-  if (cached && Date.now() - cached.at < 60_000) return cached.value;
+async function loadPublication(storeId) {
   const record = await repository.get(storeId);
   if (!record) throw failure('Mostrador todavía no publicó reglas para esta tienda');
   const value = { record, catalog: mapOnlineCatalog(record.snapshot, record.catalog) };
   publications.set(storeId, { at: Date.now(), value });
   return value;
+}
+async function publication(storeId) {
+  const cached = publications.get(storeId);
+  const age = cached ? Date.now() - cached.at : Infinity;
+  if (age < PUBLICATION_FRESH_MS) return cached.value;
+  if (age < PUBLICATION_MAX_STALE_MS) {
+    if (!cached.refreshing) {
+      cached.refreshing = true;
+      loadPublication(storeId).catch(() => { cached.refreshing = false; });
+    }
+    return cached.value;
+  }
+  return loadPublication(storeId);
 }
 
 // Cliente de la tienda con la conexión de Logitrack; exige que pertenezca al espacio.
@@ -141,16 +167,16 @@ export async function changeOffer(workspaceId, input, storeId = DEMO_STORE_ID) {
   return offerStatus(workspaceId, storeId);
 }
 
-async function enabledState(storeId) {
-  const state = await readState(storeId);
+async function enabledState(storeId, { cached = false } = {}) {
+  const state = await (cached ? cachedState(storeId) : readState(storeId));
   if (!state?.enabled || !state.promotionId) throw failure('El módulo no está activo', 404);
   return state;
 }
 
 export async function offersForStorefront(storeId, items) {
   storeId = allowed(storeId);
-  await enabledState(storeId);
-  const { record, catalog } = await publication(storeId);
+  // Estado y publicación en paralelo, desde memoria cuando ya están cargados.
+  const [, { record, catalog }] = await Promise.all([enabledState(storeId, { cached: true }), publication(storeId)]);
   return storefrontOffers(record.snapshot, catalog, items, record.catalog);
 }
 
