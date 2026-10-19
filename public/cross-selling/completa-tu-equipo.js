@@ -49,6 +49,7 @@
     '.cte-btn{background:#111827;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;width:100%;font-size:14px}',
     '.cte-btn[disabled]{opacity:.6;cursor:wait}.cte-msg{font-size:13px;margin:6px 0 0}.cte-msg.err{color:#b91c1c}',
     '.cte-inline{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px;background:#fff;color:#111827}',
+    '.cte-product{margin:16px 0}.cte-product .cte-sub{margin:2px 0 10px}',
     '.cte-inline .cte-title{font-size:16px}.cte-inline .cte-card{grid-template-columns:56px 1fr;padding:8px}.cte-inline .cte-img{width:56px;height:56px}',
   ].join('');
   var style = document.createElement('style');
@@ -58,38 +59,74 @@
   function fetchOffers() {
     var items = cartItems();
     if (!items.length) return Promise.resolve([]);
-    var q = items.slice(0, 40).map(function (i) { return (i.variant_id || i.id) + ':' + i.item_id + ':' + (i.quantity || 1); }).join(',');
+    return requestOffers(items.slice(0, 40).map(function (i) { return (i.variant_id || i.id) + ':' + i.item_id + ':' + (i.quantity || 1); }).join(','));
+  }
+
+  function requestOffers(q) {
     return fetch(API + 'offers?store=' + STORE + '&items=' + encodeURIComponent(q), { credentials: 'omit' })
       .then(function (r) { return r.ok ? r.json() : { offers: [] }; })
       .then(function (d) { return Array.isArray(d.offers) ? d.offers : []; })
       .catch(function () { return []; });
   }
 
-  function card(o) {
+  function card(o, label) {
     return '<div class="cte-card" data-variant="' + esc(o.variantId) + '">' +
       (o.image ? '<img class="cte-img" alt="" loading="lazy" src="' + esc(o.image) + '">' : '<div class="cte-img"></div>') +
       '<div><p class="cte-name">' + esc(o.name) + (o.variant ? ' · ' + esc(o.variant) : '') + '</p>' +
       (o.reason ? '<p class="cte-reason">' + esc(o.reason) + '</p>' : '') +
       '<div class="cte-prices"><span class="cte-old">' + money(o.price) + '</span><span class="cte-new">' + money(o.discountedPrice) + '</span>' +
       '<span class="cte-save">Ahorrás ' + money(o.savings) + '</span></div>' +
-      '<button type="button" class="cte-btn">Agregar con descuento</button><p class="cte-msg" role="status"></p></div></div>';
+      '<button type="button" class="cte-btn">' + (label || 'Agregar con descuento') + '</button><p class="cte-msg" role="status"></p></div></div>';
   }
 
-  function bind(root, offers) {
+  function bind(root, offers, onAccept) {
     Array.prototype.forEach.call(root.querySelectorAll('.cte-card'), function (el) {
       var offer = offers.filter(function (o) { return String(o.variantId) === el.getAttribute('data-variant'); })[0];
       var btn = el.querySelector('.cte-btn'), msg = el.querySelector('.cte-msg');
-      btn.addEventListener('click', function () { accept(offer, btn, msg); });
+      btn.addEventListener('click', function () { (onAccept || accept)(offer, btn, msg); });
     });
+  }
+
+  function addToCart(body) {
+    body.set('add_to_cart_enhanced', '1');
+    return fetch('/comprar/', { method: 'POST', body: body, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d || !d.success) throw new Error('No se pudo agregar el producto al carrito'); return d; });
+  }
+
+  function failed(btn, msg, label) {
+    return function (e) {
+      btn.disabled = false; btn.textContent = label;
+      msg.className = 'cte-msg err'; msg.textContent = e.message || 'No se pudo aplicar la oferta';
+    };
   }
 
   function accept(offer, btn, msg) {
     var id = cartId();
     if (!offer || !id) return;
     btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.className = 'cte-msg';
+    acceptAndAdd(offer, id, offer.triggerLineId).catch(failed(btn, msg, 'Agregar con descuento'));
+  }
+
+  // Página de producto: agrega el producto que se está viendo (con el formulario del tema: variante y
+  // cantidad elegidas) y después acepta la oferta sobre esa línea del carrito.
+  function acceptWithProduct(offer, btn, msg) {
+    var form = productForm();
+    if (!offer || !form) return;
+    btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.className = 'cte-msg';
+    addToCart(new URLSearchParams(new FormData(form)))
+      .then(function (d) {
+        var line = d.item && d.item.id, id = (d.cart && d.cart.id) || (d.item && d.item.cart_id) || (LS.cart && LS.cart.id);
+        if (!line || !id) { window.location.href = '/comprar/'; return null; }
+        return acceptAndAdd(offer, String(id), String(line));
+      })
+      .catch(failed(btn, msg, 'Agregar los dos con descuento'));
+  }
+
+  function acceptAndAdd(offer, id, triggerLineId) {
     // 1) Registrar la aceptación (el servidor valida contra el carrito confirmado por TN).
-    fetch(API + 'accept', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ store: STORE, cartId: id, triggerLineId: String(offer.triggerLineId), accessoryVariant: String(offer.variantId) }) })
+    return fetch(API + 'accept', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ store: STORE, cartId: id, triggerLineId: String(triggerLineId), accessoryVariant: String(offer.variantId) }) })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'No se pudo aplicar la oferta'); return d; }); })
       // Sin Redis, TN tarda unos segundos en usar la URL nueva del callback: si el accesorio entra
       // antes, el descuento recién aparece en el próximo cambio. Con Redis la URL no cambia.
@@ -99,21 +136,13 @@
         var form = new URLSearchParams();
         form.append('add_to_cart', String(offer.productId));
         form.append('quantity', '1');
-        form.append('add_to_cart_enhanced', '1');
         (offer.values || []).forEach(function (v, i) { if (v) form.append('variation[' + i + ']', v); });
-        return fetch('/comprar/', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-          .then(function (r) { return r.json(); })
-          .then(function (d) { if (!d || !d.success) throw new Error('No se pudo agregar el producto al carrito'); });
+        return addToCart(form);
       })
       .then(function () {
         store.set('cte-added', '1');
-        btn.textContent = 'Agregado ✓';
         // 3) El carrito muestra el descuento recalculado por Tiendanube.
         window.location.href = '/comprar/';
-      })
-      .catch(function (e) {
-        btn.disabled = false; btn.textContent = 'Agregar con descuento';
-        msg.className = 'cte-msg err'; msg.textContent = e.message || 'No se pudo aplicar la oferta';
       });
   }
 
@@ -168,6 +197,39 @@
     bind(box, offers);
   }
 
+  // Página de producto: ofertas para el producto que se está viendo, debajo del botón de compra.
+  function productForm() { return window.LS && LS.product ? document.querySelector('form.js-product-form') : null; }
+  function productVariant(form) {
+    var input = form.querySelector('[name="variant_id"]');
+    if (input && input.value) return String(input.value);
+    var variants = LS.variants || [];
+    return variants.length === 1 ? String(variants[0].product_variant_id || variants[0].id) : '';
+  }
+  var productPending = null;
+  function renderProduct() {
+    var form = productForm();
+    if (!form) return;
+    clearTimeout(productPending);
+    productPending = setTimeout(function () {
+      var variant = productVariant(form);
+      var old = document.querySelector('.cte-product');
+      if (!variant) { if (old) old.parentNode.removeChild(old); return; }
+      // Línea 0: el producto todavía no está en el carrito; sólo decide qué se muestra.
+      requestOffers(variant + ':0:1').then(function (offers) {
+        var prev = document.querySelector('.cte-product');
+        if (prev) prev.parentNode.removeChild(prev);
+        if (!offers.length) return;
+        var box = document.createElement('section');
+        box.className = 'cte-inline cte-product';
+        box.setAttribute('aria-label', 'Completá tu equipo');
+        box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><p class="cte-sub">Llevalo junto con este producto y ahorrá.</p>' +
+          '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
+        form.parentNode.insertBefore(box, form.nextSibling);
+        bind(box, offers, acceptWithProduct);
+      });
+    }, 300);
+  }
+
   var pending = null;
   function refresh(openModal) {
     clearTimeout(pending);
@@ -182,4 +244,7 @@
   if (typeof LS.on === 'function') LS.on('productAddedToCart', function () { refresh(true); });
   else document.addEventListener('productAddedToCart', function () { refresh(true); });
   refresh(false);
+  renderProduct();
+  var pForm = productForm();
+  if (pForm) pForm.addEventListener('change', renderProduct);
 })();
