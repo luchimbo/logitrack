@@ -109,14 +109,34 @@
     } catch (e) { /* el informe no debe afectar la compra */ }
   }
 
+  // El descuento existe sólo por sumar el accesorio ahora, junto al producto principal: decirlo siempre.
+  function mainName(o) {
+    var line = o && o.triggerLineId && String(o.triggerLineId) !== '0' &&
+      cartItems().filter(function (i) { return String(i.item_id) === String(o.triggerLineId); })[0];
+    if (line && line.name) return line.name;
+    if (window.LS && LS.product && LS.product.name) return LS.product.name;
+    var m = String((o && o.reason) || '').match(/^Ideal para tu (.+)$/);
+    return m ? m[1] : 'producto';
+  }
+  function joinNames(names) {
+    var unique = names.filter(function (n, i) { return n && names.indexOf(n) === i; });
+    return unique.length > 1 ? unique.slice(0, -1).join(', ') + ' y ' + unique[unique.length - 1] : (unique[0] || '');
+  }
+  function onlyNowLabel(o) { return '-' + esc(o.pct) + '% sólo si lo sumás ahora'; }
+  function withMainText(o) { return 'Precio especial llevándolo con tu ' + esc(mainName(o)) + ' · Ahorrás ' + money(o.savings); }
+  function onlyNowNote(main) {
+    return 'Estos precios valen sólo si los agregás ahora, en esta compra' + (main ? ', junto a tu ' + esc(main) : '') +
+      '. Por separado se cobran a precio normal.';
+  }
+
   // Mismo renglón que los productos del carrito del tema (grilla, tipografía, precio tachado y botón).
   function nativeRow(o) {
     return '<div class="cte-row row align-items-md-center" data-variant="' + esc(o.variantId) + '">' +
       '<div class="col-3 col-md-1">' + (o.image ? '<img class="img-fluid" alt="" loading="lazy" src="' + esc(o.image) + '">' : '') + '</div>' +
       '<div class="col-9 col-md-11 pl-0 pl-md-3"><div class="row align-items-md-center">' +
         '<h6 class="col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') +
-          '<div class="mt-2"><span class="d-inline-block label label-accent label-small font-smallest mb-1">-' + esc(o.pct) + '% · Ahorrás ' + money(o.savings) + '</span></div>' +
-          (o.reason ? '<div class="font-small opacity-50">' + esc(o.reason) + '</div>' : '') + '</h6>' +
+          '<div class="mt-2"><span class="d-inline-block label label-accent label-small font-smallest mb-1">' + onlyNowLabel(o) + '</span></div>' +
+          '<div class="font-small opacity-50">' + withMainText(o) + '</div></h6>' +
         '<div class="col-12 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
           '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
         '<div class="col-12 col-md-4 mt-2 mt-md-0"><button type="button" class="cte-accept btn btn-primary btn-block">Agregar con descuento</button>' +
@@ -129,9 +149,9 @@
     return '<div class="cte-card" data-variant="' + esc(o.variantId) + '">' +
       (o.image ? '<img class="cte-img" alt="" loading="lazy" src="' + esc(o.image) + '">' : '<div class="cte-img"></div>') +
       '<div><p class="cte-name">' + esc(o.name) + (o.variant ? ' · ' + esc(o.variant) : '') + '</p>' +
-      (o.reason ? '<p class="cte-reason">' + esc(o.reason) + '</p>' : '') +
+      '<p class="cte-reason">Precio especial llevándolo con tu ' + esc(mainName(o)) + '</p>' +
       '<div class="cte-prices"><span class="cte-old">' + money(o.price) + '</span><span class="cte-new">' + money(o.discountedPrice) + '</span>' +
-      '<span class="cte-save">Ahorrás ' + money(o.savings) + '</span></div>' +
+      '<span class="cte-save">' + onlyNowLabel(o) + ' · Ahorrás ' + money(o.savings) + '</span></div>' +
       '<button type="button" class="cte-btn">' + (label || 'Agregar con descuento') + '</button><p class="cte-msg" role="status"></p></div></div>';
   }
 
@@ -241,9 +261,11 @@
     if (!accepted.length) return '';
     var amount = appliedAmount();
     var total = accepted.reduce(function (sum, a) { return sum + (Number(a.savings) || 0); }, 0);
-    var names = accepted.map(function (a) { return esc(a.name); }).join(', ');
-    return '<div class="cte-applied" role="status"><b>✓ Descuento especial aplicado: ' + (amount || ('-' + money(total))) + '</b>' +
-      '<span>En ' + names + '. Lo ves en el renglón «Completá tu equipo» del total.</span></div>';
+    var names = joinNames(accepted.map(function (a) { return a.name; }));
+    var mains = joinNames(accepted.map(function (a) { return mainName({ triggerLineId: a.triggerLineId }); }).filter(function (n) { return n !== 'producto'; }));
+    return '<div class="cte-applied" role="status"><b>✓ Descuento por completar tu compra: ' + (amount || ('-' + money(total))) + '</b>' +
+      '<span>En ' + esc(names) + (mains ? ', por llevarlo junto a tu ' + esc(mains) : '') +
+      '. Se mantiene por 2 horas mientras ambos estén en el carrito. Lo ves en el renglón «Completá tu equipo» del total.</span></div>';
   }
 
   // Renglón del accesorio en la página del carrito: precio tachado y precio con descuento.
@@ -274,7 +296,7 @@
       // El aviso sigue al renglón de Tiendanube: desaparece si deja de aplicar y toma su monto.
       var notice = document.querySelector('.cte-applied');
       if (notice && !confirmed) notice.parentNode.removeChild(notice);
-      else if (notice) { var strong = notice.querySelector('b'); if (strong) strong.textContent = '✓ Descuento especial aplicado: ' + applied; }
+      else if (notice) { var strong = notice.querySelector('b'); if (strong) strong.textContent = '✓ Descuento por completar tu compra: ' + applied; }
       if (confirmed) acceptedInCart().forEach(function (a) {
         var item = items.filter(function (i) { return String(i.variant_id || i.id) === a.variantId; })[0];
         var row = item && cartRow(item.item_id), trigger = cartRow(a.triggerLineId);
@@ -374,7 +396,7 @@
     overlay.className = 'cte-overlay';
     overlay.innerHTML = '<div class="cte-modal" role="dialog" aria-modal="true" aria-labelledby="cte-title">' +
       '<div class="cte-head"><div><h2 class="cte-title" id="cte-title">Completá tu equipo</h2>' +
-      '<p class="cte-sub">Accesorios compatibles con descuento si los sumás ahora.</p></div>' +
+      '<p class="cte-sub">' + onlyNowNote(joinNames(offers.map(mainName))) + '</p></div>' +
       '<button type="button" class="cte-close" aria-label="Cerrar">×</button></div>' +
       '<div class="cte-list">' + offers.map(function (o) { return card(o); }).join('') + '</div></div>';
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
@@ -411,12 +433,13 @@
     if (!target || (!offers.length && !notice)) return;
     var box = document.createElement('section');
     box.className = 'cte-inline';
-    box.setAttribute('aria-label', 'Agregá estos productos con descuento especial');
+    box.setAttribute('aria-label', 'Oferta especial por completar tu compra');
+    var note = '<p class="cte-sub font-small mb-3">' + onlyNowNote(joinNames(offers.map(mainName))) + '</p>';
     if (native) box.className = 'cte-inline cte-native';
     box.innerHTML = notice + (offers.length ? (native
-      ? '<h5 class="cte-native-title h4-md font-weight-normal mb-3">Agregá estos productos con descuento especial</h5><div class="cte-native-list">' +
+      ? '<h5 class="cte-native-title h4-md font-weight-normal mb-1">Oferta especial por completar tu compra</h5>' + note + '<div class="cte-native-list">' +
         offers.map(nativeRow).join('') + '</div>'
-      : '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' +
+      : '<h3 class="cte-title">Oferta especial por completar tu compra</h3>' + note + '<div class="cte-list">' +
         offers.map(function (o) { return card(o); }).join('') + '</div>') : '');
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
@@ -448,7 +471,7 @@
         var box = document.createElement('section');
         box.className = 'cte-inline cte-product';
         box.setAttribute('aria-label', 'Completá tu equipo');
-        box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><p class="cte-sub">Llevalo junto con este producto y ahorrá.</p>' +
+        box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><p class="cte-sub">Precio especial sólo si los sumás ahora, junto a este producto. Por separado se cobran a precio normal.</p>' +
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
         form.parentNode.insertBefore(box, form.nextSibling);
         bind(box, offers, acceptWithProduct);
