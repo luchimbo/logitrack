@@ -218,7 +218,11 @@
     // Sin observar mientras se modifican los precios: si no, el script reaccionaría a sus propios cambios.
     if (cartObserver) cartObserver.disconnect();
     try {
-      var confirmed = Boolean(appliedAmount()), items = cartItems(), done = {};
+      var applied = appliedAmount(), confirmed = Boolean(applied), items = cartItems(), done = {};
+      // El aviso sigue al renglón de Tiendanube: desaparece si deja de aplicar y toma su monto.
+      var notice = document.querySelector('.cte-applied');
+      if (notice && !confirmed) notice.parentNode.removeChild(notice);
+      else if (notice) { var strong = notice.querySelector('b'); if (strong) strong.textContent = '✓ Descuento especial aplicado: ' + applied; }
       if (confirmed) acceptedInCart().forEach(function (a) {
         var item = items.filter(function (i) { return String(i.variant_id || i.id) === a.variantId; })[0];
         var row = item && cartRow(item.item_id), trigger = cartRow(a.triggerLineId);
