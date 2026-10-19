@@ -3,6 +3,8 @@ import { STOREFRONT_STORES } from './stores.js';
 // Encendido del módulo «Completá tu equipo» desde Mostrador, firmado igual que la publicación.
 // Opera con el espacio dueño de la conexión de la tienda.
 export const MODULE_STORES = new Set(Object.keys(STOREFRONT_STORES));
+// Permisos de la app que usa el módulo: promociones y callback de descuentos, y scripts de la tienda.
+export const REQUIRED_SCOPES = ['write_discounts', 'write_scripts'];
 const SCRIPT_NAME = /complet[aá]?\s*tu\s*equipo|crossselling|cross-selling/i;
 
 export function moduleSummary(status) {
@@ -33,7 +35,17 @@ export function createModuleHandler({ authorize, lookupConnection, offerStatus, 
       const connection = await lookupConnection(storeId);
       const workspaceId = Number(connection?.workspaceId);
       if (!workspaceId || String(connection.config?.storeId) !== storeId) return Response.json({ error: 'Conectá esta tienda a Logitrack' }, { status: 409, headers });
-      if (request.method === 'GET') return Response.json(moduleSummary(await offerStatus(workspaceId, storeId)), { headers });
+      if (request.method === 'GET') {
+        // Diagnóstico para Mostrador: espacio dueño y permisos de la app, sin tokens.
+        const scopes = String(connection.config?.scope || '').split(/[\s,]+/).filter(Boolean);
+        const info = { workspaceId, scopes, missingScopes: REQUIRED_SCOPES.filter((s) => !scopes.includes(s)) };
+        try { return Response.json({ ...moduleSummary(await offerStatus(workspaceId, storeId)), connection: info }, { headers }); }
+        catch (error) {
+          const status = [400, 404, 409].includes(error.status) ? error.status : 502;
+          return Response.json({ storeId, enabled: false, connection: info,
+            error: status === 502 ? 'No se pudo consultar Tiendanube con esta conexión' : error.message }, { status, headers });
+        }
+      }
       const input = JSON.parse(raw);
       if (typeof input?.enabled !== 'boolean') return Response.json({ error: 'Indicá enabled: true o false' }, { status: 400, headers });
       return Response.json(moduleSummary(await changeOffer(workspaceId, { action: input.enabled ? 'enable' : 'disable' }, storeId)), { headers });

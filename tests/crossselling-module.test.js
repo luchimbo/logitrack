@@ -34,7 +34,8 @@ test('módulo: GET firmado devuelve estado resumido sin eventos de carritos', as
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.deepEqual(body, { storeId: '7570182', enabled: false, promotion: { id: 'promo-1', found: true, active: false },
-    script: { found: true, ids: [11451] }, publication: { revision: 'abc', publishedAt: '2026-10-19T11:00:00Z', selectedRules: 4, mappedProducts: 120 } });
+    script: { found: true, ids: [11451] }, publication: { revision: 'abc', publishedAt: '2026-10-19T11:00:00Z', selectedRules: 4, mappedProducts: 120 },
+    connection: { workspaceId: 2, scopes: [], missingScopes: ['write_discounts', 'write_scripts'] } });
   assert.deepEqual(calls, [['lookup', '7570182'], ['status', 2]]);
 });
 
@@ -101,4 +102,18 @@ test('módulo: la ruta es pública en el proxy y verifica la firma en el handler
   assert.match(proxy, /pathname === "\/api\/cross-selling\/module"\) return NextResponse\.next\(\)/);
   const route = readFileSync(new URL('../src/app/api/cross-selling/module/route.js', import.meta.url), 'utf8');
   assert.match(route, /authorize: authorizePublication/);
+});
+
+test('módulo: el GET informa espacio y permisos faltantes, sin tokens, aunque TN falle', async () => {
+  const handle = createModuleHandler({
+    authorize: (input) => authorizePublication({ ...input, keysJson, now }),
+    lookupConnection: async () => ({ workspaceId: 1, config: { storeId: '78394', accessToken: 'secreto', scope: 'read_orders,write_discounts' } }),
+    offerStatus: async () => { throw Object.assign(new Error('HTTP 401'), { status: 401 }); },
+    changeOffer: async () => { throw new Error('no'); },
+  });
+  const res = await handle(signed('GET', '78394', '', 'p'.repeat(40)));
+  const body = await res.json();
+  assert.equal(res.status, 502);
+  assert.deepEqual(body.connection, { workspaceId: 1, scopes: ['read_orders', 'write_discounts'], missingScopes: ['write_scripts'] });
+  assert.equal(JSON.stringify(body).includes('secreto'), false);
 });
