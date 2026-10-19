@@ -52,6 +52,8 @@ export default function proxy(req, event) {
   // Esta única ruta verifica HMAC por tienda en su handler. No requiere sesión
   // ni consultas a Clerk para la comunicación entre servidores.
   if (req.nextUrl.pathname === "/api/cross-selling/config") return NextResponse.next();
+  // Encendido del módulo desde Mostrador: misma firma HMAC por tienda, verificada en el handler.
+  if (req.nextUrl.pathname === "/api/cross-selling/module") return NextResponse.next();
   if (/^\/api\/cross-selling\/demo-callback\/[a-f0-9]{64}$/.test(req.nextUrl.pathname)) return NextResponse.next();
   // Módulo «Completá tu equipo» de la demo: firma en la URL o validación de origen y carrito en el handler.
   if (/^\/api\/cross-selling\/offer-callback\/[a-f0-9]{32}$/.test(req.nextUrl.pathname)) return NextResponse.next();

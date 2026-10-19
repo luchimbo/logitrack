@@ -73,7 +73,7 @@ export async function changeOffer(workspaceId, input) {
   if (input.action === 'enable') {
     const record = await repository.get(DEMO_STORE_ID);
     if (!record || record.workspaceId !== workspaceId) throw failure('Primero publicá las reglas desde Mostrador');
-    if (!record.snapshot.enabled || !record.snapshot.ruleIds.length) throw failure('En Mostrador, elegí reglas y marcá «Preparar para el canal online» antes de publicar');
+    if (!record.snapshot.enabled || !record.snapshot.ruleIds.length) throw failure('En Mostrador, activá al menos una regla de Recomendaciones y volvé a publicar');
     if (!state?.promotionId) {
       const existing = (await client.listPromotions()).find((p) => p.name === NAME);
       const created = existing || await client.createPromotion({ name: NAME, ...PROMOTION_COMBINATION });
