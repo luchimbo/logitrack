@@ -117,9 +117,9 @@
         '<h6 class="col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') +
           '<div class="mt-2"><span class="d-inline-block label label-accent label-small font-smallest mb-1">-' + esc(o.pct) + '% · Ahorrás ' + money(o.savings) + '</span></div>' +
           (o.reason ? '<div class="font-small opacity-50">' + esc(o.reason) + '</div>' : '') + '</h6>' +
-        '<div class="col-6 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
+        '<div class="col-12 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
           '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
-        '<div class="col-6 col-md-4"><button type="button" class="cte-accept btn btn-primary btn-block">Agregar con descuento</button>' +
+        '<div class="col-12 col-md-4 mt-2 mt-md-0"><button type="button" class="cte-accept btn btn-primary btn-block">Agregar con descuento</button>' +
           '<p class="cte-row-msg font-small mb-0" role="status"></p></div>' +
       '</div></div>' +
       '<div class="col-12"><div class="divider"></div></div></div>';
