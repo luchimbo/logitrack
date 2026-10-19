@@ -90,9 +90,9 @@
     fetch(API + 'accept', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ store: STORE, cartId: id, triggerLineId: String(offer.triggerLineId), accessoryVariant: String(offer.variantId) }) })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'No se pudo aplicar la oferta'); return d; }); })
-      // TN tarda unos segundos en usar el callback actualizado: si el accesorio entra antes,
-      // el carrito se evalúa con la URL anterior y el descuento recién aparece en el próximo cambio.
-      .then(function () { return new Promise(function (resolve) { setTimeout(resolve, 4000); }); })
+      // Sin Redis, TN tarda unos segundos en usar la URL nueva del callback: si el accesorio entra
+      // antes, el descuento recién aparece en el próximo cambio. Con Redis la URL no cambia.
+      .then(function (d) { return d.mode === 'redis' ? null : new Promise(function (resolve) { setTimeout(resolve, 4000); }); })
       .then(function () {
         // 2) Agregar el accesorio al carrito de Tiendanube, con el mismo pedido que usa el tema.
         var form = new URLSearchParams();

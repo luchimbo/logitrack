@@ -4,6 +4,7 @@ import { createCrossSellingRepository } from './repository.js';
 import { clientForWorkspace } from './demo-probe.js';
 import { DEMO_STORE_ID } from './demo-probe-commands.js';
 import { addAcceptance, buildAcceptance, createOfferSigner, storefrontOffers } from './storefront-offer.js';
+import { createOfferStore, offerStoreConfig } from './offer-store.js';
 
 const NAME = 'LogiTrack · Completá tu equipo';
 const DEMO_DOMAIN = 'logitrackprueba.mitiendanube.com';
@@ -30,7 +31,19 @@ async function saveState(state) {
   await db.execute({ sql: `INSERT INTO crossselling_offer_state VALUES(?,?,?) ON CONFLICT(store_id) DO UPDATE SET state_json=excluded.state_json
     WHERE crossselling_offer_state.workspace_id=excluded.workspace_id`, args: [DEMO_STORE_ID, state.workspaceId, JSON.stringify(state)] });
 }
-const callbackUrl = (state) => signer().encode({ promotionId: state.promotionId, acceptances: state.enabled ? state.acceptances : [] }).url;
+// Con Redis configurado, la URL del callback es fija y las aceptaciones viven en Redis.
+// Sin Redis, viajan en la URL firmada (máximo 3, sólo para la demo).
+const storeConfig = offerStoreConfig();
+const offerStore = storeConfig ? createOfferStore({ ...storeConfig, storeId: DEMO_STORE_ID }) : null;
+export const acceptanceMode = offerStore ? 'redis' : 'url';
+const callbackUrl = (state) => signer().encode({ promotionId: state.promotionId,
+  acceptances: state.enabled && !offerStore ? state.acceptances || [] : [] }).url;
+
+// Aceptaciones para el callback: las de la URL (modo anterior) más las de Redis.
+export async function callbackAcceptances(state, cartId) {
+  if (!offerStore) return state.acceptances;
+  return [...state.acceptances, ...await offerStore.acceptances(String(cartId))];
+}
 
 // La configuración publicada cambia poco: evitar leerla en cada vista de la tienda.
 let cache = { at: 0, value: null };
@@ -60,7 +73,7 @@ export async function offerStatus(workspaceId) {
     repository.get(DEMO_STORE_ID),
   ]);
   const { rows } = await db.execute('SELECT created_at,cart_id,event_json FROM crossselling_offer_events ORDER BY id DESC LIMIT 12');
-  return { storeId: DEMO_STORE_ID, state, promotions, scripts,
+  return { storeId: DEMO_STORE_ID, acceptanceMode, state, promotions, scripts,
     publication: record ? { revision: record.revision, publishedAt: record.publishedAt, requestedEnabled: record.snapshot.enabled,
       selectedRules: record.snapshot.ruleIds.length, mappedProducts: record.diagnostics?.mappedProducts ?? null } : null,
     events: rows.map((r) => ({ at: r.created_at, cartId: r.cart_id, ...JSON.parse(r.event_json) })) };
@@ -122,6 +135,12 @@ export async function offersForStorefront(items) {
 async function latestCallbackCart(cartId) {
   // El callback guarda el carrito después de responder: esperar unos segundos.
   for (let attempt = 0; attempt < 4; attempt++) {
+    if (offerStore) {
+      const event = await offerStore.lastEvent(cartId);
+      if (event) return event;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
     const { rows } = await db.execute({ sql: 'SELECT created_at,event_json FROM crossselling_offer_events WHERE cart_id=? ORDER BY id DESC LIMIT 1', args: [cartId] });
     if (rows[0] && Date.now() - Date.parse(rows[0].created_at) < 2 * 60 * 60_000) return JSON.parse(rows[0].event_json);
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -136,10 +155,15 @@ export async function acceptOffer({ cartId, triggerLineId, accessoryVariant }) {
   const callbackCart = await latestCallbackCart(String(cartId));
   if (!callbackCart) throw failure('Tiendanube todavía no confirmó este carrito. Volvé a intentar en unos segundos.');
   const acceptance = buildAcceptance({ snapshot: record.snapshot, catalog, callbackCart, cartId, triggerLineId, accessoryVariant });
+  if (offerStore) {
+    // La URL del callback no cambia: el próximo cálculo del carrito ya ve la aceptación.
+    await offerStore.saveAcceptance(acceptance);
+    return { accepted: true, mode: 'redis', pct: acceptance.pct, expiresAt: new Date(acceptance.expiresAt).toISOString() };
+  }
   state = { ...state, acceptances: addAcceptance(state.acceptances, acceptance) };
   await saveState(state);
   await (await clientForWorkspace(state.workspaceId)).setDiscountCallback(callbackUrl(state));
-  return { accepted: true, pct: acceptance.pct, expiresAt: new Date(acceptance.expiresAt).toISOString() };
+  return { accepted: true, mode: 'url', pct: acceptance.pct, expiresAt: new Date(acceptance.expiresAt).toISOString() };
 }
 
 export function verifiedOfferState(token, encoded) { return signer().verify(token, encoded); }
@@ -151,8 +175,8 @@ export async function recordOfferEvent(cart, commands, elapsedMs) {
   const event = { elapsedMs, tier: cart.execution_tier, currency: cart.currency, coupons: (cart.coupons || []).length,
     products: (cart.products || []).slice(0, 40).map((p) => ({ id: p.id, variantId: p.variant_id, quantity: p.quantity, price: p.price })),
     commands: commands.map((c) => c.command) };
-  await db.batch([
+  await Promise.all([offerStore?.saveEvent(String(cart.cart_id), event), db.batch([
     { sql: 'INSERT INTO crossselling_offer_events(created_at,cart_id,event_json) VALUES(?,?,?)', args: [new Date().toISOString(), String(cart.cart_id), JSON.stringify(event)] },
     'DELETE FROM crossselling_offer_events WHERE id <= (SELECT MAX(id)-500 FROM crossselling_offer_events)',
-  ], 'write');
+  ], 'write')]);
 }

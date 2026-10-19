@@ -1,8 +1,8 @@
 import { after } from 'next/server';
 import { offerCommands } from '@/lib/crossselling/storefront-offer';
-import { recordOfferEvent, verifiedOfferState } from '@/lib/crossselling/storefront-runtime';
+import { callbackAcceptances, recordOfferEvent, verifiedOfferState } from '@/lib/crossselling/storefront-runtime';
 export const dynamic = 'force-dynamic';
-// Camino crítico de TN (800 ms): sólo verifica la firma y evalúa, sin base de datos.
+// Camino crítico de TN (800 ms): verifica la firma, lee las aceptaciones del carrito (Redis, máx. 300 ms) y evalúa.
 export async function POST(request, context) {
   const started = Date.now();
   const { token } = await context.params;
@@ -14,12 +14,14 @@ export async function POST(request, context) {
     if (body.length > 131072) return new Response(null, { status: 413 });
     const cart = JSON.parse(body);
     if (String(cart.store_id) !== '7570182') return new Response(null, { status: 204 });
-    const commands = offerCommands(state, cart);
+    const acceptances = await callbackAcceptances(state, cart.cart_id);
+    const commands = offerCommands({ ...state, acceptances }, cart);
     const elapsedMs = Date.now() - started;
     after(() => recordOfferEvent(cart, commands, elapsedMs).catch((e) => console.warn('TN offer event failed', e.name)));
     return commands.length ? Response.json({ commands }) : new Response(null, { status: 204 });
   } catch (error) {
-    console.warn('TN offer callback failed', error.name);
+    // Sin respuesta válida TN retira los descuentos: falla segura. Sólo tipo/código.
+    console.warn('TN offer callback failed', error.name, error.code || '');
     return new Response(null, { status: 503 });
   }
 }
