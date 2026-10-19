@@ -167,15 +167,20 @@
   }
   // Monto que muestra Tiendanube en el renglón «Completá tu equipo» de los totales, si está.
   function appliedAmount() {
+    var squash = function (t) { return String(t || '').replace(/\s+/g, ' ').trim(); };
+    var amount = function (t) { var m = squash(t).match(/-\s*\$\s*[\d.,]+/); return m ? m[0].replace(/\s+/g, '') : ''; };
+    // Renglón de promociones del tema (Amazonas y Morelia).
+    var rows = document.querySelectorAll('.js-total-promotions-detail-row');
+    for (var r = 0; r < rows.length; r++) if (squash(rows[r].textContent).indexOf('Completá tu equipo') >= 0 && amount(rows[r].textContent)) return amount(rows[r].textContent);
+    // Otros temas: el elemento más chico que lo menciona, sin contar espacios.
     var nodes = document.querySelectorAll('body *');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (el.closest('.cte-inline, .cte-overlay') || el.children.length > 3) continue;
-      var text = el.textContent || '';
+      var text = squash(el.textContent);
       if (text.length > 120 || text.indexOf('Completá tu equipo') < 0) continue;
-      var row = el.parentNode && el.parentNode.textContent || text;
-      var m = row.match(/-\s*\$\s*[\d.,]+/);
-      if (m) return m[0].replace(/\s+/g, '');
+      var found = amount(el.parentNode ? el.parentNode.textContent : text);
+      if (found) return found;
     }
     return '';
   }
