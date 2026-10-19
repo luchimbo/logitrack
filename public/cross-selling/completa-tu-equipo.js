@@ -56,8 +56,8 @@
     '.cte-btn[disabled]{opacity:.6;cursor:wait}.cte-msg{font-size:13px;margin:6px 0 0}.cte-msg.err{color:#b91c1c}',
     '.cte-inline{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px;background:#fff;color:#111827}',
     '.cte-product{margin:16px 0}.cte-product .cte-sub{margin:2px 0 10px}',
-    '.cte-native{border:0;padding:0;margin:0 0 24px;background:transparent;color:inherit}.cte-native .cte-card{padding-top:12px}',
-    '.cte-native .cte-applied{margin-bottom:16px}.cte-native .cte-msg{margin-top:6px}.cte-native .cte-msg.err{color:#b91c1c}',
+    '.cte-native{border:0;padding:0;margin:0 0 24px;background:transparent;color:inherit}.cte-native .cte-row{padding-top:12px}',
+    '.cte-native .cte-applied{margin-bottom:16px}.cte-row-msg{margin-top:6px}.cte-row-msg.err{color:#b91c1c}',
     '.cte-applied{display:grid;gap:2px;background:#dcfce7;color:#166534;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}',
     '.cte-applied b{font-size:15px}',
     '.cte-strike{color:#9ca3af;font-weight:400;margin-right:4px}.cte-final{color:#166534;font-weight:700}',
@@ -111,7 +111,7 @@
 
   // Mismo renglón que los productos del carrito del tema (grilla, tipografía, precio tachado y botón).
   function nativeRow(o) {
-    return '<div class="cte-card row align-items-md-center" data-variant="' + esc(o.variantId) + '">' +
+    return '<div class="cte-row row align-items-md-center" data-variant="' + esc(o.variantId) + '">' +
       '<div class="col-3 col-md-1">' + (o.image ? '<img class="img-fluid" alt="" loading="lazy" src="' + esc(o.image) + '">' : '') + '</div>' +
       '<div class="col-9 col-md-11 pl-0 pl-md-3"><div class="row align-items-md-center">' +
         '<h6 class="col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') +
@@ -119,8 +119,8 @@
           (o.reason ? '<div class="font-small opacity-50">' + esc(o.reason) + '</div>' : '') + '</h6>' +
         '<div class="col-6 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
           '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
-        '<div class="col-6 col-md-4"><button type="button" class="cte-btn btn btn-primary btn-small btn-block">Agregar con descuento</button>' +
-          '<p class="cte-msg font-small mb-0" role="status"></p></div>' +
+        '<div class="col-6 col-md-4"><button type="button" class="cte-accept btn btn-primary btn-small btn-block">Agregar con descuento</button>' +
+          '<p class="cte-row-msg font-small mb-0" role="status"></p></div>' +
       '</div></div>' +
       '<div class="col-12"><div class="divider"></div></div></div>';
   }
@@ -136,9 +136,9 @@
   }
 
   function bind(root, offers, onAccept) {
-    Array.prototype.forEach.call(root.querySelectorAll('.cte-card'), function (el) {
+    Array.prototype.forEach.call(root.querySelectorAll('.cte-card, .cte-row'), function (el) {
       var offer = offers.filter(function (o) { return String(o.variantId) === el.getAttribute('data-variant'); })[0];
-      var btn = el.querySelector('.cte-btn'), msg = el.querySelector('.cte-msg');
+      var btn = el.querySelector('.cte-btn, .cte-accept'), msg = el.querySelector('.cte-msg, .cte-row-msg');
       btn.addEventListener('click', function () { (onAccept || accept)(offer, btn, msg); });
     });
   }
@@ -153,14 +153,14 @@
   function failed(btn, msg, label) {
     return function (e) {
       btn.disabled = false; btn.textContent = label;
-      msg.className = 'cte-msg err'; msg.textContent = e.message || 'No se pudo aplicar la oferta';
+      msg.classList.add('err'); msg.textContent = e.message || 'No se pudo aplicar la oferta';
     };
   }
 
   function accept(offer, btn, msg) {
     var id = cartId();
     if (!offer || !id) return;
-    btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.className = 'cte-msg';
+    btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.classList.remove('err');
     acceptAndAdd(offer, id, offer.triggerLineId).catch(failed(btn, msg, 'Agregar con descuento'));
   }
 
@@ -169,7 +169,7 @@
   function acceptWithProduct(offer, btn, msg) {
     var form = productForm();
     if (!offer || !form) return;
-    btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.className = 'cte-msg';
+    btn.disabled = true; btn.textContent = 'Agregando…'; msg.textContent = ''; msg.classList.remove('err');
     addToCart(new URLSearchParams(new FormData(form)))
       .then(function (d) {
         var line = d.item && d.item.id, id = (d.cart && d.cart.id) || (d.item && d.item.cart_id) || (LS.cart && LS.cart.id);
