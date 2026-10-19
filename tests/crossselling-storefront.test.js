@@ -65,7 +65,7 @@ test('URL firmada: entra en 255 caracteres y rechaza manipulación', () => {
   const full = { ...state, acceptances: Array.from({ length: MAX_ACCEPTANCES }, () => big) };
   assert.ok(signer.encode(full).url.length <= 255, signer.encode(full).url.length);
   const { token, encoded } = signer.encode(state);
-  assert.deepEqual(signer.verify(token, encoded), { ...state, acceptances: [{ ...acceptance, expiresAt: Math.floor(acceptance.expiresAt / 1000) * 1000 }] });
+  assert.deepEqual(signer.verify(token, encoded), { storeId: '7570182', ...state, acceptances: [{ ...acceptance, expiresAt: Math.floor(acceptance.expiresAt / 1000) * 1000 }] });
   assert.equal(signer.verify(token, encoded.replace('-a-', '-z-')), null);
   assert.equal(createOfferSigner('b'.repeat(64)).verify(token, encoded), null);
   assert.equal(signer.verify(signer.encode({ ...state, acceptances: [] }).token, encoded), null);
@@ -78,4 +78,18 @@ test('las aceptaciones se renuevan y conservan sólo las más recientes', () => 
   list = addAcceptance(list, { ...acceptance, cartId: '4', pct: 5 }, now);
   assert.deepEqual(list.map((a) => [a.cartId, a.pct]), [['3', 10], ['5', 10], ['4', 5]]);
   assert.deepEqual(addAcceptance([{ ...acceptance, expiresAt: now - 1 }], { ...acceptance, cartId: '9' }, now).map((a) => a.cartId), ['9']);
+});
+
+test('cada tienda tiene su propia firma de callback y sus comandos sólo valen para sus carritos', () => {
+  const demo = createOfferSigner('a'.repeat(64)), pcmidi = createOfferSigner('a'.repeat(64), '78394');
+  const fixed = { promotionId: state.promotionId, acceptances: [] };
+  assert.ok(!demo.encode(fixed).url.includes('&st='), 'la URL de la demo no cambia');
+  const signed = pcmidi.encode(fixed);
+  assert.ok(signed.url.endsWith('&st=78394'));
+  assert.equal(demo.verify(signed.token, signed.encoded), null, 'la firma de PC MIDI no sirve como demo');
+  const verified = pcmidi.verify(signed.token, signed.encoded);
+  assert.equal(verified.storeId, '78394');
+  const pcCart = { ...cart, store_id: 78394 };
+  assert.equal(offerCommands({ ...verified, acceptances: [acceptance] }, pcCart, now)[0].command, 'create_or_update_discount');
+  assert.deepEqual(offerCommands({ ...verified, acceptances: [acceptance] }, cart, now), [], 'un carrito de la demo no usa el estado de PC MIDI');
 });

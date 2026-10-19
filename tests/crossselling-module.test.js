@@ -6,7 +6,7 @@ import { publicationSignature } from '../src/lib/crossselling/engine/publish-pro
 import { createModuleHandler } from '../src/lib/crossselling/module-endpoint.js';
 
 const key = 'k'.repeat(40), now = Date.parse('2026-10-19T12:00:00Z');
-const keysJson = JSON.stringify({ 7570182: key, 78394: 'p'.repeat(40) });
+const keysJson = JSON.stringify({ 7570182: key, 78394: 'p'.repeat(40), 99999: 'q'.repeat(40) });
 const status = (enabled) => ({ storeId: '7570182', state: { workspaceId: 2, promotionId: 'promo-1', enabled, acceptances: [] },
   promotions: [{ id: 'promo-1', active: enabled }], scripts: [{ id: 11451, name: 'Completá tu equipo' }, { id: 9, name: 'Otro' }],
   publication: { revision: 'abc', publishedAt: '2026-10-19T11:00:00Z', selectedRules: 4, mappedProducts: 120 }, events: [{ cartId: 'x' }] });
@@ -60,9 +60,22 @@ test('módulo: firma inválida, cuerpo alterado o vencida no llegan a Tiendanube
 
 test('módulo: una tienda con clave válida pero no habilitada recibe 403', async () => {
   const { handle, calls } = setup();
-  const res = await handle(signed('PUT', '78394', '{"enabled":true}', 'p'.repeat(40)));
+  const res = await handle(signed('PUT', '99999', '{"enabled":true}', 'q'.repeat(40)));
   assert.equal(res.status, 403);
   assert.deepEqual(calls, []);
+});
+
+test('módulo: PC MIDI está habilitada y opera con su propia tienda', async () => {
+  const calls = [];
+  const handle = createModuleHandler({
+    authorize: (input) => authorizePublication({ ...input, keysJson, now }),
+    lookupConnection: async () => ({ workspaceId: 1, config: { storeId: '78394' } }),
+    offerStatus: async (workspaceId, storeId) => { calls.push(['status', workspaceId, storeId]); return { ...status(true), storeId }; },
+    changeOffer: async (workspaceId, input, storeId) => { calls.push(['change', workspaceId, input.action, storeId]); return { ...status(true), storeId }; },
+  });
+  assert.equal((await handle(signed('PUT', '78394', '{"enabled":true}', 'p'.repeat(40)))).status, 200);
+  assert.deepEqual(calls, [['change', 1, 'enable', '78394']]);
+  assert.equal((await handle(signed('PUT', '78394', '{"enabled":true}'))).status, 401, 'la clave de la demo no sirve para PC MIDI');
 });
 
 test('módulo: conexión ausente, cuerpo inválido y errores de proveedor', async () => {

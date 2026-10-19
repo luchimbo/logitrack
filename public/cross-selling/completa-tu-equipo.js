@@ -1,10 +1,11 @@
-// «Completá tu equipo» · LogiTrack Prueba (tienda 7570182).
+// «Completá tu equipo» · tiendas habilitadas en Logitrack (demo 7570182 y PC MIDI 78394).
 // Lo carga el script registrado en Partners. No depende del JavaScript del tema.
 (function () {
   'use strict';
-  var STORE = '7570182';
+  var STORES = ['7570182', '78394'];
   var API = 'https://www.geomodi.ai/api/cross-selling/storefront/';
-  if (!window.LS || String(LS.store && LS.store.id) !== STORE || window.__completaTuEquipo) return;
+  var STORE = window.LS && LS.store ? String(LS.store.id) : '';
+  if (STORES.indexOf(STORE) < 0 || window.__completaTuEquipo) return;
   window.__completaTuEquipo = true;
 
   var money = function (n) {
@@ -141,16 +142,29 @@
     if (first) first.focus();
   }
 
-  function renderInline(offers) {
+  // Carrito lateral (Morelia) o, si el tema no lo tiene (Amazonas), la página del carrito antes de los totales.
+  function inlineTarget() {
     var panel = document.querySelector('.js-ajax-cart-panel');
+    if (panel) return { parent: panel, before: panel.firstChild };
+    if (!/^\/comprar\/?$/.test(location.pathname)) return null;
+    var form = document.querySelector('form.cart-body') || document.querySelector('form[action$="/comprar/"]');
+    if (!form) return null;
+    var totals = form.querySelector('.js-cart-subtotal');
+    var before = totals;
+    while (before && before.parentNode !== form) before = before.parentNode;
+    return { parent: form, before: before || null };
+  }
+
+  function renderInline(offers) {
+    var target = inlineTarget();
     var old = document.querySelector('.cte-inline');
     if (old) old.parentNode.removeChild(old);
-    if (!panel || !offers.length) return;
+    if (!target || !offers.length) return;
     var box = document.createElement('section');
     box.className = 'cte-inline';
     box.setAttribute('aria-label', 'Completá tu equipo');
     box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><div class="cte-list">' + offers.map(card).join('') + '</div>';
-    panel.insertBefore(box, panel.firstChild);
+    target.parent.insertBefore(box, target.before);
     bind(box, offers);
   }
 

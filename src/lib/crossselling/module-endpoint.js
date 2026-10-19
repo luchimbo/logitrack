@@ -1,8 +1,8 @@
-import { DEMO_STORE_ID } from './demo-probe-commands.js';
+import { STOREFRONT_STORES } from './stores.js';
 
 // Encendido del módulo «Completá tu equipo» desde Mostrador, firmado igual que la publicación.
-// Opera con el espacio dueño de la conexión de la tienda; por ahora sólo la demo.
-export const MODULE_STORES = new Set([DEMO_STORE_ID]);
+// Opera con el espacio dueño de la conexión de la tienda.
+export const MODULE_STORES = new Set(Object.keys(STOREFRONT_STORES));
 const SCRIPT_NAME = /complet[aá]?\s*tu\s*equipo|crossselling|cross-selling/i;
 
 export function moduleSummary(status) {
@@ -33,10 +33,10 @@ export function createModuleHandler({ authorize, lookupConnection, offerStatus, 
       const connection = await lookupConnection(storeId);
       const workspaceId = Number(connection?.workspaceId);
       if (!workspaceId || String(connection.config?.storeId) !== storeId) return Response.json({ error: 'Conectá esta tienda a Logitrack' }, { status: 409, headers });
-      if (request.method === 'GET') return Response.json(moduleSummary(await offerStatus(workspaceId)), { headers });
+      if (request.method === 'GET') return Response.json(moduleSummary(await offerStatus(workspaceId, storeId)), { headers });
       const input = JSON.parse(raw);
       if (typeof input?.enabled !== 'boolean') return Response.json({ error: 'Indicá enabled: true o false' }, { status: 400, headers });
-      return Response.json(moduleSummary(await changeOffer(workspaceId, { action: input.enabled ? 'enable' : 'disable' })), { headers });
+      return Response.json(moduleSummary(await changeOffer(workspaceId, { action: input.enabled ? 'enable' : 'disable' }, storeId)), { headers });
     } catch (error) {
       const status = error instanceof SyntaxError ? 400 : [400, 404, 409].includes(error.status) ? error.status : 502;
       // Los errores propios del módulo son mensajes para el operador; no reflejar respuestas de proveedores.

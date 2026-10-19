@@ -16,14 +16,16 @@ const b36 = (n) => Number(n).toString(36);
 const fromB36 = (s) => parseInt(s, 36);
 const digits = (v) => /^\d{1,15}$/.test(String(v ?? ''));
 
-export function createOfferSigner(key) {
+export function createOfferSigner(key, storeId = DEMO_STORE_ID) {
   if (typeof key !== 'string' || key.length < 32) throw new Error('Falta la clave del servidor');
-  const sign = (encoded) => createHmac('sha256', key).update(`crossselling-offer-v1:${DEMO_STORE_ID}:${encoded}`).digest('hex').slice(0, 32);
+  const sign = (encoded) => createHmac('sha256', key).update(`crossselling-offer-v1:${storeId}:${encoded}`).digest('hex').slice(0, 32);
+  // La demo se registró sin parámetro de tienda: conservar esa URL.
+  const storeParam = String(storeId) === DEMO_STORE_ID ? '' : `&st=${storeId}`;
   function encode(state) {
     const parts = [state.promotionId.replaceAll('-', ''), ...(state.acceptances || []).map((a) =>
       [a.cartId, a.triggerVariant, a.accessoryVariant, a.pct, a.minPriceCents, Math.floor(a.expiresAt / 1000)].map(b36).join('-'))];
     const encoded = parts.join('.');
-    return { encoded, token: sign(encoded), url: `${OFFER_CALLBACK_BASE}${sign(encoded)}?s=${encoded}` };
+    return { encoded, token: sign(encoded), url: `${OFFER_CALLBACK_BASE}${sign(encoded)}?s=${encoded}${storeParam}` };
   }
   function verify(token, encoded) {
     if (typeof encoded !== 'string' || !encoded || encoded.length > 255) return null;
@@ -39,14 +41,14 @@ export function createOfferSigner(key) {
       acceptances.push({ cartId: String(cartId), triggerVariant: String(triggerVariant), accessoryVariant: String(accessoryVariant),
         pct, minPriceCents, expiresAt: expiry * 1000 });
     }
-    return { promotionId: promotion.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5'), acceptances };
+    return { storeId: String(storeId), promotionId: promotion.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5'), acceptances };
   }
   return { encode, verify };
 }
 
 // Comandos para el callback. Usa sólo el carrito autoritativo enviado por TN.
 export function offerCommands(state, cart, now = Date.now()) {
-  if (!state?.promotionId || String(cart.store_id) !== DEMO_STORE_ID || cart.execution_tier !== 'line_item') return [];
+  if (!state?.promotionId || String(cart.store_id) !== String(state.storeId ?? DEMO_STORE_ID) || cart.execution_tier !== 'line_item') return [];
   const products = cart.products || [];
   const qty = (p) => (Number.isInteger(p.quantity) && p.quantity > 0 ? p.quantity : 0);
   const items = new Map();

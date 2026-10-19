@@ -6,14 +6,16 @@ export const dynamic = 'force-dynamic';
 export async function POST(request, context) {
   const started = Date.now();
   const { token } = await context.params;
-  const state = verifiedOfferState(token, new URL(request.url).searchParams.get('s'));
+  const params = new URL(request.url).searchParams;
+  // La demo se registró sin parámetro de tienda.
+  const state = verifiedOfferState(params.get('st') || '7570182', token, params.get('s'));
   if (!state) return new Response(null, { status: 404 });
   try {
     if (Number(request.headers.get('content-length')) > 131072) return new Response(null, { status: 413 });
     const body = await request.text();
     if (body.length > 131072) return new Response(null, { status: 413 });
     const cart = JSON.parse(body);
-    if (String(cart.store_id) !== '7570182') return new Response(null, { status: 204 });
+    if (String(cart.store_id) !== state.storeId) return new Response(null, { status: 204 });
     const acceptances = await callbackAcceptances(state, cart.cart_id);
     const commands = offerCommands({ ...state, acceptances }, cart);
     const elapsedMs = Date.now() - started;
