@@ -52,6 +52,8 @@
     '.cte-product{margin:16px 0}.cte-product .cte-sub{margin:2px 0 10px}',
     '.cte-applied{display:grid;gap:2px;background:#dcfce7;color:#166534;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}',
     '.cte-applied b{font-size:15px}',
+    '.cte-strike{color:#9ca3af;font-weight:400;margin-right:4px}.cte-final{color:#166534;font-weight:700}',
+    '.cte-line-badge{display:block;width:max-content;margin-top:4px;background:#dcfce7;color:#166534;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600}',
     '.cte-inline .cte-title{font-size:16px}.cte-inline .cte-card{grid-template-columns:56px 1fr;padding:8px}.cte-inline .cte-img{width:56px;height:56px}',
   ].join('');
   var style = document.createElement('style');
@@ -142,7 +144,7 @@
         return addToCart(form);
       })
       .then(function () {
-        rememberAccepted(offer, id);
+        rememberAccepted(offer, id, triggerLineId);
         // 3) El carrito muestra el descuento recalculado por Tiendanube.
         window.location.href = '/comprar/';
       });
@@ -152,9 +154,10 @@
   function readAccepted() {
     try { var list = JSON.parse(store.get('cte-accepted') || '[]'); return Array.isArray(list) ? list : []; } catch (e) { return []; }
   }
-  function rememberAccepted(offer, id) {
+  function rememberAccepted(offer, id, triggerLineId) {
     var list = readAccepted().filter(function (a) { return !(a.cartId === String(id) && a.variantId === String(offer.variantId)); });
-    list.push({ cartId: String(id), variantId: String(offer.variantId), name: offer.name, savings: offer.savings });
+    list.push({ cartId: String(id), variantId: String(offer.variantId), name: offer.name, savings: offer.savings,
+      pct: Number(offer.pct) || 0, triggerLineId: String(triggerLineId) });
     store.set('cte-accepted', JSON.stringify(list.slice(-10)));
   }
   function acceptedInCart() {
@@ -184,6 +187,73 @@
     var names = accepted.map(function (a) { return esc(a.name); }).join(', ');
     return '<div class="cte-applied" role="status"><b>✓ Descuento especial aplicado: ' + (amount || ('-' + money(total))) + '</b>' +
       '<span>En ' + names + '. Lo ves en el renglón «Completá tu equipo» del total.</span></div>';
+  }
+
+  // Renglón del accesorio en la página del carrito: precio tachado y precio con descuento.
+  // Sólo visual y sólo si Tiendanube ya muestra su renglón «Completá tu equipo» en los totales;
+  // lo que se cobra lo calcula Tiendanube. El descuento cubre tantas unidades como principales.
+  var decorating = false, cartObserver = null, cartForm = null;
+  function lineQuantity(row, fallback) {
+    var input = row && row.querySelector('.js-cart-quantity-input');
+    var n = input ? parseInt(input.value, 10) : NaN;
+    return isNaN(n) ? (fallback || 0) : n;
+  }
+  function cartRow(itemId) { return document.querySelector('.js-cart-item[data-item-id="' + itemId + '"]'); }
+  function restoreCell(el) {
+    if (el && el.hasAttribute('data-cte-orig')) { el.innerHTML = el.getAttribute('data-cte-orig'); el.removeAttribute('data-cte-orig'); }
+  }
+  function setCell(el, html) {
+    if (!el) return;
+    if (!el.hasAttribute('data-cte-orig')) el.setAttribute('data-cte-orig', el.innerHTML);
+    el.innerHTML = html;
+  }
+  function decorateLines() {
+    if (decorating || !/^\/comprar\/?$/.test(location.pathname)) return;
+    decorating = true;
+    // Sin observar mientras se modifican los precios: si no, el script reaccionaría a sus propios cambios.
+    if (cartObserver) cartObserver.disconnect();
+    try {
+      var confirmed = Boolean(appliedAmount()), items = cartItems(), done = {};
+      if (confirmed) acceptedInCart().forEach(function (a) {
+        var item = items.filter(function (i) { return String(i.variant_id || i.id) === a.variantId; })[0];
+        var row = item && cartRow(item.item_id), trigger = cartRow(a.triggerLineId);
+        if (!row || !trigger || !(a.pct > 0)) return;
+        var qty = lineQuantity(row, item.quantity), covered = Math.min(qty, lineQuantity(trigger, 1));
+        if (!(qty > 0) || !(covered > 0)) return;
+        var unit = item.unit_price / 100, full = unit * qty;
+        var discount = Math.round(unit * covered * a.pct) / 100;
+        var badge = '<span class="cte-line-badge">Descuento especial -' + a.pct + '%</span>';
+        var unitEl = row.querySelector('.js-cart-item-unit-price');
+        setCell(unitEl, covered === qty
+          ? '<s class="cte-strike">' + money(unit) + '</s> <span class="cte-final">' + money(unit - unit * a.pct / 100) + '</span>' + badge
+          : (unitEl && (unitEl.getAttribute('data-cte-orig') || unitEl.innerHTML)) + badge);
+        setCell(row.querySelector('.js-cart-item-subtotal'),
+          '<s class="cte-strike">' + money(full) + '</s> <span class="cte-final">' + money(full - discount) + '</span>');
+        done[item.item_id] = true;
+      });
+      // Si el descuento dejó de aplicar (se quitó el principal), volver a los precios del tema.
+      Array.prototype.forEach.call(document.querySelectorAll('.js-cart-item'), function (row) {
+        if (done[row.getAttribute('data-item-id')]) return;
+        restoreCell(row.querySelector('.js-cart-item-unit-price'));
+        restoreCell(row.querySelector('.js-cart-item-subtotal'));
+      });
+    } finally {
+      decorating = false;
+      if (cartObserver && cartForm) cartObserver.observe(cartForm, { childList: true, subtree: true, characterData: true });
+    }
+  }
+  // El tema reescribe precios y totales al cambiar cantidades: volver a aplicar después.
+  var linesTimer = null;
+  function watchCart() {
+    var form = document.querySelector('form.cart-body') || document.querySelector('form[action$="/comprar/"]');
+    if (!form || !window.MutationObserver || !/^\/comprar\/?$/.test(location.pathname)) return;
+    cartForm = form;
+    cartObserver = new MutationObserver(function () {
+      if (decorating) return;
+      clearTimeout(linesTimer);
+      linesTimer = setTimeout(decorateLines, 600);
+    });
+    cartObserver.observe(form, { childList: true, subtree: true, characterData: true });
   }
 
   function closeModal() {
@@ -279,6 +349,7 @@
     pending = setTimeout(function () {
       fetchOffers().then(function (offers) {
         renderInline(offers);
+        decorateLines();
         if (openModal && offers.length) showModal(offers);
       });
     }, 400);
@@ -288,6 +359,7 @@
   else document.addEventListener('productAddedToCart', function () { refresh(true); });
   refresh(false);
   renderProduct();
+  watchCart();
   var pForm = productForm();
   if (pForm) pForm.addEventListener('change', renderProduct);
 })();
