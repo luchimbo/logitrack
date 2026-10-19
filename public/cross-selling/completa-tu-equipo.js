@@ -161,7 +161,7 @@
       '<div class="cte-head"><div><h2 class="cte-title" id="cte-title">Completá tu equipo</h2>' +
       '<p class="cte-sub">Accesorios compatibles con descuento si los sumás ahora.</p></div>' +
       '<button type="button" class="cte-close" aria-label="Cerrar">×</button></div>' +
-      '<div class="cte-list">' + offers.map(card).join('') + '</div></div>';
+      '<div class="cte-list">' + offers.map(function (o) { return card(o); }).join('') + '</div></div>';
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
     overlay.querySelector('.cte-close').addEventListener('click', closeModal);
     document.addEventListener('keydown', onKey);
@@ -191,8 +191,8 @@
     if (!target || !offers.length) return;
     var box = document.createElement('section');
     box.className = 'cte-inline';
-    box.setAttribute('aria-label', 'Completá tu equipo');
-    box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><div class="cte-list">' + offers.map(card).join('') + '</div>';
+    box.setAttribute('aria-label', 'Agregá estos productos con descuento especial');
+    box.innerHTML = '<h3 class="cte-title">Agregá estos productos con descuento especial</h3><div class="cte-list">' + offers.map(function (o) { return card(o); }).join('') + '</div>';
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
   }
