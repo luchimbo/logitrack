@@ -88,10 +88,14 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     }
 
     if (lastRes?.status === 401 || lastRes?.status === 403) {
-      throw new Error(`Unauthorized en Tiendanube (store ${resolvedStoreId}): token inválido/vencido o permisos insuficientes (read_orders)`);
+      const error = new Error(`Tiendanube rechazó el acceso (store ${resolvedStoreId}, HTTP ${lastRes.status}): verificá el token y los permisos de la app`);
+      error.status = lastRes.status;
+      throw error;
     }
 
-    throw new Error(lastData?.error || lastData?.message || `Tiendanube error ${lastRes?.status || 'desconocido'}`);
+    const error = new Error(lastData?.message || (typeof lastData?.error === 'string' ? lastData.error : '') || `Tiendanube error ${lastRes?.status || 'desconocido'}`);
+    error.status = lastRes?.status;
+    throw error;
   }
 
   async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', q = '' } = {}) {
@@ -111,6 +115,67 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
 
   async function getOrder(id) {
     return tiendanubeFetch(`/orders/${id}`);
+  }
+
+  async function getStore() {
+    return tiendanubeFetch('/store');
+  }
+
+  async function listProducts({ page = 1, perPage = 200 } = {}) {
+    const payload = await tiendanubeFetch(`/products?page=${page}&per_page=${perPage}`);
+    if (!Array.isArray(payload)) throw new Error('Respuesta de catálogo Tiendanube inválida');
+    return payload;
+  }
+
+  async function downloadCatalog() {
+    const products = [];
+    for (let page = 1; page <= 200; page++) {
+      const batch = await listProducts({ page });
+      products.push(...batch);
+      if (batch.length < 200) return products;
+    }
+    throw new Error('Catálogo incompleto: se alcanzó el límite de páginas');
+  }
+
+  async function listPromotions() {
+    const payload = await tiendanubeFetch('/promotions');
+    const promotions = Array.isArray(payload) ? payload : payload?.data;
+    if (!Array.isArray(promotions)) throw new Error('Respuesta de promociones Tiendanube inválida');
+    return promotions;
+  }
+
+  async function createPromotion(promotion) {
+    return tiendanubeFetch('/promotions', { method: 'POST', body: JSON.stringify(promotion) });
+  }
+
+  async function updatePromotion(id, changes) {
+    return tiendanubeFetch(`/promotions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });
+  }
+
+  async function deletePromotion(id) {
+    return tiendanubeFetch(`/promotions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async function setDiscountCallback(url) {
+    if (new URL(url).protocol !== 'https:') throw new Error('El callback de descuentos requiere HTTPS');
+    return tiendanubeFetch('/discounts/callbacks', { method: 'PUT', body: JSON.stringify({ url }) });
+  }
+
+  // Asociación tienda-script. El script se crea en Partners sin instalación automática.
+  async function listScripts() {
+    const payload = await tiendanubeFetch('/scripts');
+    const scripts = Array.isArray(payload) ? payload : [payload?.result, payload?.data, payload?.results, payload?.scripts].find(Array.isArray);
+    // Mostrar sólo los nombres de los campos para diagnosticar un formato nuevo.
+    if (!scripts) throw new Error(`Respuesta de scripts Tiendanube inválida (${Object.keys(payload || {}).join(', ') || typeof payload})`);
+    return scripts;
+  }
+
+  async function createScriptAssociation(scriptId, queryParams = {}) {
+    return tiendanubeFetch('/scripts', { method: 'POST', body: JSON.stringify({ script_id: scriptId, query_params: JSON.stringify(queryParams) }) });
+  }
+
+  async function deleteScriptAssociation(id) {
+    return tiendanubeFetch(`/scripts/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
 
   async function listWebhooks() {
@@ -144,6 +209,17 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
   return {
     listOrders,
     getOrder,
+    getStore,
+    listProducts,
+    downloadCatalog,
+    listPromotions,
+    createPromotion,
+    updatePromotion,
+    deletePromotion,
+    setDiscountCallback,
+    listScripts,
+    createScriptAssociation,
+    deleteScriptAssociation,
     listWebhooks,
     createWebhook,
     listFulfillmentOrders,

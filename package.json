@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run check:crossselling",
     "build": "next build",
+    "check:crossselling": "node --experimental-default-type=module --test tests/crossselling*.test.js",
+    "deploy:production": "node scripts/deploy-production.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-default-type=module --test tests/*.test.js",

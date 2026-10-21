@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createTiendanubeClient } from '@/lib/tiendanubeClient';
 import { findIntegrationByConfigValue, findIntegrationConnectionByStore } from '@/lib/integrationService';
 import { upsertTiendanubeOrder } from '@/lib/tiendanubeStore';
+import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';
 
 const TIENDANUBE_CLIENT_SECRET = process.env.TIENDANUBE_CLIENT_SECRET || '';
 const ORDER_EVENTS = new Set([
@@ -94,6 +95,8 @@ export async function POST(request) {
       connectionId: connection?.id || null,
       externalStoreId: storeId,
     });
+    // Informe de cross-selling online: no debe hacer fallar la logística.
+    await recordOnlineOrder(storeId, order).catch((e) => console.warn('Cross-selling order record failed', e.name));
 
     return NextResponse.json({ received: true, updated: true });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { legacyTiendanubeReturn, loginPath } from "./lib/oauthNavigation";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -28,7 +29,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/v2/print-jobs/recover(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerkGuard = clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) return NextResponse.next();
 
   const { userId } = await auth();
@@ -38,8 +39,28 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  return NextResponse.redirect(new URL("/login", req.url));
+  return NextResponse.redirect(new URL(loginPath(req.nextUrl.pathname + req.nextUrl.search), req.url));
 });
+
+export default function proxy(req, event) {
+  // Las instalaciones anteriores regresaban a la portada pública. Recuperar
+  // exclusivamente los parámetros de TN, sin cambiar la portada normal.
+  if (req.nextUrl.pathname === "/") {
+    const target = legacyTiendanubeReturn(req.nextUrl.searchParams);
+    if (target) return NextResponse.redirect(new URL(target, req.url));
+  }
+  // Esta única ruta verifica HMAC por tienda en su handler. No requiere sesión
+  // ni consultas a Clerk para la comunicación entre servidores.
+  if (req.nextUrl.pathname === "/api/cross-selling/config") return NextResponse.next();
+  // Mostrador usa HMAC por tienda; estas rutas validan la firma en sus handlers.
+  if (req.nextUrl.pathname === "/api/cross-selling/module") return NextResponse.next();
+  if (req.nextUrl.pathname === "/api/cross-selling/report") return NextResponse.next();
+  if (/^\/api\/cross-selling\/demo-callback\/[a-f0-9]{64}$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  // Módulo «Completá tu equipo» de la demo: firma en la URL o validación de origen y carrito en el handler.
+  if (/^\/api\/cross-selling\/offer-callback\/[a-f0-9]{32}$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  if (/^\/api\/cross-selling\/storefront\/(offers|accept|seen)$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  return clerkGuard(req, event);
+}
 
 export const config = {
   matcher: [
