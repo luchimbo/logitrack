@@ -169,6 +169,10 @@ test('report preserves all package sales while charging one physical shipment',a
     assert.equal(compact.rows,undefined);
     assert.deepEqual(compact.summary,report.summary);
     assert.equal(compact.summary.averageSaleCents,75000);
+    // The Detalle tab reads its rows from the same snapshot, with the same figures as the full calculation.
+    const detail=await repo.report(1,{}, { withRows:true });
+    assert.deepEqual(detail.summary,report.summary);
+    assert.deepEqual(detail.rows.map(r=>[r.shipmentId,r.amountCents,r.salesCents,r.zone,r.sellerId,r.recipient]),report.rows.map(r=>[r.shipmentId,r.amountCents,r.salesCents,r.zone,r.sellerId,r.recipient]));
     assert.equal((await repo.report(2,{})).summary.salesCents,null);
     assert.equal((await repo.report(1,{from:'2026-10-02'})).summary.salesCents,null);
   } finally {cleanup();}

@@ -33,10 +33,10 @@ async function readFinancePages(connection, sql, args, idColumn) {
 
 const LEAN_FIELDS = ['connectionId', 'shipmentId', 'orderId', 'method', 'partido', 'zone', 'carrierId', 'carrierName', 'dispatchDay', 'deliveryDay',
   'estimatedDay', 'state', 'stateLabel', 'delayed', 'overdue', 'incident', 'amountCents', 'missing', 'settlementId', 'salesCents', 'salesMissingCount',
-  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'zipnova', 'trackingNumber'];
+  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'zipnova', 'trackingNumber', 'sellerId', 'recipient'];
 const SNAPSHOT_TTL_MS = 5 * 60_000;
 // Bump when the calculation changes, so stored summaries are rebuilt on next read.
-const SNAPSHOT_VERSION = 6;
+const SNAPSHOT_VERSION = 7;
 const rebuilding = new Map();
 // Flex amounts that come straight from the rate table are recomputed on read, so changing a rate never needs a rebuild.
 function leanRecord(r) {
@@ -236,7 +236,7 @@ export function createFinanceRepository(db) {
     return job;
   }
   // Reads the precomputed snapshot. A missing snapshot is built once; an old one is refreshed after the response.
-  async function snapshotReport(workspaceId, filters, { refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
+  async function snapshotReport(workspaceId, filters, { refresh = false, scheduleRefresh = null, withTargets = false, withRows = false } = {}) {
     const readMeta = async () => (await execute('SELECT built_at, options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
     let meta = await readMeta();
     if (!meta || refresh || parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION) {
@@ -266,16 +266,16 @@ export function createFinanceRepository(db) {
       targets = { syncTargets, labelTargets };
     }
     return { summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
-      byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: JSON.parse(meta.options_json), snapshotAt: meta.built_at, ...targets, dispatchMonths: months.rows.map((row) => ({ month: row.month, count: Number(row.n) })) };
+      byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: JSON.parse(meta.options_json), snapshotAt: meta.built_at, ...targets, ...(withRows ? { rows: rows.sort((a, b) => String(b.dispatchDay || '').localeCompare(String(a.dispatchDay || ''))) } : {}), dispatchMonths: months.rows.map((row) => ({ month: row.month, count: Number(row.n) })) };
   }
-  async function report(workspaceId, filters, { compact = false, refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
-    if (compact) {
-      try { return await snapshotReport(workspaceId, filters, { refresh, scheduleRefresh, withTargets }); }
+  async function report(workspaceId, filters, { compact = false, withRows = false, refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
+    if (compact || withRows) {
+      try { return await snapshotReport(workspaceId, filters, { refresh, scheduleRefresh, withTargets, withRows }); }
       catch (error) { console.error('Finance snapshot unavailable, using full calculation:', error.message); }
     }
     const all = await records(workspaceId);
     const rows = filterRecords(all, filters);
-    return { ...(compact ? {} : { rows }), summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
+    return { ...(compact && !withRows ? {} : { rows }), summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
       byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: {
         parties: [...new Set(all.map((r) => r.partido).filter(Boolean))].sort(),
         connections: [...new Set(all.map((r) => r.connectionId).filter(Boolean))],

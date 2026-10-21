@@ -30,9 +30,14 @@ export async function GET(request) {
       }
       return NextResponse.json({ settlements: await repository.listSettlements(workspaceId) });
     }
+    // Full detail of one shipment (history, sync dates), read on demand from the Detalle tab.
+    if (p.get('view') === 'shipment') {
+      const [row] = await repository.records(workspaceId, db, { connectionId: Number(p.get('connectionId')), shipmentId: p.get('shipmentId') });
+      return row ? NextResponse.json(row) : NextResponse.json({ error: 'Envío no encontrado' }, { status: 404 });
+    }
     const filters = Object.fromEntries(p);
     if (filters.from && !validDate(filters.from) || filters.to && !validDate(filters.to) || filters.from && filters.to && filters.from > filters.to) return NextResponse.json({ error: 'Período inválido' }, { status: 400 });
-    const report = await repository.report(workspaceId, filters, { compact: ['map', 'targets'].includes(p.get('view')) && p.get('format') !== 'csv', withTargets: p.get('view') === 'targets', refresh: p.get('refresh') === '1', scheduleRefresh: (job) => after(job) });
+    const report = await repository.report(workspaceId, filters, { compact: ['map', 'targets'].includes(p.get('view')) && p.get('format') !== 'csv', withRows: p.get('view') === 'detail', withTargets: p.get('view') === 'targets', refresh: p.get('refresh') === '1', scheduleRefresh: (job) => after(job) });
     if (p.get('format') === 'csv') return csvResponse(report.rows, columns, 'gastos-envios');
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return NextResponse.json({ error: error.message || 'No se pudo cargar' }, { status: 500 }); }
