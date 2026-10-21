@@ -331,10 +331,36 @@ export function settlementCandidates(rows, carrierId, from, to) {
   return rows.filter((r) => r.method === 'flex' && r.state === 'delivered' && r.amountCents !== null && !r.missing
     && !r.settlementId && Number(r.carrierId) === Number(carrierId) && r.deliveryDay && r.deliveryDay >= from && r.deliveryDay <= to);
 }
+// Settlement summary as the carrier reads it: one row per delivery day, packages per zone and the day's amount.
+export function settlementMatrix(items, zoneOrder) {
+  const extra = [...new Set(items.map((i) => i.zone || 'Sin zona'))].filter((z) => !zoneOrder.includes(z)).sort();
+  const zones = [...zoneOrder, ...extra];
+  const blank = () => ({ counts: Object.fromEntries(zones.map((z) => [z, 0])), cents: Object.fromEntries(zones.map((z) => [z, 0])), count: 0, totalCents: 0 });
+  const byDay = new Map(), total = blank();
+  for (const item of items) {
+    const day = item.deliveryDay || 'Sin fecha', zone = item.zone || 'Sin zona', cents = Number(item.amountCents) || 0;
+    if (!byDay.has(day)) byDay.set(day, { day, ...blank() });
+    for (const row of [byDay.get(day), total]) { row.counts[zone] += 1; row.cents[zone] += cents; row.count += 1; row.totalCents += cents; }
+  }
+  return { zones, days: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)), total };
+}
+export function settlementMatrixCsv(matrix, adjustments = []) {
+  const pesos = (cents) => (cents / 100).toFixed(2).replace('.', ',');
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split('-').reverse().join('/') : value;
+  const rows = [
+    ...matrix.days.map((d) => [day(d.day), ...matrix.zones.map((z) => d.counts[z]), d.count, pesos(d.totalCents)]),
+    ['Total paquetes', ...matrix.zones.map((z) => matrix.total.counts[z]), matrix.total.count, ''],
+    ['Total $', ...matrix.zones.map((z) => pesos(matrix.total.cents[z])), '', pesos(matrix.total.totalCents)],
+    ...adjustments.map((a) => [`Ajuste: ${a.reason}`, ...matrix.zones.map(() => ''), '', pesos(Number(a.amount_cents))]),
+  ];
+  if (adjustments.length) rows.push(['Total a pagar', ...matrix.zones.map(() => ''), '', pesos(matrix.total.totalCents + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0))]);
+  const columns = [['Día', 0], ...matrix.zones.map((z, i) => [z, i + 1]), ['Paquetes', matrix.zones.length + 1], ['Total $', matrix.zones.length + 2]];
+  return csv(rows, columns);
+}
 export function csv(rows, columns) {
   const cell = (value) => {
     let text = String(value ?? '');
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    if (/^[=+\-@\t\r]/.test(text) && !/^-\d+(,\d+)?$/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
   return '\uFEFF' + [columns.map(([name]) => cell(name)).join(';'), ...rows.map((r) => columns.map(([, key]) => cell(typeof key === 'function' ? key(r) : r[key])).join(';'))].join('\r\n');

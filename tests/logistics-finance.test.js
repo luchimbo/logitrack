@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { FINANCE_SCHEMA } from '../src/lib/financeSchema.js';
 import { createFinanceRepository } from '../src/lib/financeRepository.js';
-import { matchZipnovaToOrders, internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales } from '../src/lib/logisticsFinance.js';
+import { matchZipnovaToOrders, internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv } from '../src/lib/logisticsFinance.js';
 
 test('sales use paid ARS gross totals, keeping zero, unknown and cancellation distinct', () => {
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'0'}).salesCents,0);
@@ -417,4 +417,24 @@ test('a coordinar sales and Zipnova shipments join Colecta, linked or not',async
     assert.equal(full.summary.zipnovaUnlinkedCount,1);
     assert.ok(fast.byProvince.some((g)=>g.name==='cordoba'));
   } finally { cleanup(); }
+});
+
+test('settlement matrix counts packages per day and zone and reconciles the amount', () => {
+  const items = [
+    { deliveryDay: '2026-10-09', zone: 'GBA 1', amountCents: 300000 },
+    { deliveryDay: '2026-10-08', zone: 'CABA', amountCents: 250000 },
+    { deliveryDay: '2026-10-08', zone: 'CABA', amountCents: 250000 },
+    { deliveryDay: '2026-10-09', zone: null, amountCents: 100000 },
+  ];
+  const m = settlementMatrix(items, ['CABA', 'GBA 1', 'GBA 2', 'GBA 3']);
+  assert.deepEqual(m.zones, ['CABA', 'GBA 1', 'GBA 2', 'GBA 3', 'Sin zona']);
+  assert.deepEqual(m.days.map((d) => [d.day, d.count, d.totalCents]), [['2026-10-08', 2, 500000], ['2026-10-09', 2, 400000]]);
+  assert.equal(m.days[0].counts.CABA, 2);
+  assert.equal(m.total.count, 4);
+  assert.equal(m.total.totalCents, 900000);
+  assert.equal(m.total.cents.CABA, 500000);
+  const text = settlementMatrixCsv(m, [{ reason: 'Faltante', amount_cents: -50000 }]);
+  assert.match(text, /"08\/10\/2026";"2";"0";"0";"0";"0";"2";"5000,00"/);
+  assert.match(text, /"Ajuste: Faltante";"";"";"";"";"";"";"-500,00"/);
+  assert.match(text, /"Total a pagar";.*"8500,00"/);
 });

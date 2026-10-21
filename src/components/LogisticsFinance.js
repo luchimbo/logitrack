@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { ZONE_ORDER } from '@/lib/zoneGroups';
 import { partidoLabel, provinceLabel } from '@/lib/financeMap';
-import { STATE_LABELS, toCents, deliveryEventLabel } from '@/lib/logisticsFinance';
+import { STATE_LABELS, toCents, deliveryEventLabel, settlementMatrix, settlementMatrixCsv } from '@/lib/logisticsFinance';
 import { getArgentinaDateString, formatArgentinaDateTime } from '@/lib/dateUtils';
 import styles from './LogisticsFinance.module.css';
 
@@ -271,9 +271,33 @@ function RatesPanel({ carriers, rates, canEdit, busy, onSave }) {
   </section>;
 }
 function DraftForm({ carriers, busy, onSave }) { return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSave({ action:'draft', carrierId:Number(f.get('carrier')), from:f.get('from'), to:f.get('to') }); }}><label>Transportista<select required name="carrier"><option value="">Elegir…</option>{carriers.map((c) => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}</select></label><label>Entregado desde<input type="date" name="from" required defaultValue={`${getArgentinaDateString().slice(0,7)}-01`} /></label><label>Entregado hasta<input type="date" name="to" required defaultValue={getArgentinaDateString()} /></label><button className="btn btn-primary" disabled={busy}>Crear borrador</button></form>; }
+function SettlementMatrix({ matrix, adjustments, totalCents }) {
+  const { zones, days, total } = matrix;
+  return <div className={styles.tableWrap}><table className={styles.table}>
+    <thead><tr><th>Día</th>{zones.map((z) => <th key={z} className={styles.number}>{z}</th>)}<th className={styles.number}>Paquetes</th><th className={styles.number}>Total</th></tr></thead>
+    <tbody>{days.map((d) => <tr key={d.day}><td>{when(d.day)}</td>{zones.map((z) => <td key={z} className={styles.number}>{d.counts[z] || '—'}</td>)}<td className={styles.number}>{d.count}</td><td className={styles.number}>{money(d.totalCents)}</td></tr>)}</tbody>
+    <tfoot>
+      <tr><th>Total paquetes</th>{zones.map((z) => <th key={z} className={styles.number}>{total.counts[z]}</th>)}<th className={styles.number}>{total.count}</th><th /></tr>
+      <tr><th>Total $</th>{zones.map((z) => <th key={z} className={styles.number}>{money(total.cents[z])}</th>)}<th /><th className={styles.number}>{money(total.totalCents)}</th></tr>
+      {adjustments.map((a) => <tr key={a.id}><td colSpan={zones.length + 2}>Ajuste: {a.reason}</td><td className={styles.number}>{money(Number(a.amount_cents))}</td></tr>)}
+      {adjustments.length ? <tr><th colSpan={zones.length + 2}>Total a pagar</th><th className={styles.number}>{money(totalCents)}</th></tr> : null}
+    </tfoot>
+  </table></div>;
+}
 function SettlementDetail({ detail, canEdit, busy, onSave, onClose }) {
   const { settlement:s, items, adjustments, totalCents } = detail;
-  return <section className={`${styles.panel} ${styles.detail}`}><div className={styles.actions}><h2>Liquidación #{s.id} · {statusNames[s.status]}</h2><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button><a className="btn btn-ghost btn-sm" href={`/api${endpoint}?view=settlements&id=${s.id}&format=csv`}>Exportar detalle</a></div><p className={styles.muted}>{items.length} entregados · {when(s.date_from)} al {when(s.date_to)} · Total {money(totalCents)}</p><ShipmentTable rows={items} />
+  const matrix = settlementMatrix(items, ZONE_ORDER);
+  // Built in the browser from the data on screen, so the download never depends on a second server request.
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([settlementMatrixCsv(matrix, adjustments)], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `liquidacion-${s.id}-${s.carrier_name || 'transportista'}-${s.date_from}_${s.date_to}.csv`.replace(/[^\w.-]+/g, '-');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return <section className={`${styles.panel} ${styles.detail}`}><div className={styles.actions}><h2>Liquidación #{s.id} · {statusNames[s.status]}</h2><button className="btn btn-primary btn-sm" disabled={!items.length} onClick={download}>Descargar Excel</button><a className="btn btn-ghost btn-sm" href={`/api${endpoint}?view=settlements&id=${s.id}&format=csv`}>Detalle por envío</a><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button></div><p className={styles.muted}>{items.length} entregados · {when(s.date_from)} al {when(s.date_to)} · Total {money(totalCents)}</p>
+    {items.length ? <SettlementMatrix matrix={matrix} adjustments={adjustments} totalCents={totalCents} /> : <p className={styles.empty}>No hay envíos Flex entregados con tarifa para este transportista en el período.</p>}
+    <details><summary className={styles.link}>Ver envío por envío ({items.length})</summary><ShipmentTable rows={items} /></details>
     {adjustments.map((a) => <p className={styles.muted} key={a.id}>Ajuste: {money(Number(a.amount_cents))} · {a.reason} · {when(a.created_at)}</p>)}
     {s.status === 'paid' ? <div className={styles.notice}>Pagada el {when(s.paid_at)}. Referencia: {s.payment_reference || 'Sin referencia'}.</div> : null}
     {canEdit && s.status === 'draft' ? <div className={styles.notice}><p>Revisá los envíos y el importe antes de cerrar. El cierre reserva cada envío y congela su tarifa.</p><button className="btn btn-primary" disabled={busy || !items.length} onClick={() => onSave({ action:'close', id:s.id })}>Cerrar liquidación · {money(totalCents)}</button></div> : null}
