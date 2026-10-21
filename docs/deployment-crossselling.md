@@ -10,7 +10,7 @@ Se incorporaron las rutas, el motor de producción por tienda, Redis, informes, 
 
 1. `npm test` verifica el conjunto completo. Las pruebas de cross-selling comprueban firmas válidas e inválidas, separación de tiendas, aceptaciones, descuentos, Redis e informes. Las pruebas de release ejecutan el proxy con dobles de Next/Clerk para detectar el 401 antes del handler y comprobar que las APIs administrativas siguen protegidas.
 2. `npm run build` ejecuta esas pruebas automáticamente mediante `prebuild`. `vercel.json` indica ese comando de compilación para los despliegues.
-3. `npm run deploy:production` verifica el ID del proyecto público, ejecuta las pruebas y crea un despliegue de producción con `--skip-domain`. Antes de promoverlo comprueba sin credenciales que `/config`, `/module` y `/report` lleguen al control HMAC, que ambas tiendas acepten sus propios dominios, que un origen ajeno sea rechazado y que el script esté disponible. Si falla, no promueve el despliegue. Si Vercel protege la URL de inspección, el control también se detiene: no saltear la verificación para promover.
+3. `npm run deploy:production` verifica el ID del proyecto público, ejecuta las pruebas y crea un despliegue de producción con `--skip-domain`. Antes de promoverlo comprueba que `/config`, `/module` y `/report` lleguen al control HMAC, que ambas tiendas acepten sus propios dominios, que un origen ajeno sea rechazado y que el script esté disponible. La URL de inspección se consulta con `vercel curl` y la sesión del CLI, sin desactivar la protección de Vercel ni usar claves de Tiendanube. Si falla, no promueve el despliegue.
 
 Primera vinculación local: `vercel link --project logitrack`. No usar `logitrack-tan` como proyecto de despliegue.
 

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { storeOrigins } from '../src/lib/crossselling/stores.js';
 import { checkCrossSellingDeployment } from '../scripts/check-crossselling-deployment.mjs';
+import { parseCurlResponse } from '../scripts/vercel-deployment-fetch.mjs';
 
 // Ejecutar el proxy real con dobles de Next/Clerk: detecta el 401 antes del handler,
 // incluso si las pruebas de HMAC y del módulo siguen pasando por separado.
@@ -91,4 +92,11 @@ test('release: el control previo a promover detecta el 401 de Clerk aunque el c�
 
 test('release: el control previo a promover detecta la pérdida de los dominios de PC MIDI', async () => {
   await assert.rejects(checkCrossSellingDeployment('https://example.vercel.app', deploymentFetch({ brokenOrigin: true })), /78394/);
+});
+
+test('release: la inspección autenticada lee la respuesta del handler detrás del proxy de Vercel', async () => {
+  const response = parseCurlResponse('HTTP/1.1 200 Connection established\r\n\r\nHTTP/2 401 \r\ncontent-type: application/json\r\n\r\n{"error":"Solicitud no autorizada"}');
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: 'Solicitud no autorizada' });
+  assert.throws(() => parseCurlResponse('respuesta inválida'), /inválida/);
 });
