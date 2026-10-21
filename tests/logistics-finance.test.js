@@ -125,6 +125,11 @@ async function fixture() {
     // Two sales, and a second connection, still represent one physical package.
     `INSERT INTO mercadolibre_orders SELECT 2,workspace_id,integration_connection_id,shipment_id,'O2',user_id,external_store_id,logistic_type,shipping_method,shipment_status,shipment_substatus,raw_shipment_json,lead_time_json,history_json,delays_json,address_json,shipment_row_id,synced_at,recipient_name,label_printed_at,label_imported_at FROM mercadolibre_orders WHERE id=1`,
   ],'write');
+  for (const column of ['status','currency','total','raw_order_json','carrier_json','printed_label_zpl']) {
+    await db.execute(`ALTER TABLE mercadolibre_orders ADD COLUMN ${column} TEXT`);
+  }
+  await db.execute('ALTER TABLE shipments ADD COLUMN raw_zpl TEXT');
+  await db.execute('ALTER TABLE shipments ADD COLUMN recipient_name TEXT');
   const repo=createFinanceRepository(db);
   await repo.saveRate(1,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:10000},7);
   await repo.saveRate(2,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:30000},8);
@@ -148,7 +153,6 @@ test('schema migrations are repeatable, records deduplicate, workspace rates iso
 test('report preserves all package sales while charging one physical shipment',async()=>{
   const {db,repo,cleanup}=await fixture();
   try {
-    for (const column of ['status','currency','total']) await db.execute(`ALTER TABLE mercadolibre_orders ADD COLUMN ${column} TEXT`);
     await db.execute("UPDATE mercadolibre_orders SET status='paid',currency='ARS',total=CASE order_id WHEN 'O1' THEN '1000' ELSE '500' END");
     await db.execute(`INSERT INTO mercadolibre_orders(id,workspace_id,integration_connection_id,shipment_id,order_id,user_id,logistic_type,shipping_method,shipment_status,raw_shipment_json,shipment_row_id,synced_at,status,currency,total)
       SELECT 3,workspace_id,20,shipment_id,order_id,user_id,logistic_type,shipping_method,shipment_status,raw_shipment_json,shipment_row_id,synced_at,status,currency,total FROM mercadolibre_orders WHERE id=1`);
@@ -161,6 +165,62 @@ test('report preserves all package sales while charging one physical shipment',a
     assert.equal(report.byPartido[0].salesCents,150000);
     assert.equal((await repo.report(2,{})).summary.salesCents,null);
     assert.equal((await repo.report(1,{from:'2026-10-02'})).summary.salesCents,null);
+  } finally {cleanup();}
+});
+
+test('large histories exclude labels, retry oversized pages, and keep complete totals',async()=>{
+  const {db,cleanup}=await fixture();
+  try {
+    const label='^XA'+'x'.repeat(30000)+'^XZ';
+    const raw=JSON.stringify({total_amount:100,status:'paid',currency_id:'ARS',unused:'x'.repeat(30000)});
+    const inserts=[];
+    for(let i=0;i<205;i++) inserts.push({
+      sql:`INSERT INTO mercadolibre_orders(id,workspace_id,integration_connection_id,shipment_id,order_id,user_id,
+        logistic_type,shipping_method,shipment_status,raw_shipment_json,synced_at,status,currency,total,raw_order_json,printed_label_zpl)
+        VALUES(?,1,10,?,?,'555','self_service','flex','delivered',?,'2026-10-21 12:00:00','paid','ARS','100',?,?)`,
+      args:[i+10,`S${i+10}`,`O${i+10}`,base.raw_shipment_json,raw,label],
+    });
+    for(let i=0;i<235;i++) inserts.push({
+      sql:"INSERT INTO shipments(id,workspace_id,partido,assigned_carrier,shipping_method,raw_zpl,recipient_name) VALUES(?,1,'capital_federal','uno','flex',?,'Destinatario local')",
+      args:[i+10,label],
+    });
+    await db.batch(inserts,'write');
+    await db.execute("UPDATE mercadolibre_orders SET status='paid',currency='ARS',total='100' WHERE id IN (1,2)");
+    await db.execute({
+      sql:`INSERT INTO mercadolibre_orders(id,workspace_id,integration_connection_id,shipment_id,order_id,user_id,
+        logistic_type,shipping_method,shipment_status,raw_shipment_json,synced_at,status,currency,total)
+        VALUES(300,1,20,'S1','O1','555','self_service','flex','delivered',?,'1970-01-01','cancelled','ARS','100')`,
+      args:[base.raw_shipment_json],
+    });
+    let oversizeRetries=0;
+    const seen=[];
+    const boundedDb={execute:async(statement)=>{
+      const result=await db.execute(statement);
+      if(/FROM mercadolibre_orders mo|FROM shipments s/.test(statement.sql)) {
+        assert.match(statement.sql,/LIMIT \?/);
+        for(const row of result.rows) {
+          assert.equal(row.printed_label_zpl,undefined);
+          assert.equal(row.raw_zpl,undefined);
+          if(row.raw_order_json) assert.equal(JSON.parse(row.raw_order_json).unused,undefined);
+        }
+        if(Buffer.byteLength(JSON.stringify(result.rows))>18000) {
+          oversizeRetries++;
+          throw Object.assign(new Error('Response is too large'),{code:'RESPONSE_TOO_LARGE'});
+        }
+        seen.push(...result.rows.map(r=>r.id));
+      }
+      return result;
+    }};
+    const report=await createFinanceRepository(boundedDb).report(1,{});
+    assert.ok(oversizeRetries>0);
+    assert.ok(seen.length>400);
+    assert.equal(report.rows.length,441); // 206 physical ML shipments + 235 local shipments.
+    assert.equal(report.summary.paidOrderCount,207); // The older O1 copy is on a different page.
+    assert.equal(report.summary.salesCents,2070000);
+    assert.equal(report.summary.totalCents,10000);
+    assert.equal(report.byZone.reduce((n,g)=>n+(g.salesCents||0),0),2070000);
+    assert.equal(report.rows.find(r=>r.shipmentId==='local:244').recipient,'Destinatario local');
+    await assert.rejects(createFinanceRepository({execute:async()=>{throw new Error('Database unavailable');}}).records(1),/Database unavailable/);
   } finally {cleanup();}
 });
 test('closure freezes rate, snapshots responsibility and prevents duplicate settlement',async()=>{

@@ -1,6 +1,32 @@
 import { financeRecord, filterRecords, summarize, groupRecords, parseJson, validDate, settlementCandidates, shipmentSales } from './logisticsFinance.js';
 import { ZONE_ORDER } from './zoneGroups.js';
 
+// Bound each database response, without capping the history used by totals.
+// Keyset pagination also works inside the settlement closing transaction.
+async function readFinancePages(connection, sql, args, idColumn) {
+  const rows = [];
+  let before = null;
+  let size = 100;
+  while (true) {
+    let result;
+    try {
+      result = await connection.execute({
+        sql: `${sql} AND (? IS NULL OR ${idColumn} < ?) ORDER BY ${idColumn} DESC LIMIT ?`,
+        args: [...args, before, before, size],
+      });
+    } catch (error) {
+      if (size > 1 && /RESPONSE_TOO_LARGE|response is too large/i.test(`${error.code || ''} ${error.message || ''}`)) {
+        size = Math.max(1, Math.floor(size / 2));
+        continue;
+      }
+      throw error;
+    }
+    rows.push(...result.rows);
+    if (result.rows.length < size) return { rows };
+    before = result.rows[result.rows.length - 1].id;
+  }
+}
+
 export function createFinanceRepository(db) {
   const execute = (sql, args = []) => db.execute({ sql, args });
   async function listRates(workspaceId, connection = db) {
@@ -20,7 +46,17 @@ export function createFinanceRepository(db) {
   async function records(workspaceId, connection = db, identity = null) {
     const [rates, result, unlinked] = await Promise.all([
       listRates(workspaceId, connection),
-      connection.execute({ sql: `SELECT mo.*, s.partido, s.assigned_carrier, c.id AS carrier_id, c.display_name AS carrier_display_name,
+      readFinancePages(connection, `SELECT mo.id, mo.integration_connection_id, mo.shipment_id, mo.order_id,
+        mo.user_id, mo.external_store_id, mo.logistic_type, mo.shipping_method, mo.shipment_status, mo.shipment_substatus,
+        mo.status, mo.currency, mo.total, mo.raw_shipment_json, mo.lead_time_json, mo.history_json,
+        mo.delays_json, mo.carrier_json, mo.address_json, mo.synced_at, mo.recipient_name,
+        mo.label_printed_at, mo.label_imported_at,
+        CASE WHEN json_valid(mo.raw_order_json) THEN json_object(
+          'id', json_extract(mo.raw_order_json, '$.id'),
+          'status', json_extract(mo.raw_order_json, '$.status'),
+          'currency_id', json_extract(mo.raw_order_json, '$.currency_id'),
+          'total_amount', json_extract(mo.raw_order_json, '$.total_amount')) ELSE NULL END AS raw_order_json,
+        s.partido, s.assigned_carrier, c.id AS carrier_id, c.display_name AS carrier_display_name,
         f.costs_json, f.costs_synced_at, f.details_json, f.details_synced_at, f.sync_error, f.responsibility_json, f.pricing_json,
         si.settlement_id, si.snapshot_json AS locked_snapshot_json, si.amount_cents AS locked_amount_cents
         FROM mercadolibre_orders mo
@@ -32,12 +68,19 @@ export function createFinanceRepository(db) {
         LEFT JOIN carrier_settlement_items si ON si.workspace_id = mo.workspace_id AND si.shipment_id = mo.shipment_id
         WHERE mo.workspace_id = ? AND mo.shipment_id IS NOT NULL AND mo.shipment_id <> ''
         ${identity ? 'AND mo.integration_connection_id = ? AND mo.shipment_id = ?' : ''}
-        ORDER BY mo.synced_at DESC, mo.id DESC`, args: identity ? [workspaceId, identity.connectionId, identity.shipmentId] : [workspaceId] }),
-      identity ? Promise.resolve({ rows: [] }) : connection.execute({ sql: `SELECT s.*, c.id AS carrier_id, c.display_name AS carrier_display_name
+        `, identity ? [workspaceId, identity.connectionId, identity.shipmentId] : [workspaceId], 'mo.id'),
+      identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT s.id, s.partido, s.assigned_carrier, s.recipient_name,
+        s.shipping_method, c.id AS carrier_id, c.display_name AS carrier_display_name
         FROM shipments s LEFT JOIN carriers c ON c.workspace_id=0 AND (c.name=s.assigned_carrier OR CAST(c.id AS TEXT)=s.assigned_carrier)
         WHERE s.workspace_id=? AND s.shipping_method='flex' AND NOT EXISTS (
-          SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND (mo.shipment_row_id=s.id OR (mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')))`, args: [workspaceId] }),
+          SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND (mo.shipment_row_id=s.id OR (mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')))`, [workspaceId], 's.id'),
     ]);
+    // Preserve the newest-copy rule for orders repeated across connections,
+    // even when the matching rows arrived in different database pages.
+    result.rows.sort((a, b) => {
+      const left = a.synced_at || '', right = b.synced_at || '';
+      return left === right ? Number(b.id) - Number(a.id) : left < right ? 1 : -1;
+    });
     const unique = new Map();
     const ordersByShipment = new Map();
     for (const row of result.rows) {
