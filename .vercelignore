@@ -1,0 +1,6 @@
+_backup
+.next
+node_modules
+*.db
+.env*
+!.env.example

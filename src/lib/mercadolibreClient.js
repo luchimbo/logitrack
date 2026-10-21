@@ -51,6 +51,10 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/shipments/${shipmentId}/lead_time`);
   }
 
+  function getShipmentCosts(shipmentId) {
+    return request(`/shipments/${shipmentId}/costs`, { headers: { 'x-format-new': 'true' } });
+  }
+
   async function getShipmentDelays(shipmentId) {
     try {
       return await request(`/shipments/${shipmentId}/delays`);
@@ -64,17 +68,14 @@ export function createMercadoLibreClient({ accessToken } = {}) {
   async function getShipmentCarrier(shipmentId) {
     try {
       return await request(`/shipments/${shipmentId}/carrier`);
-    } catch {
-      return null;
+    } catch (error) {
+      if (String(error.message).toLowerCase().includes('not found')) return null;
+      throw error;
     }
   }
 
   async function getShipmentHistory(shipmentId) {
-    try {
-      return await request(`/shipments/${shipmentId}/history`);
-    } catch {
-      return [];
-    }
+    return request(`/shipments/${shipmentId}/history`);
   }
 
   function downloadShipmentLabelsZpl(shipmentIds) {
@@ -157,6 +158,7 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     getShipment,
     getShipmentItems,
     getShipmentLeadTime,
+    getShipmentCosts,
     getShipmentDelays,
     getShipmentCarrier,
     getShipmentHistory,

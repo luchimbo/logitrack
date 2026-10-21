@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
+import { db } from '@/lib/db';
+import { createFinanceRepository } from '@/lib/financeRepository';
+import { reconcileMercadoLibreFinance, recoverMercadoLibreNotifications } from '@/lib/financeReconciliation';
 
 // El cron debe poder completar todas las cuentas aunque la API de ML esté lenta.
 export const maxDuration = 300;
@@ -39,7 +42,9 @@ export async function GET(request) {
           light: true,
           maxPages: 5,
         });
-        return { connectionId: connection.id, ok: true, synced: count };
+        await recoverMercadoLibreNotifications(connection.workspaceId, target);
+        const reconciliation = await reconcileMercadoLibreFinance(connection.workspaceId, target);
+        return { connectionId: connection.id, ok: true, synced: count, reconciliation };
       } catch (error) {
         console.error('Cron ML sync error (connection', connection.id, '):', error.message || error);
         return { connectionId: connection.id, ok: false, error: error.message || 'error' };
@@ -49,6 +54,12 @@ export async function GET(request) {
     for (const result of connectionResults) {
       results.push(result);
       if (result.ok) totalSynced += result.synced;
+    }
+
+    // Refresh the precomputed finance map once the day's data is in.
+    const repository = createFinanceRepository(db);
+    for (const workspaceId of new Set(connections.map((connection) => connection.workspaceId))) {
+      try { await repository.rebuildSnapshot(workspaceId); } catch (error) { console.error('Cron finance snapshot error (workspace', workspaceId, '):', error.message || error); }
     }
 
     return NextResponse.json({ ok: true, connections: connections.length, totalSynced, results });

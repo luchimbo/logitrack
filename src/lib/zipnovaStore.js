@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { getDefaultZipnovaClient, normalizeZipnovaShipment } from '@/lib/zipnovaClient';
+import { resolveZipnovaClient } from '@/lib/zipnovaResolver';
 import { formatArgentinaDateTime, getArgentinaDateString } from '@/lib/dateUtils';
 
 export const ZIPNOVA_VISIBLE_STATUSES = ['new', 'documentation_ready', 'ready_to_ship', 'shipped', 'in_transit_to_crossdock'];
@@ -240,8 +241,8 @@ async function upsertZipnovaShipment(shipment, { workspaceId, collectionWindow =
       carrier_logo = excluded.carrier_logo,
       products_json = excluded.products_json,
       packages_json = excluded.packages_json,
-      collection_window_json = excluded.collection_window_json,
-      collection_key = excluded.collection_key,
+      collection_window_json = COALESCE(excluded.collection_window_json, zipnova_shipments.collection_window_json),
+      collection_key = COALESCE(excluded.collection_key, zipnova_shipments.collection_key),
       synced_at = CURRENT_TIMESTAMP`,
     args: [
       workspaceId || null,
@@ -374,6 +375,25 @@ async function upsertZipnovaCollections(collections, workspaceId) {
       ],
     });
   }
+}
+
+// One page of every Zipnova shipment created in a date range, any status, for sales and costs.
+// Keeps collection data set by the operational sync.
+export async function syncZipnovaShipmentsPage({ workspaceId, from = '', to = '', page = 1, client = null } = {}) {
+  await ensureDb();
+  const zipnovaClient = client || await resolveZipnovaClient(workspaceId);
+  const response = await zipnovaClient.listShipments({ page, from, to });
+  const data = Array.isArray(response?.data) ? response.data : [];
+  const shipments = await Promise.all(data.map(async (item) => {
+    const shipment = normalizeZipnovaShipment(item);
+    if (Number(shipment.price) > 0) return shipment;
+    try { return normalizeZipnovaShipment(await zipnovaClient.getShipment(item.id)); } catch { return shipment; }
+  }));
+  for (const shipment of shipments) await upsertZipnovaShipment(shipment, { workspaceId });
+  const meta = response?.meta || response || {};
+  const lastPage = Number(meta.last_page || meta.lastPage || 0) || null;
+  const total = Number(meta.total || 0) || null;
+  return { synced: shipments.length, page, lastPage, total, done: !data.length || (lastPage ? page >= lastPage : data.length < Number(meta.per_page || 25)) };
 }
 
 export async function syncZipnovaVisibleShipments({ externalId = '', client = null, workspaceId = null, daysAhead = 7 } = {}) {

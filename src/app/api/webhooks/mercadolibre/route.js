@@ -87,7 +87,7 @@ export async function POST(request) {
       light: false,
     });
 
-    if (notificationId) {
+    if (notificationId && !full?.syncErrors?.length) {
       await db.execute({
         sql: `UPDATE mercadolibre_notifications SET processed_at = CURRENT_TIMESTAMP WHERE id = ?`,
         args: [notificationId],
