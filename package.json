@@ -6,11 +6,11 @@
     "dev": "next dev",
     "prebuild": "npm run check:crossselling",
     "build": "next build",
-    "check:crossselling": "node --experimental-default-type=module --test tests/crossselling*.test.js",
+    "check:crossselling": "node --test tests/crossselling*.test.js",
     "deploy:production": "node scripts/deploy-production.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-default-type=module --test tests/*.test.js",
+    "test": "node --test tests/*.test.js",
     "bootstrap:legacy-admin": "node scripts/bootstrap-legacy-admin.mjs"
   },
   "dependencies": {
