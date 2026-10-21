@@ -65,7 +65,7 @@ export async function POST(request) {
     await repository.mutateSettlement(workspaceId, Number(input.id), input.action, input, actorId);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const conflict = /UNIQUE|constraint|cerrar borradores/i.test(error.message);
+    const conflict = /UNIQUE|constraint|ya está cerrada/i.test(error.message);
     return NextResponse.json({ error: conflict ? 'Conflicto: la tarifa ya existe o los envíos ya se liquidaron. Actualizá y revisá el detalle.' : error.message }, { status: conflict ? 409 : 400 });
   }
 }

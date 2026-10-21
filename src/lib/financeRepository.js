@@ -325,7 +325,7 @@ export function createFinanceRepository(db) {
       const detail = await settlementDetail(workspaceId, id, tx);
       const s = detail.settlement;
       if (action === 'close') {
-        if (s.status !== 'draft') throw new Error('Solo se pueden cerrar borradores');
+        if (s.status !== 'draft') throw new Error('Esta liquidación ya está cerrada');
         if (!detail.items.length) throw new Error('No hay entregados con tarifa completa para liquidar');
         for (const item of detail.items) await tx.execute({
           sql: `INSERT INTO carrier_settlement_items(settlement_id,workspace_id,connection_id,shipment_id,amount_cents,snapshot_json) VALUES(?,?,?,?,?,?)`,
