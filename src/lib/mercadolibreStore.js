@@ -4,6 +4,8 @@ import { assignCarrier } from '@/lib/zoneMapper';
 import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
+import { persistShipmentFinance, enqueueMercadoLibreRetry } from '@/lib/financeSync';
+import { preserveMercadoLibreDetails } from '@/lib/logisticsFinance';
 
 function json(value, fallback) {
   try {
@@ -157,12 +159,18 @@ function normalizeOrder({ order, shipment, shipmentItems = [], leadTime = null, 
 
 export async function upsertMercadoLibreOrder(workspaceId, payload, { connectionId, externalStoreId, siteId = 'MLA' } = {}) {
   await ensureDb();
+  const originalPayload = payload;
+  const orderId = String(payload.order?.id || '');
+  if (!orderId) return;
+  const prior = await db.execute({ sql: 'SELECT * FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=? AND order_id=? LIMIT 1', args: [workspaceId, Number(connectionId), orderId] });
+  const old = prior.rows[0];
+  payload = preserveMercadoLibreDetails(payload, old);
   const normalized = normalizeOrder({ ...payload, siteId });
   if (!normalized.orderId) return;
   const resolvedConnectionId = connectionId ? Number(connectionId) : null;
   const existing = await db.execute({
-    sql: `SELECT id, label_imported_at, shipment_row_id FROM mercadolibre_orders WHERE integration_connection_id = ? AND order_id = ? LIMIT 1`,
-    args: [resolvedConnectionId, normalized.orderId],
+    sql: `SELECT id, label_imported_at, shipment_row_id FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id = ? AND order_id = ? LIMIT 1`,
+    args: [workspaceId, resolvedConnectionId, normalized.orderId],
   });
   const values = [
     workspaceId,
@@ -210,6 +218,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
         WHERE id = ?`,
       args: [...values, Number(existing.rows[0].id)],
     });
+    await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
     return;
   }
 
@@ -223,6 +232,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: values,
   });
+  await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
 }
 
 async function getFlexConfigCached(client, { siteId, userId, cache }) {
@@ -242,22 +252,30 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
   const shipmentId = order?.shipping?.id;
   let shipment = null;
   let shipmentItems = [];
-  let leadTime = null;
-  let delays = null;
-  let carrier = null;
-  let history = [];
+  let leadTime;
+  let delays;
+  let carrier;
+  let history;
+  let costs;
+  const syncErrors = [];
+  const safe = async (label, work) => {
+    try { return await work(); } catch (error) { syncErrors.push(`${label}: ${error.message}`); return undefined; }
+  };
   if (shipmentId) {
     // Resiliente: un fallo puntual de ML (429/5xx/red) no debe abortar el sync masivo. Si no
     // se puede traer el shipment, guardamos igual la orden con los datos del search.
-    shipment = await client.getShipment(shipmentId).catch(() => null);
+    shipment = await safe('Envío', () => client.getShipment(shipmentId));
     if (light) {
-      return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
+      return { order, shipment, light: true, syncErrors };
     }
-    shipmentItems = await client.getShipmentItems(shipmentId).catch(() => []);
-    leadTime = await client.getShipmentLeadTime(shipmentId).catch(() => null);
-    delays = await client.getShipmentDelays(shipmentId);
-    carrier = await client.getShipmentCarrier(shipmentId);
-    history = await client.getShipmentHistory(shipmentId);
+    [shipmentItems, leadTime, delays, carrier, history, costs] = await Promise.all([
+      safe('Productos', () => client.getShipmentItems(shipmentId)),
+      safe('Plazos', () => client.getShipmentLeadTime(shipmentId)),
+      safe('Demoras', () => client.getShipmentDelays(shipmentId)),
+      safe('Transportista', () => client.getShipmentCarrier(shipmentId)),
+      safe('Historial', () => client.getShipmentHistory(shipmentId)),
+      safe('Costos', () => client.getShipmentCosts(shipmentId)),
+    ]);
     if (shipment?.logistic?.type === 'self_service') {
       const assignment = await client.getFlexAssignment({ siteId: shipment?.source?.site_id || siteId, shipmentId });
       const flexConfig = await getFlexConfigCached(client, {
@@ -268,7 +286,7 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
       if (assignment || flexConfig) carrier = { ...(carrier || {}), flex_assignment: assignment, flex_config: flexConfig };
     }
   }
-  return { order, shipment, shipmentItems, leadTime, delays, carrier, history };
+  return { order, shipment, shipmentItems, leadTime, delays, carrier, history, costs, syncErrors };
 }
 
 // Sincroniza UNA orden con su detalle COMPLETO (shipment, items, lead_time, delays, carrier,
@@ -277,9 +295,14 @@ async function fetchFullOrder(client, orderSummary, siteId, { flexConfigCache = 
 export async function syncSingleMercadoLibreOrder({ workspaceId, client, orderId, connectionId, externalStoreId, siteId = 'MLA', light = false } = {}) {
   await ensureDb();
   if (!orderId) return null;
-  const full = await fetchFullOrder(client, { id: String(orderId) }, siteId, { light });
-  await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
-  return full;
+  try {
+    const full = await fetchFullOrder(client, { id: String(orderId) }, siteId, { light });
+    await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
+    return full;
+  } catch (error) {
+    await enqueueMercadoLibreRetry({ workspaceId, connectionId, orderId, error: error.message });
+    throw error;
+  }
 }
 
 export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5 } = {}) {
@@ -303,6 +326,7 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
       return true;
     } catch (error) {
       console.error(`ML sync: orden ${orderSummary?.id || '?'} falló:`, error?.message || error);
+      await enqueueMercadoLibreRetry({ workspaceId, connectionId, orderId: orderSummary?.id, error: error.message });
       return false;
     }
   };

@@ -87,6 +87,56 @@ npm run build
 
 ## Scripts
 
+### Costos, liquidaciones y entregas
+
+En el menú de Operación están **Ventas y costos** y **Control de entregas**.
+
+- Las ventas brutas pagadas de Mercado Libre se muestran junto a los gastos por
+  zona y partido, en ARS y según fecha de despacho. Se suman los pedidos de cada
+  paquete sin duplicar sus ventas entre conexiones ni su costo logístico.
+  El porcentaje gasto/ventas usa solo envíos con ambos importes completos.
+  No descuenta comisiones, impuestos ni devoluciones parciales; no equivale a
+  facturación fiscal ni al neto acreditado. Ver [definiciones y alcance](docs/zonas-ventas-costos.md).
+
+- En **Tarifas por zona**, un administrador carga precio ARS por envío, transportista,
+  zona y fecha de vigencia. Las tarifas pertenecen al espacio de trabajo, aunque el
+  catálogo de transportistas sea compartido. Una vigencia ya registrada no se sobrescribe.
+- Flex utiliza el despacho confirmado por Mercado Libre, no la fecha prevista de la
+  etiqueta. Se conserva la responsabilidad y el precio aplicado; agregar una tarifa
+  histórica completa los envíos todavía sin precio, sin modificar los ya valorizados.
+- Colecta utiliza `senders[].cost` de `/shipments/{id}/costs`, seleccionando el vendedor
+  correspondiente. El importe del comprador y el importe bruto no sustituyen este costo.
+- Las estadísticas se filtran por fecha de despacho. Quitar el período permite revisar
+  envíos sin despacho confirmado o sin vínculo con Mercado Libre. Los importes
+  desconocidos no se convierten en cero. Los totales incluyen estimaciones de Flex en curso,
+  que se muestran separadas de los entregados aún sin liquidar.
+- Las liquidaciones se crean por fecha de entrega: **borrador → cerrada → pagada**.
+  El cierre vuelve a consultar los candidatos y los reserva en una transacción, con
+  unicidad por espacio/envío físico. Guarda precio y detalle. Antes del pago pueden
+  agregarse ajustes con motivo; después del pago la liquidación permanece inmutable.
+- El tablero distingue estado, demora informada por ML y plazo estimado vencido.
+  Los plazos de `lead_time` se presentan como fechas, sin inventar una cita horaria.
+  El historial es completo y la preparación/impresión interna se muestra por separado.
+- Las pantallas consultan la base cada 60 segundos mientras están visibles. **Actualizar
+  desde Mercado Libre** recorre los envíos de la selección en lotes de hasta diez.
+
+El esquema se agrega mediante `initDb` sin borrar datos operativos. La sincronización
+manual, los webhooks y el proceso diario utilizan la misma captura. Se conserva el
+último detalle válido ante fallos. El proceso diario también recupera notificaciones
+pendientes y reintentos persistentes, y reconcilia hasta 25 envíos por cuenta por pasada,
+priorizando los intentos más antiguos; no está limitado a las ventas recientes.
+
+Interfaces autenticadas: `GET /api/logistics-finance` (filtros, `format=csv`,
+`view=rates`, `view=settlements`, `id` para detalle), `POST /api/logistics-finance`
+(`action=rate|draft|close|pay|adjust`, solo administradores) y
+`POST /api/logistics-finance/sync` (actualización de envíos existentes en el espacio).
+Los portales públicos de transportistas no exponen estos datos financieros.
+
+Los cálculos y la emisión de CSV son internos: no se emiten comprobantes fiscales
+ni se realizan transferencias. Subsidios Flex y recargos por peso/producto quedan fuera.
+
+### Comandos
+
 - `npm run dev`: entorno local
 - `npm run build`: build produccion
 - `npm run start`: servir build

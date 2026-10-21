@@ -20,6 +20,7 @@ const ZoneConfig = dynamic(() => import("@/components/ZoneConfig"), { loading })
 const GoogleSheetsSection = dynamic(() => import("@/components/GoogleSheetsSection"), { loading });
 const OperationToday = dynamic(() => import("@/components/OperationToday"), { loading });
 const PackageHistorySection = dynamic(() => import("@/components/PackageHistorySection"), { loading });
+const LogisticsFinance = dynamic(() => import("@/components/LogisticsFinance"), { loading });
 
 export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
   switch (activeTab) {
@@ -31,6 +32,8 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "zoneConfig": return <ZoneConfig />;
     case "sheetSync": return currentUser ? <GoogleSheetsSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
     case "dashboard": return <Dashboard />;
+    case "logisticsFinance": return <LogisticsFinance key="finance" currentUser={currentUser} />;
+    case "deliveryControl": return <LogisticsFinance key="delivery" currentUser={currentUser} delivery />;
     case "printJobs": return <PackageHistorySection />;
     case "map": return <MapSection />;
     case "integrations": return currentUser ? <IntegrationsSection onNavigate={onNavigate} /> : <div>No autorizado</div>;

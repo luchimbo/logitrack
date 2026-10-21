@@ -7,6 +7,8 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "colecta", icon: "colecta", label: "Colecta" },
     ...(hasOperationsPreview ? [{ id: "printJobs", icon: "colecta", label: "Historial de paquetes" }] : []),
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },
+    { id: "logisticsFinance", icon: "dashboard", label: "Ventas y costos" },
+    { id: "deliveryControl", icon: "colecta", label: "Control de entregas" },
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
     { id: "map", icon: "map", label: "Mapa" },
   ];
@@ -47,7 +49,8 @@ export function getDefaultAppTab({ currentUser, navGroups = [] }) {
 }
 
 export function resolveAppTab({ requestedTab, currentUser, navGroups = [] }) {
-  // Permitir la configuración inicial y el regreso de OAuth sin conexión previa.
+  // La primera conexión y el regreso de OAuth deben poder abrir el módulo
+  // antes de que el proveedor aparezca en la navegación de conectadas.
   if (currentUser && ["tiendanube", "shopify", "mercadolibre", "zipnova"].includes(requestedTab)) return requestedTab;
   const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
   return availableIds.has(requestedTab)

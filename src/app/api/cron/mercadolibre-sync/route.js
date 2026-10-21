@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
+import { reconcileMercadoLibreFinance, recoverMercadoLibreNotifications } from '@/lib/financeReconciliation';
 
 // El cron debe poder completar todas las cuentas aunque la API de ML esté lenta.
 export const maxDuration = 300;
@@ -39,7 +40,9 @@ export async function GET(request) {
           light: true,
           maxPages: 5,
         });
-        return { connectionId: connection.id, ok: true, synced: count };
+        await recoverMercadoLibreNotifications(connection.workspaceId, target);
+        const reconciliation = await reconcileMercadoLibreFinance(connection.workspaceId, target);
+        return { connectionId: connection.id, ok: true, synced: count, reconciliation };
       } catch (error) {
         console.error('Cron ML sync error (connection', connection.id, '):', error.message || error);
         return { connectionId: connection.id, ok: false, error: error.message || 'error' };
