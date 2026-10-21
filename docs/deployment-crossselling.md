@@ -23,3 +23,11 @@ node scripts/check-crossselling-deployment.mjs https://www.geomodi.ai
 La comprobación no activa el módulo ni valida una compra: verifica la distribución, autorización de rutas y dominios. La aceptación de descuentos se cubre con pruebas del motor y, después de cambios comerciales, con una prueba de carrito.
 
 Mantener estos archivos versionados en el repositorio principal. Publicar directamente con otro comando, eliminar los controles o usar otra copia del código puede eludir estas protecciones; no existe una garantía absoluta frente a ese tipo de cambios.
+
+## Corrección publicada el 21/10/2026
+
+- Despliegue: `dpl_4i17c8s6npqr3KQNgALfEnT2vJuX`, `https://logitrack-9e5x3tzab-lucio-tamborinis-projects.vercel.app`, promovido con el comando verificado a `www.geomodi.ai`.
+- Verificación posterior sobre el dominio público: comprobación de distribución aprobada; consulta HMAC real de Mostrador a `/module` y `/report` con HTTP 200 para 78394. Módulo habilitado, promoción activa y script disponible.
+- Validación: 116 pruebas aprobadas, lint de los controles sin errores y compilación de Vercel correcta. Se retiró la opción de Node `--experimental-default-type=module`, incompatible con el runtime actual de Vercel, y se agregó inspección de URLs protegidas mediante la sesión del CLI.
+- Versión pública anterior: `dpl_BBqzi96vESFzgqRGNgBaR3mZja4S`. No promoverla para resolver este incidente: contiene la regresión del módulo.
+- Mostrador y la tienda sólo requieren recargar las páginas. La promoción permanece activa; no es necesario volver a autorizar Tiendanube ni reiniciar Mostrador.
