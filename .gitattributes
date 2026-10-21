@@ -1,0 +1,2 @@
+# El motor de cross-selling se verifica por hash de sus bytes: no convertir finales de línea.
+src/lib/crossselling/engine/** -text
