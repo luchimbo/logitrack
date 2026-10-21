@@ -514,7 +514,8 @@ async function syncJob(job, config) {
   for (const url of urls) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      // La base corre en un servidor propio: un lote grande puede tardar bastante más que con Turso.
+      const timeout = setTimeout(() => controller.abort(), 90000);
 
       const response = await fetch(url, {
         method: "POST",

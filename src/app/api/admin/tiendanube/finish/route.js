@@ -26,7 +26,7 @@ async function popOauthSession(storeId, retries = 5) {
     const result = await db.execute({
       sql: `SELECT access_token, scope, expires_at
             FROM tiendanube_oauth_sessions
-            WHERE store_id = ? AND expires_at > datetime('now')
+            WHERE store_id = ? AND julianday(expires_at) > julianday('now')
             LIMIT 1`,
       args: [storeId],
     });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { loginPath } from "@/lib/oauthNavigation";
 
 export function useCurrentUser({ isLoaded, isSignedIn, router }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -20,7 +21,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
           setAuthError(errorData.errorDetail || errorData.error || `Error ${res.status}`);
           setAuthErrorCode(errorData.errorCode || (res.status >= 500 ? "SERVER_ERROR" : "AUTH_FAILED"));
           if (!isSignedIn) {
-            router.replace("/login");
+            router.replace(loginPath(window.location.pathname + window.location.search));
           }
           return;
         }
@@ -38,7 +39,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
         setAuthError(err.message || "Error de autenticación");
         setAuthErrorCode("SERVER_ERROR");
         if (!isSignedIn) {
-          router.replace("/login");
+          router.replace(loginPath(window.location.pathname + window.location.search));
         }
       }
     };

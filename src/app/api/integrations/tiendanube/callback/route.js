@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { exchangeTiendanubeCodeForToken } from '@/lib/tiendanubeOAuth';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { tiendanubeReturnPath } from '@/lib/oauthNavigation';
 
 const BASE_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geomodi.ai';
 
@@ -21,7 +22,7 @@ async function saveOauthSession({ storeId, accessToken, scope }) {
 }
 
 export async function GET(request) {
-  let baseRedirect = `${BASE_APP_URL}/?tab=tiendanube`;
+  const returnUrl = (values) => new URL(tiendanubeReturnPath(values), BASE_APP_URL);
 
   try {
     const { searchParams } = new URL(request.url);
@@ -29,11 +30,11 @@ export async function GET(request) {
     const error = searchParams.get('error');
 
     if (error) {
-      return NextResponse.redirect(`${baseRedirect}&tiendanube_error=${encodeURIComponent(error)}`);
+      return NextResponse.redirect(returnUrl({ error }));
     }
 
     if (!code) {
-      return NextResponse.redirect(`${baseRedirect}&tiendanube_error=${encodeURIComponent('Falta el codigo de autorizacion')}`);
+      return NextResponse.redirect(returnUrl({ error: 'Falta el codigo de autorizacion' }));
     }
 
     const tokens = await exchangeTiendanubeCodeForToken({ code });
@@ -44,9 +45,9 @@ export async function GET(request) {
       scope: tokens.scope,
     });
 
-    return NextResponse.redirect(`${baseRedirect}&tiendanube_store_id=${encodeURIComponent(tokens.storeId)}`);
+    return NextResponse.redirect(returnUrl({ storeId: tokens.storeId }));
   } catch (err) {
     console.error('Tiendanube OAuth callback error:', err);
-    return NextResponse.redirect(`${baseRedirect}&tiendanube_error=${encodeURIComponent(err.message || 'Error en la autorizacion')}`);
+    return NextResponse.redirect(returnUrl({ error: err.message || 'Error en la autorizacion' }));
   }
 }
