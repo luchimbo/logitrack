@@ -110,10 +110,10 @@ export function createFinanceRepository(db) {
     }));
     if (statements.length) await db.batch(statements, 'write');
   }
-  async function report(workspaceId, filters) {
+  async function report(workspaceId, filters, { compact = false } = {}) {
     const all = await records(workspaceId);
     const rows = filterRecords(all, filters);
-    return { rows, summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'),
+    return { ...(compact ? {} : { rows }), summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'),
       byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: {
         parties: [...new Set(all.map((r) => r.partido).filter(Boolean))].sort(),
         connections: [...new Set(all.map((r) => r.connectionId).filter(Boolean))],

@@ -91,6 +91,12 @@ npm run build
 
 En el menú de Operación están **Ventas y costos** y **Control de entregas**.
 
+- **Mapa de zonas** es la vista inicial: período por fechas o accesos rápidos,
+  selección múltiple de CABA/GBA 1/GBA 2/GBA 3 y resumen automático con ventas,
+  gasto, promedio por envío, promedio por pedido e incidencia logística.
+  El CSV y el botón **Ver detalle** respetan las zonas elegidas. La selección
+  filtra el informe; la asignación operativa de zonas se mantiene en Config. Zonas.
+
 - Las ventas brutas pagadas de Mercado Libre se muestran junto a los gastos por
   zona y partido, en ARS y según fecha de despacho. Se suman los pedidos de cada
   paquete sin duplicar sus ventas entre conexiones ni su costo logístico.

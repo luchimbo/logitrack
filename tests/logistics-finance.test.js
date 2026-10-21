@@ -163,6 +163,10 @@ test('report preserves all package sales while charging one physical shipment',a
     assert.equal(report.summary.totalCents,10000);
     assert.equal(report.byZone[0].salesCents,150000);
     assert.equal(report.byPartido[0].salesCents,150000);
+    const compact=await repo.report(1,{}, { compact:true });
+    assert.equal(compact.rows,undefined);
+    assert.deepEqual(compact.summary,report.summary);
+    assert.equal(compact.summary.averageSaleCents,75000);
     assert.equal((await repo.report(2,{})).summary.salesCents,null);
     assert.equal((await repo.report(1,{from:'2026-10-02'})).summary.salesCents,null);
   } finally {cleanup();}

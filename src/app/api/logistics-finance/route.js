@@ -32,7 +32,7 @@ export async function GET(request) {
     }
     const filters = Object.fromEntries(p);
     if (filters.from && !validDate(filters.from) || filters.to && !validDate(filters.to) || filters.from && filters.to && filters.from > filters.to) return NextResponse.json({ error: 'Período inválido' }, { status: 400 });
-    const report = await repository.report(workspaceId, filters);
+    const report = await repository.report(workspaceId, filters, { compact: p.get('view') === 'map' && p.get('format') !== 'csv' });
     if (p.get('format') === 'csv') return csvResponse(report.rows, columns, 'gastos-envios');
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return NextResponse.json({ error: error.message || 'No se pudo cargar' }, { status: 500 }); }

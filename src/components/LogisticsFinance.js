@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { ZONE_ORDER } from '@/lib/zoneGroups';
 import { STATE_LABELS, toCents, deliveryEventLabel } from '@/lib/logisticsFinance';
@@ -13,11 +14,13 @@ const when = (value) => !value ? 'No disponible' : /^\d{4}-\d{2}-\d{2}$/.test(va
 const statusNames = { draft: 'Borrador', closed: 'Cerrada', paid: 'Pagada' };
 const keyOf = (r) => `${r.connectionId}:${r.shipmentId}`;
 const endpoint = '/logistics-finance';
+const FinanceMapDashboard = dynamic(() => import('./FinanceMapDashboard'), { loading: () => <div role="status">Cargando mapa…</div> });
 
 export default function LogisticsFinance({ currentUser, delivery = false }) {
-  const [tab, setTab] = useState('stats');
+  const [tab, setTab] = useState('map');
+  const [mapSelection, setMapSelection] = useState([]);
   const [filters, setFilters] = useState(() => delivery ? {} : { from: `${getArgentinaDateString().slice(0, 7)}-01`, to: getArgentinaDateString() });
-  const [report, setReport] = useState(null);
+  const [loadedReport, setReport] = useState(null);
   const [rates, setRates] = useState([]);
   const [carriers, setCarriers] = useState([]);
   const [settlements, setSettlements] = useState([]);
@@ -30,14 +33,18 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
   const [loading, setLoading] = useState(true);
   const sequence = useRef(0);
   const canEdit = currentUser?.isGlobalAdmin || ['admin', 'owner'].includes(currentUser?.role);
-  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+  const mapView = !delivery && tab === 'map';
+  const query = new URLSearchParams(Object.entries(filters).filter(([key, value]) => value && (!mapView || ['from', 'to', 'method'].includes(key)))).toString();
+  const exportQuery = mapView ? new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(query)), ...(mapSelection.length ? { zones: mapSelection.join(',') } : {}) }).toString() : query;
+  const report = loadedReport?.queryKey === `${mapView}:${query}` ? loadedReport : null;
+  const openMapDetail = () => { setFilters({ ...Object.fromEntries(new URLSearchParams(query)), zones: mapSelection.join(',') }); setPage(1); setSelected(null); setTab('stats'); };
   const load = useCallback(async () => {
     const id = ++sequence.current;
     try {
-      const data = await api(`${endpoint}?${query}`);
-      if (id === sequence.current) { setReport(data); setLoading(false); }
+      const data = await api(`${endpoint}?${query}${mapView ? '&view=map' : ''}`);
+      if (id === sequence.current) { setReport({ ...data, queryKey: `${mapView}:${query}` }); setError(''); setLoading(false); }
     } catch (err) { if (id === sequence.current) { setError(err.message); setLoading(false); } }
-  }, [query]);
+  }, [query, mapView]);
   const loadConfig = useCallback(async () => {
     const [r, c, s] = await Promise.all([api(`${endpoint}?view=rates`), api('/carriers'), api(`${endpoint}?view=settlements`)]);
     setRates(r.rates); setCarriers(c); setSettlements(s.settlements);
@@ -76,11 +83,13 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
   const selectedRow = rows.find((r) => keyOf(r) === selected);
   const shown = rows.slice((page - 1) * 50, page * 50);
   return <div className={`section ${styles.page}`}>
-    <header className={styles.header}><div><p className={styles.eyebrow}>{delivery ? 'Seguimiento · Mercado Libre' : 'Administración · ARS'}</p><h1>{delivery ? 'Control de entregas' : 'Ventas, costos y liquidaciones'}</h1><p>{delivery ? 'Cada envío, su plazo y sus incidencias. Los datos se consultan localmente cada 60 segundos.' : 'Ventas y gasto logístico por zona y partido. Tarifas Flex y liquidaciones de transportistas.'}</p></div><div className={styles.actions}><button className="btn btn-primary" disabled={busy || loading} onClick={sync}>{busy ? 'Actualizando…' : 'Actualizar desde Mercado Libre'}</button><a className="btn btn-ghost" href={`/api${endpoint}?${query}&format=csv`}>Exportar CSV</a></div></header>
+    <header className={styles.header}><div><p className={styles.eyebrow}>{delivery ? 'Seguimiento · Mercado Libre' : 'Administración · ARS'}</p><h1>{delivery ? 'Control de entregas' : mapView ? 'Ventas y costos por zona' : 'Ventas, costos y liquidaciones'}</h1><p>{delivery ? 'Cada envío, su plazo y sus incidencias. Los datos se consultan localmente cada 60 segundos.' : mapView ? 'Elegí un período y seleccioná zonas. El resumen se calcula automáticamente.' : 'Ventas y gasto logístico por zona y partido. Tarifas Flex y liquidaciones de transportistas.'}</p></div><div className={styles.actions}><button className="btn btn-primary" disabled={busy || loading} onClick={mapView ? load : sync}>{busy ? 'Actualizando…' : mapView ? 'Actualizar datos' : 'Actualizar desde Mercado Libre'}</button><a className="btn btn-ghost" href={`/api${endpoint}?${exportQuery}&format=csv`}>Exportar CSV</a></div></header>
     {error ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{error}</div> : null}
     {message ? <div role="status" className={styles.notice}>{message}</div> : null}
-    {!delivery ? <nav className={styles.tabs} aria-label="Costos"><button aria-pressed={tab === 'stats'} onClick={() => setTab('stats')}>Estadísticas</button><button aria-pressed={tab === 'rates'} onClick={() => setTab('rates')}>Tarifas por zona</button><button aria-pressed={tab === 'settlements'} onClick={() => setTab('settlements')}>Liquidaciones</button></nav> : null}
+    {!delivery ? <nav className={styles.tabs} aria-label="Ventas y costos"><button aria-pressed={tab === 'map'} onClick={() => setTab('map')}>Mapa de zonas</button><button aria-pressed={tab === 'stats'} onClick={() => tab !== 'stats' && openMapDetail()}>Detalle</button><button aria-pressed={tab === 'rates'} onClick={() => setTab('rates')}>Tarifas por zona</button><button aria-pressed={tab === 'settlements'} onClick={() => setTab('settlements')}>Liquidaciones</button></nav> : null}
+    {mapView ? <FinanceMapDashboard report={report?.queryKey === `${mapView}:${query}` ? report : null} filters={filters} selected={mapSelection} onSelect={setMapSelection} onPeriod={(range) => { setFilters((prev) => ({ ...prev, ...range })); setPage(1); }} onMethod={(method) => change('method', method)} onDetail={openMapDetail} loading={loading || report?.queryKey !== `${mapView}:${query}`} /> : null}
     {delivery || tab === 'stats' ? <>
+      {!delivery && filters.zones ? <div className={styles.notice}>Zonas seleccionadas: {filters.zones.replaceAll('__missing__', 'Sin zona').replaceAll(',', ' + ')}. <button className={styles.link} onClick={() => change('zones', '')}>Ver todas</button></div> : null}
       <div className={styles.panel}><Filters filters={filters} change={change} carriers={carriers} report={report} delivery={delivery} /><p className={styles.muted}>{delivery ? 'Fechas opcionales. Sin período se incluyen también los envíos antiguos abiertos.' : 'Período según fecha de despacho confirmada. Los envíos sin fecha se ven quitando el período.'} <button className={styles.link} onClick={() => { setFilters({}); setPage(1); }}>Quitar filtros</button></p></div>
       <div className={styles.metrics}>{delivery ? <>
         <Metric label="Envíos" value={summary.count || 0} note="En la selección" /><Metric label="Con demora" value={summary.delayed || 0} note="Informada por ML o plazo vencido" /><Metric label="Incidencias" value={summary.incidents || 0} note="Intentos fallidos y problemas" /><Metric label="Entregados" value={rows.filter((r) => r.state === 'delivered').length} note="Confirmados por Mercado Libre" />
@@ -88,7 +97,7 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
       {!delivery ? <><div className={styles.metrics}><Metric label="Ventas brutas pagadas" value={money(summary.salesCents)} note={`${summary.paidOrderCount || 0} pedidos pagados · ARS`} /><Metric label="Gasto / ventas" value={percent(summary.logisticsPercent)} note={`${summary.comparableCount || 0} envíos con ventas y costo completos`} /><Metric label="Flex" value={money(summary.flexCents)} note="Gasto logístico Flex" /><Metric label="Colecta" value={money(summary.colectaCents)} note="Gasto logístico Colecta" /></div><p className={styles.muted}>Ventas brutas de pedidos pagados de Mercado Libre, agrupadas por el despacho de sus envíos. No descuentan comisiones, impuestos ni devoluciones parciales. {summary.salesMissingCount || 0} pedidos con venta no computable; {summary.salesUnavailableCount || 0} envíos sin importe de venta. El porcentaje usa solo envíos con ventas y costo completos.</p></> : null}
       {!delivery ? <div className={styles.notice}><strong>{summary.count || 0} envíos · {summary.missingCount || 0} sin importe.</strong> Flex en curso: {money(summary.estimatedFlexCents)}. Entregados aún sin liquidar: {money(summary.payableFlexCents)}. Son partes del gasto Flex, no importes adicionales.{report?.options.noDispatchCount ? <p>{report.options.noDispatchCount} envíos sin despacho confirmado en el espacio ({report.options.unmatchedCount} sin vínculo con Mercado Libre). Quitá el período para revisarlos.</p> : null}</div> : null}
       {!delivery ? <div className={styles.breakdown}><GroupTable title={filters.zone ? `Partidos · ${filters.zone === '__missing__' ? 'Sin zona' : filters.zone}` : 'Por zona'} groups={filters.zone ? report?.byPartido : report?.byZone} onChoose={(name) => change(filters.zone ? 'partido' : 'zone', name === 'Sin dato' ? '__missing__' : name)} /><GroupTable title="Transportistas Flex" groups={report?.byCarrier} onChoose={(name) => { const carrier = carriers.find((c) => (c.display_name || c.name) === name); change('carrierId', carrier ? String(carrier.id) : '__missing__'); }} /></div> : null}
-      <section className={styles.panel}><h2>{delivery ? 'Seguimiento de envíos' : filters.partido ? `Envíos · ${filters.partido === '__missing__' ? 'Sin partido' : filters.partido.replaceAll('_',' ')}` : 'Detalle de envíos'}</h2>{loading ? <div className={styles.empty} role="status">Cargando envíos…</div> : <ShipmentTable rows={shown} delivery={delivery} onSelect={(r) => setSelected(keyOf(r))} />}<div className={styles.footer}><span>{rows.length} envíos · página {page} de {Math.max(1, Math.ceil(rows.length / 50))}</span><div className={styles.actions}><button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><button className="btn btn-ghost btn-sm" disabled={page * 50 >= rows.length} onClick={() => setPage(page + 1)}>Siguiente</button></div></div></section>
+      <section className={styles.panel}><h2>{delivery ? 'Seguimiento de envíos' : filters.partido ? `Envíos · ${filters.partido === '__missing__' ? 'Sin partido' : filters.partido.replaceAll('_',' ')}` : 'Detalle de envíos'}</h2>{loading || !report ? <div className={styles.empty} role="status">Cargando envíos…</div> : <ShipmentTable rows={shown} delivery={delivery} onSelect={(r) => setSelected(keyOf(r))} />}<div className={styles.footer}><span>{rows.length} envíos · página {page} de {Math.max(1, Math.ceil(rows.length / 50))}</span><div className={styles.actions}><button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><button className="btn btn-ghost btn-sm" disabled={page * 50 >= rows.length} onClick={() => setPage(page + 1)}>Siguiente</button></div></div></section>
       {selectedRow ? <ShipmentDetail row={selectedRow} onClose={() => setSelected(null)} /> : null}
     </> : null}
     {!delivery && tab === 'rates' ? <section className={styles.panel}><h2>Tarifa por envío físico</h2><p className={styles.muted}>Cada tarifa pertenece a este espacio de trabajo. Se utiliza la vigente en la fecha de despacho. Los cambios se agregan con una nueva vigencia.</p>{canEdit ? <RateForm carriers={carriers} busy={busy} onSave={mutate} /> : <p className={styles.muted}>Solo administradores pueden modificar tarifas.</p>}<div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Transportista</th><th>Zona</th><th>Vigente desde</th><th className={styles.number}>Por envío</th></tr></thead><tbody>{rates.map((r) => <tr key={r.id}><td>{r.carrier_name}</td><td>{r.zone}</td><td>{when(r.valid_from)}</td><td className={styles.number}>{money(Number(r.amount_cents))}</td></tr>)}</tbody></table>{!rates.length ? <p className={styles.empty}>Cargá las tarifas para comenzar a calcular los gastos Flex.</p> : null}</div></section> : null}

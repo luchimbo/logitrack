@@ -41,7 +41,7 @@ export function orderSales(row) {
 }
 export function shipmentSales(rows) {
   const seen = new Set();
-  let salesCents = 0, salesKnownCount = 0, salesMissingCount = 0, paidOrderCount = 0;
+  let salesCents = 0, salesKnownCount = 0, salesMissingCount = 0, paidOrderCount = 0, paidKnownOrderCount = 0;
   for (const row of rows) {
     // Rows arrive newest first. The same ML order may be connected more than once.
     const raw = parseJson(row.raw_order_json);
@@ -51,9 +51,9 @@ export function shipmentSales(rows) {
     const sale = orderSales(row);
     paidOrderCount += sale.paidOrderCount;
     if (sale.salesCents === null) salesMissingCount++;
-    else { salesCents += sale.salesCents; salesKnownCount++; }
+    else { salesCents += sale.salesCents; salesKnownCount++; paidKnownOrderCount += sale.paidOrderCount; }
   }
-  return { salesCents: salesKnownCount ? salesCents : null, salesKnownCount, salesMissingCount, paidOrderCount };
+  return { salesCents: salesKnownCount ? salesCents : null, salesKnownCount, salesMissingCount, paidOrderCount, paidKnownOrderCount };
 }
 export function sellerCost(costs, sellerId) {
   const sender = costs?.senders?.find((entry) => String(entry.user_id) === String(sellerId));
@@ -189,9 +189,11 @@ export function financeRecord(row, rates, now) {
     costsSyncedAt: row.costs_synced_at || '', responsibility: saved, pricing };
 }
 export function filterRecords(rows, filters = {}) {
+  const zones = String(filters.zones || '').split(',').filter(Boolean);
   return rows.filter((r) => {
     const date = filters.dateBasis === 'delivery' ? r.deliveryDay : r.dispatchDay;
     if (filters.from && (!date || date < filters.from) || filters.to && (!date || date > filters.to)) return false;
+    if (zones.length && !zones.includes(r.zone || '__missing__')) return false;
     for (const [key, field] of [['connectionId','connectionId'], ['method','method'], ['carrierId','carrierId'], ['zone','zone'], ['partido','partido'], ['state','state']]) {
       if (filters[key] === '__missing__') { if (r[field]) return false; continue; }
       if (filters[key] && String(r[field]) !== String(filters[key])) return false;
@@ -213,8 +215,10 @@ export function summarize(rows) {
   const comparable = rows.filter((r) => r.amountCents !== null && r.salesCents > 0 && !r.salesMissingCount);
   const comparableSalesCents = comparable.reduce((n, r) => n + r.salesCents, 0);
   const comparableCostCents = sum(comparable);
+  const paidKnownOrderCount = rows.reduce((n, r) => n + (r.paidKnownOrderCount || 0), 0);
   return { count: rows.length, knownCount: known.length, missingCount: rows.length - known.length,
     salesCents, paidOrderCount: rows.reduce((n, r) => n + (r.paidOrderCount || 0), 0),
+    paidKnownOrderCount, averageSaleCents: paidKnownOrderCount && salesCents !== null ? Math.round(salesCents / paidKnownOrderCount) : null,
     salesMissingCount: rows.reduce((n, r) => n + (r.salesMissingCount || 0), 0),
     salesUnavailableCount: rows.filter((r) => r.salesCents === null || r.salesCents === undefined).length,
     comparableCount: comparable.length, comparableSalesCents, comparableCostCents,

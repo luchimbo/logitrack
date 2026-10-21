@@ -3,6 +3,34 @@
 La sección **Ventas y costos** del menú Operación reúne ventas brutas pagadas de
 Mercado Libre, gastos Flex y Colecta, tarifas y liquidaciones.
 
+## Mapa de zonas
+
+La vista inicial permite elegir un período y seleccionar varias zonas del mapa.
+Los accesos Hoy, 7 días, 30 días, Este mes, Mes anterior y Todo completan las
+fechas; también se puede escribir Desde/Hasta. Los períodos se calculan según
+el día de Argentina y la fecha de despacho del envío.
+
+El resumen suma las zonas marcadas. Los promedios ponderan los envíos con costo
+conocido y los pedidos pagados con venta conocida; nunca promedian los promedios
+de cada zona. El CSV y Ver detalle usan la misma selección. Sin zonas marcadas
+se incluyen todas, también envíos sin zona o fuera del área representada.
+
+El mapa usa un resumen compacto de la API (`view=map`), sin enviar todo el detalle
+de los envíos al navegador. `zones=CABA,GBA 1` filtra el detalle y CSV. Los datos
+se vuelven a consultar cada 60 segundos mientras la pantalla está visible.
+
+Las geometrías locales se generan con `scripts/build-finance-map.py` desde
+geoBoundaries ARG ADM2, revisión `9469f09`, con origen IGN, UNHCR y OCHA ROLAC
+y licencia CC BY 3.0 IGO. Se incluyen 37 partidos y las 15 comunas de CABA.
+La Matanza Norte conserva su clasificación operativa GBA 1 aunque el polígono
+del partido completo se dibuje en GBA 2; esto se explica en Cómo se agrupan las
+zonas. La selección no modifica configuraciones ni reclasifica envíos.
+
+Pruebas del mapa: selección múltiple, zonas sin datos, conciliación con detalle,
+promedios ponderados, pedidos incompletos y períodos con cambio de mes/año y
+horario de Argentina. Verificación visual local con datos ficticios: selección
+mediante mapa y botones, suma de CABA + GBA 1 y recálculo al elegir 7 días.
+
 ## Qué se puede consultar
 
 - Ventas brutas, pedidos pagados y gasto logístico de la selección.
