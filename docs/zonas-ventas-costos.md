@@ -61,3 +61,22 @@ Con la sesión de navegador disponible se verificó la carga de estadísticas,
 filtros, tarifas y liquidaciones sin errores. Ese espacio no tiene ventas de
 Mercado Libre vinculadas; no se validaron importes reales de otro espacio ni se
 crearon tarifas, liquidaciones o pagos de prueba en producción.
+
+## Corrección de respuestas grandes · 21/10/2026
+
+El primer despliegue podía fallar con `RESPONSE_TOO_LARGE` en espacios con más
+historial: las consultas sin límite incluían columnas de etiquetas ZPL y pedidos
+completos que no necesitaba el informe. La revisión `d53645e` consulta campos
+explícitos, resume el JSON del pedido y recorre la base por ID en lotes de hasta
+100 registros. Si la base rechaza un lote por tamaño, reduce el lote y reintenta
+sin avanzar el cursor ni omitir envíos. La selección de la copia más reciente y
+los totales siguen considerando todo el historial.
+
+Despliegue corregido: `dpl_GyR3caF89o1CvpqnkBcpWi3S9vqw`,
+`https://logitrack-59uonzcyy-lucio-tamborinis-projects.vercel.app`, activo en
+`www.geomodi.ai`. Reversión anterior: `dpl_8pUEgjzYj3rpfC64juWuVVLurb4S`.
+
+Validación: 90 pruebas aprobadas, compilación local y remota correctas y lint
+sin errores. La nueva regresión utiliza 441 envíos físicos, etiquetas y JSON
+pesados, duplicados entre páginas y un límite de respuesta simulado; comprueba
+que todos los envíos y sus ventas se conservan.
