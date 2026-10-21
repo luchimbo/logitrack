@@ -455,6 +455,9 @@ export async function initDb() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_mercadolibre_orders_connection_order ON mercadolibre_orders(integration_connection_id, order_id) WHERE integration_connection_id IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace ON mercadolibre_orders(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_shipment ON mercadolibre_orders(shipment_id)`,
+    // Vínculo etiqueta ↔ venta en el cálculo de Ventas y costos: sin estos índices cada lectura tarda decenas de segundos.
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_row ON mercadolibre_orders(workspace_id, shipment_row_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_shipment ON mercadolibre_orders(workspace_id, shipment_id)`,
     `CREATE TABLE IF NOT EXISTS mercadolibre_notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       topic TEXT,
@@ -696,6 +699,7 @@ export async function initDb() {
         "CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)",
         "CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)",
         "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_tracking_history ON shipments(workspace_id, tracking_number)",
+        "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_external ON shipments(workspace_id, external_shipment_id)",
         "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sale_history ON shipments(workspace_id, sale_id)",
         "CREATE INDEX IF NOT EXISTS idx_shipments_workspace_sku_history ON shipments(workspace_id, sku)",
       ], "write");

@@ -110,8 +110,10 @@ export function createFinanceRepository(db) {
         s.shipping_method, s.dispatch_date, s.created_at, s.status AS internal_status, lb.date AS batch_date, c.id AS carrier_id, c.display_name AS carrier_display_name
         FROM shipments s LEFT JOIN daily_batches lb ON lb.id = s.batch_id AND lb.workspace_id = s.workspace_id
         LEFT JOIN carriers c ON c.workspace_id=0 AND (c.name=s.assigned_carrier OR CAST(c.id AS TEXT)=s.assigned_carrier)
-        WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta') AND NOT EXISTS (
-          SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND (mo.shipment_row_id=s.id OR (mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'') OR (mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')))`, [workspaceId], 's.id'),
+        WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta')
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_row_id=s.id)
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')`, [workspaceId], 's.id'),
       // Paid Mercado Libre sales with shipping "a coordinar": no ML shipment exists for them.
       identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT mo.id, mo.integration_connection_id, mo.order_id, mo.pack_id,
         mo.user_id, mo.external_store_id, mo.status, mo.currency, mo.total, mo.recipient_name, mo.buyer_nickname, mo.synced_at,
@@ -239,12 +241,15 @@ export function createFinanceRepository(db) {
   async function snapshotReport(workspaceId, filters, { refresh = false, scheduleRefresh = null, withTargets = false, withRows = false } = {}) {
     const readMeta = async () => (await execute('SELECT built_at, options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
     let meta = await readMeta();
-    if (!meta || refresh || parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION) {
+    if (!meta || refresh) {
       await rebuildSnapshot(workspaceId);
       meta = await readMeta();
-    } else if (Date.now() - Date.parse(meta.built_at) > SNAPSHOT_TTL_MS) {
+    } else if (Date.now() - Date.parse(meta.built_at) > (parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION ? 60_000 : SNAPSHOT_TTL_MS)) {
+      // An old summary is still shown while the new one is built after the response. Only the request that
+      // claims the refresh rebuilds it, so many open pages do not rebuild at once.
+      const claimed = await execute('UPDATE finance_snapshot_meta SET built_at = ? WHERE workspace_id = ? AND built_at = ?', [new Date().toISOString(), workspaceId, meta.built_at]);
       const refreshJob = () => rebuildSnapshot(workspaceId).catch((error) => console.error('Finance snapshot refresh failed:', error.message));
-      if (scheduleRefresh) scheduleRefresh(refreshJob); else refreshJob();
+      if (Number(claimed.rowsAffected)) { if (scheduleRefresh) scheduleRefresh(refreshJob); else refreshJob(); }
     }
     const byDispatch = filters.dateBasis !== 'delivery';
     const conditions = ['workspace_id = ?'], args = [workspaceId];
@@ -292,7 +297,7 @@ export function createFinanceRepository(db) {
   // Draft preview from the precomputed snapshot: reading every order again takes too long for an interactive request.
   async function snapshotCandidates(workspaceId, settlement) {
     const meta = (await execute('SELECT options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
-    if (!meta || parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION) await rebuildSnapshot(workspaceId);
+    if (!meta) await rebuildSnapshot(workspaceId);
     const since = new Date(`${settlement.date_from}T12:00:00Z`); since.setUTCDate(since.getUTCDate() - 30);
     const [rates, result] = await Promise.all([listRates(workspaceId), execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day >= ? AND dispatch_day <= ?`,
       [workspaceId, since.toISOString().slice(0, 10), settlement.date_to])]);
