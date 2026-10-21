@@ -22,7 +22,7 @@ export async function GET(request) {
     if (p.get('view') === 'rates') return NextResponse.json({ rates: await repository.listRates(workspaceId) });
     if (p.get('view') === 'settlements') {
       if (p.get('id')) {
-        const detail = await repository.settlementDetail(workspaceId, Number(p.get('id')));
+        const detail = await repository.settlementDetail(workspaceId, Number(p.get('id')), undefined, { fast: true });
         if (p.get('format') === 'csv') return csvResponse([...detail.items,
           ...detail.adjustments.map((a) => ({ shipmentId: 'AJUSTE', amountCents: Number(a.amount_cents), missing: a.reason })),
         ], columns, `liquidacion-${p.get('id')}`);

@@ -289,15 +289,24 @@ export function createFinanceRepository(db) {
       COALESCE((SELECT SUM(a.amount_cents) FROM carrier_settlement_adjustments a WHERE a.settlement_id = l.id),0) AS adjustments_cents
       FROM carrier_settlements l LEFT JOIN carriers c ON c.id = l.carrier_id WHERE l.workspace_id = ? ORDER BY l.id DESC`, [workspaceId])).rows;
   }
-  async function settlementDetail(workspaceId, id, connection = db) {
+  // Draft preview from the precomputed snapshot: reading every order again takes too long for an interactive request.
+  async function snapshotCandidates(workspaceId, settlement) {
+    const meta = (await execute('SELECT options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
+    if (!meta || parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION) await rebuildSnapshot(workspaceId);
+    const since = new Date(`${settlement.date_from}T12:00:00Z`); since.setUTCDate(since.getUTCDate() - 30);
+    const [rates, result] = await Promise.all([listRates(workspaceId), execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day >= ? AND dispatch_day <= ?`,
+      [workspaceId, since.toISOString().slice(0, 10), settlement.date_to])]);
+    return settlementCandidates(result.rows.map((row) => applyRates(JSON.parse(row.data_json), rates)), settlement.carrier_id, settlement.date_from, settlement.date_to);
+  }
+  async function settlementDetail(workspaceId, id, connection = db, { fast = false } = {}) {
     const query = (sql, args) => connection.execute({ sql, args });
-    const result = await query('SELECT * FROM carrier_settlements WHERE workspace_id = ? AND id = ?', [workspaceId, id]);
+    const result = await query('SELECT l.*, c.display_name AS carrier_name FROM carrier_settlements l LEFT JOIN carriers c ON c.id = l.carrier_id WHERE l.workspace_id = ? AND l.id = ?', [workspaceId, id]);
     const settlement = result.rows[0];
     if (!settlement) throw new Error('Liquidación no encontrada');
     const adjustments = (await query('SELECT * FROM carrier_settlement_adjustments WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows;
     let items;
     if (settlement.status === 'draft') {
-      items = settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
+      items = fast ? await snapshotCandidates(workspaceId, settlement) : settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
     } else {
       items = (await query('SELECT * FROM carrier_settlement_items WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows
         .map((r) => ({ ...parseJson(r.snapshot_json), amountCents: Number(r.amount_cents) }));
