@@ -108,3 +108,15 @@ Validación: 90 pruebas aprobadas, compilación local y remota correctas y lint
 sin errores. La nueva regresión utiliza 441 envíos físicos, etiquetas y JSON
 pesados, duplicados entre páginas y un límite de respuesta simulado; comprueba
 que todos los envíos y sus ventas se conservan.
+
+## Publicación del mapa · 21/10/2026
+
+Revisión `bc131bf`, despliegue `dpl_BXp4wS11wLQAPwWR9r8dPv8fGMhN`,
+`https://logitrack-awk5n3x1r-lucio-tamborinis-projects.vercel.app`, activo en
+`www.geomodi.ai`. Versión anterior: `dpl_GyR3caF89o1CvpqnkBcpWi3S9vqw`.
+
+95 pruebas aprobadas, lint sin errores y compilación local/remota correcta.
+Verificación de producción con sesión disponible: mapa inicial, período Todo,
+selección CABA, resumen de un envío local sin datos financieros y paso a Detalle
+con `zones=CABA`; el enlace CSV respeta la selección. El acceso al resumen sin
+sesión devuelve 401. No se modificaron tarifas, pagos ni asignaciones de zonas.
