@@ -8,7 +8,6 @@ const ColectaSection = dynamic(() => import("@/components/ColectaSection"), { lo
 const Dashboard = dynamic(() => import("@/components/Dashboard"), { loading });
 const FlexSection = dynamic(() => import("@/components/FlexSection"), { loading });
 const IntegrationsSection = dynamic(() => import("@/components/IntegrationsSection"), { loading });
-const MapSection = dynamic(() => import("@/components/MapSection"), { loading });
 const MercadoLibreSection = dynamic(() => import("@/components/MercadoLibreSection"), { loading });
 const PickingList = dynamic(() => import("@/components/PickingList"), { loading });
 const ShopifySection = dynamic(() => import("@/components/ShopifySection"), { loading });
@@ -35,7 +34,6 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "logisticsFinance": return <LogisticsFinance key="finance" currentUser={currentUser} />;
     case "deliveryControl": return <LogisticsFinance key="delivery" currentUser={currentUser} delivery />;
     case "printJobs": return <PackageHistorySection />;
-    case "map": return <MapSection />;
     case "integrations": return currentUser ? <IntegrationsSection onNavigate={onNavigate} /> : <div>No autorizado</div>;
     case "adminOverview": return currentUser?.isGlobalAdmin ? <AdminOverviewSection /> : <div>No autorizado</div>;
     case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;

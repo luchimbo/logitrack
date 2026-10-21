@@ -34,7 +34,7 @@ const modules = [
   ["picking", "Prepará picking", "Productos agrupados por cantidad, SKU y método de envío para preparar más rápido."],
   ["flex", "Controlá Flex", "Resumen operativo, envíos por zona y transportista asignado."],
   ["colecta", "Ordená Colecta", "Listado de envíos tradicionales con acceso rápido a etiquetas."],
-  ["map", "Visualizá entregas", "Direcciones geocodificadas para revisar distribución antes de despachar."],
+  ["map", "Medí costos por zona", "Ventas, cargos de Mercado Libre y costo de envío por zona, partido y provincia, en un mapa."],
   ["dashboard", "Medí la operación", "Volumen por día, semana, mes, año o rango personalizado."],
 ];
 

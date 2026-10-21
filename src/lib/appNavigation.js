@@ -10,7 +10,6 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "logisticsFinance", icon: "dashboard", label: "Ventas y costos" },
     { id: "deliveryControl", icon: "colecta", label: "Control de entregas" },
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
-    { id: "map", icon: "map", label: "Mapa" },
   ];
 
   if (hasOperationsPreview) {

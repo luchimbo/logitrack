@@ -40,9 +40,10 @@ function frame(view, rect, [mapW, mapH]) {
 }
 const groupKey = (g) => g.name === 'Sin dato' ? '__missing__' : g.name;
 
+const KINDS = [['flex', 'Flex'], ['colecta', 'Colecta'], ['all', 'Todo']];
 const KIND_TITLES = { flex: ['Mapa Flex', 'Solo envíos Flex, en el AMBA.'], colecta: ['Mapa Colecta', 'Solo envíos Colecta: Mercado Libre y ventas a coordinar por Zipnova.'], all: ['Mapa total', 'Flex y Colecta juntos.'] };
 
-export default function FinanceMapDashboard({ kind = 'all', report, refreshing = false, filters, selected, onSelect, partidos = [], onPartidos = () => {}, mode = 'zone', onMode = () => {},
+export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, report, refreshing = false, filters, selected, onSelect, partidos = [], onPartidos = () => {}, mode = 'zone', onMode = () => {},
   provinces = [], onProvinces = () => {}, level = 'amba', onLevel = () => {}, onPeriod, onDetail }) {
   const loading = refreshing;
   const [hovered, setHovered] = useState(null);
@@ -157,6 +158,7 @@ export default function FinanceMapDashboard({ kind = 'all', report, refreshing =
         const active = (filters.from || '') === range.from && (filters.to || '') === range.to;
         return <button key={key} type="button" aria-pressed={active} onClick={() => onPeriod(range)}>{label}</button>;
       })}</div><div className={styles.dates}><label>Desde<input type="date" value={filters.from || ''} max={filters.to || undefined} onChange={(e) => onPeriod({ from: e.target.value, to: filters.to || '' })} /></label><span aria-hidden="true">→</span><label>Hasta<input type="date" value={filters.to || ''} min={filters.from || undefined} onChange={(e) => onPeriod({ from: filters.from || '', to: e.target.value })} /></label></div>
+        <div className={styles.methodSwitch} role="group" aria-label="Mapa de envíos">{KINDS.map(([value, label]) => <button key={value} type="button" aria-pressed={kind === value} style={kind === value ? { background: value === 'all' ? `linear-gradient(90deg, ${METHOD_COLORS.flex}, ${METHOD_COLORS.colecta})` : METHOD_COLORS[value] } : undefined} onClick={() => onKind(value)}>{label}</button>)}</div>
 </div>
     </section>
     {report && report.options?.noDispatchCount ? <p className={styles.coverage} role="note">{report.options.noDispatchCount} envíos todavía no tienen fecha de despacho confirmada, por eso no entran en ningún período.{report.syncTargets?.length ? ' Tocá “Actualizar datos” arriba para completarlos.' : ''}{report.dispatchMonths?.length ? ` Envíos con fecha de despacho por mes: ${report.dispatchMonths.map((m) => `${m.month.split('-').reverse().join('/')}: ${m.count}`).join(' · ')}.` : ''}</p> : null}

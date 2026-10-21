@@ -15,7 +15,6 @@ const when = (value) => !value ? 'No disponible' : /^\d{4}-\d{2}-\d{2}$/.test(va
 const statusNames = { draft: 'Borrador', closed: 'Cerrada', paid: 'Pagada' };
 const keyOf = (r) => `${r.connectionId}:${r.shipmentId}`;
 const endpoint = '/logistics-finance';
-const MAP_TABS = [['map-flex', 'Mapa Flex', 'flex'], ['map-colecta', 'Mapa Colecta', 'colecta'], ['map-all', 'Mapa total', 'all']];
 const blankMap = (level) => ({ selection: [], partidos: [], mode: 'zone', provinces: [], level });
 // The last map summary of each query is kept in this browser, so the page opens with numbers while it refreshes.
 const cacheKey = (workspaceId, query) => `geomodi-finance-map:${workspaceId ?? ''}:${query}`;
@@ -24,7 +23,8 @@ function writeCache(key, data) { try { window.localStorage.setItem(key, JSON.str
 const FinanceMapDashboard = dynamic(() => import('./FinanceMapDashboard'), { loading: () => <div role="status">Cargando mapa…</div> });
 
 export default function LogisticsFinance({ currentUser, delivery = false }) {
-  const [tab, setTab] = useState('map-flex');
+  const [tab, setTab] = useState('map');
+  const [mapKindChoice, setMapKind] = useState('all');
   const [maps, setMaps] = useState({ flex: blankMap('amba'), colecta: blankMap('argentina'), all: blankMap('argentina') });
   const [filters, setFilters] = useState(() => delivery ? {} : { from: `${getArgentinaDateString().slice(0, 7)}-01`, to: getArgentinaDateString() });
   const [loadedReport, setReport] = useState(null);
@@ -42,7 +42,7 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
   const [refreshing, setRefreshing] = useState(false);
   const sequence = useRef(0);
   const canEdit = currentUser?.isGlobalAdmin || ['admin', 'owner'].includes(currentUser?.role);
-  const mapKind = MAP_TABS.find(([id]) => id === tab)?.[2] || null;
+  const mapKind = tab === 'map' ? mapKindChoice : null;
   const mapView = !delivery && Boolean(mapKind);
   const ms = maps[mapKind || 'flex'];
   const setMs = (patch) => setMaps((prev) => ({ ...prev, [mapKind]: { ...prev[mapKind], ...patch } }));
@@ -178,8 +178,8 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
     {progress ? <div className={styles.progress} role="status" aria-live="polite"><div className={styles.progressTop}><strong>{progress.label}</strong><span>{progress.total ? `${Math.min(progress.done, progress.total)} de ${progress.total}` : `${progress.done}…`}</span></div><div className={styles.progressTrack}><span style={{ width: progress.total ? `${Math.min(100, Math.round(progress.done / progress.total * 100))}%` : '8%' }} /></div></div> : null}
     {error ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{error}</div> : null}
     {message ? <div role="status" className={styles.notice}>{message}</div> : null}
-    {!delivery ? <nav className={styles.tabs} aria-label="Ventas y costos">{MAP_TABS.map(([id, label, kind]) => <button key={id} aria-pressed={tab === id} className={styles[`tab_${kind}`]} onClick={() => setTab(id)}>{label}</button>)}<button aria-pressed={tab === 'stats'} onClick={() => tab !== 'stats' && openMapDetail()}>Detalle</button><button aria-pressed={tab === 'rates'} onClick={() => setTab('rates')}>Tarifas por zona</button><button aria-pressed={tab === 'settlements'} onClick={() => setTab('settlements')}>Liquidaciones</button></nav> : null}
-    {mapView ? <FinanceMapDashboard key={mapKind} kind={mapKind} report={report} refreshing={refreshing} filters={{ ...filters, method: mapMethod }} selected={ms.selection} onSelect={(selection) => setMs({ selection })} partidos={ms.partidos} onPartidos={(partidos) => setMs({ partidos })} mode={ms.mode} onMode={(mode) => setMs({ mode })} provinces={ms.provinces} onProvinces={(provinces) => setMs({ provinces })} level={ms.level} onLevel={(level) => setMs({ level })} onPeriod={(range) => { setFilters((prev) => ({ ...prev, ...range })); setPage(1); }} onDetail={openMapDetail} /> : null}
+    {!delivery ? <nav className={styles.tabs} aria-label="Ventas y costos"><button aria-pressed={tab === 'map'} onClick={() => setTab('map')}>Mapa de zonas</button><button aria-pressed={tab === 'stats'} onClick={() => tab !== 'stats' && openMapDetail()}>Detalle</button><button aria-pressed={tab === 'rates'} onClick={() => setTab('rates')}>Tarifas por zona</button><button aria-pressed={tab === 'settlements'} onClick={() => setTab('settlements')}>Liquidaciones</button></nav> : null}
+    {mapView ? <FinanceMapDashboard key={mapKind} kind={mapKind} onKind={setMapKind} report={report} refreshing={refreshing} filters={{ ...filters, method: mapMethod }} selected={ms.selection} onSelect={(selection) => setMs({ selection })} partidos={ms.partidos} onPartidos={(partidos) => setMs({ partidos })} mode={ms.mode} onMode={(mode) => setMs({ mode })} provinces={ms.provinces} onProvinces={(provinces) => setMs({ provinces })} level={ms.level} onLevel={(level) => setMs({ level })} onPeriod={(range) => { setFilters((prev) => ({ ...prev, ...range })); setPage(1); }} onDetail={openMapDetail} /> : null}
     {delivery || tab === 'stats' ? <>
       {!delivery && filters.provinces ? <div className={styles.notice}>Provincias seleccionadas: {filters.provinces.split(',').map(provinceLabel).join(' + ')}. <button className={styles.link} onClick={() => change('provinces', '')}>Ver todas</button></div> : null}
       {!delivery && filters.partidos ? <div className={styles.notice}>Partidos seleccionados: {filters.partidos.split(',').map(partidoLabel).join(' + ')}. <button className={styles.link} onClick={() => change('partidos', '')}>Ver todos</button></div> : null}
