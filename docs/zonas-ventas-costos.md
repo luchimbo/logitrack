@@ -36,17 +36,28 @@ pedidos no computables y envíos sin importe de venta. Un paquete con ventas
 parciales queda fuera del porcentaje gasto/ventas. Los envíos sin costo conocido
 también quedan fuera de ese porcentaje.
 
-## Preparación de publicación
+## Publicación del 21/10/2026
 
-Los cambios están en la copia local. Antes de publicar, integrar el módulo de
-finanzas con la revisión actualmente desplegada: esta carpeta también contiene
-cambios de Tiendanube, OAuth y cross-selling.
+Publicado en `https://www.geomodi.ai`, proyecto Vercel `logitrack`.
 
-El enlace `.vercel/project.json` de esta carpeta apunta a `logitrack-tan`; según
-el registro de despliegue en `crossselling-online.md`, `geomodi.ai` utiliza el
-proyecto `logitrack`. Verificar el destino real al publicar.
+- Revisión de código: `d5b2d09a042ef555a9963e6a6753db48fc6f3300`.
+- Rama: `codex/zonas-ventas-costos-20261021`.
+- Despliegue: `dpl_8pUEgjzYj3rpfC64juWuVVLurb4S`.
+- URL de despliegue: `https://logitrack-hgo6iirnn-lucio-tamborinis-projects.vercel.app`.
+- Despliegue anterior para reversión: `dpl_G9Jhg72A9HvUBaWDuEM2dSe1QZ2V`.
+- Copia de publicación: `C:/Users/PC Midi/AppData/Local/Temp/logitrack-tn-20261016`.
 
-Validación automatizada: pruebas de ventas pagadas, moneda, importes faltantes,
-cancelaciones, varios pedidos por paquete, duplicación entre conexiones,
-aislamiento entre espacios, filtros de fechas y conciliación de totales por zona.
-La verificación con datos y sesión de producción queda pendiente de publicación.
+Se integró sobre la misma revisión que estaba en producción (`0997f41`),
+conservando las funciones de Tiendanube y cross-selling ya publicadas.
+El enlace Vercel de la carpeta principal sigue apuntando a `logitrack-tan`:
+para la próxima publicación usar el proyecto `logitrack` de la copia indicada.
+
+Validación: 89 pruebas aprobadas en la copia integrada, compilación local y remota
+correctas, lint de los archivos del módulo sin errores. Vercel confirmó estado
+READY y alias `www.geomodi.ai` y `geomodi.ai`. La portada responde 200 y las APIs
+financieras responden 401 sin sesión.
+
+Con la sesión de navegador disponible se verificó la carga de estadísticas,
+filtros, tarifas y liquidaciones sin errores. Ese espacio no tiene ventas de
+Mercado Libre vinculadas; no se validaron importes reales de otro espacio ni se
+crearon tarifas, liquidaciones o pagos de prueba en producción.
