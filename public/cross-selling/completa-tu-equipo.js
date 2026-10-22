@@ -136,11 +136,11 @@
     offers.forEach(function (o) {
       var key = String(o.triggerLineId || mainName(o));
       var group = groups.filter(function (g) { return g.key === key; })[0];
-      if (!group) { group = { key: key, name: mainName(o), offers: [] }; groups.push(group); }
+      if (!group) { group = { key: key, lineId: o.triggerLineId, name: mainName(o), offers: [] }; groups.push(group); }
       group.offers.push(o);
     });
     return groups.map(function (g, index) {
-      return '<div class="cte-group"><div class="cte-main"><p class="cte-main-label">Ya tenés en tu carrito</p>' +
+      return '<div class="cte-group" data-cte-trigger-line="' + esc(g.lineId) + '"><div class="cte-main"><p class="cte-main-label">Ya tenés en tu carrito</p>' +
         '<p class="cte-main-name">' + esc(g.name) + '</p></div>' +
         offerHeading(titleId ? 'h2' : 'h3', index === 0 ? titleId : '') +
         '<div class="' + (native ? 'cte-native-list' : 'cte-list') + '">' +
@@ -302,6 +302,17 @@
     if (!el.hasAttribute('data-cte-orig')) el.setAttribute('data-cte-orig', el.innerHTML);
     el.innerHTML = html;
   }
+  // El tema retira líneas por AJAX sin disparar productAddedToCart. No dejar el resumen de un
+  // principal que ya no está: comprobar las líneas visibles, aunque LS.cart aún no se haya renovado.
+  function pruneCartOffers() {
+    var box = document.querySelector('.cte-native');
+    if (!box) return;
+    Array.prototype.forEach.call(box.querySelectorAll('.cte-group[data-cte-trigger-line]'), function (group) {
+      var lineId = group.getAttribute('data-cte-trigger-line');
+      if (lineId && !cartRow(lineId)) group.parentNode.removeChild(group);
+    });
+    if (!box.querySelector('.cte-group, .cte-applied')) box.parentNode.removeChild(box);
+  }
   function decorateLines() {
     if (decorating || !/^\/comprar\/?$/.test(location.pathname)) return;
     decorating = true;
@@ -313,6 +324,7 @@
       var notice = document.querySelector('.cte-applied');
       if (notice && !confirmed) notice.parentNode.removeChild(notice);
       else if (notice) { var strong = notice.querySelector('b'); if (strong) strong.textContent = '✓ Descuento por completar tu compra: ' + applied; }
+      pruneCartOffers();
       if (confirmed) acceptedInCart().forEach(function (a) {
         var item = items.filter(function (i) { return String(i.variant_id || i.id) === a.variantId; })[0];
         var row = item && cartRow(item.item_id), trigger = cartRow(a.triggerLineId);
