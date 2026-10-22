@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { tiendanubeFinanceRecords, tiendanubeShippingAmounts } from '../src/lib/tiendanubeFinance.js';
 import { FINANCE_SCHEMA } from '../src/lib/financeSchema.js';
 import { createFinanceRepository } from '../src/lib/financeRepository.js';
-import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv } from '../src/lib/logisticsFinance.js';
+import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
 
 test('sales use paid ARS gross totals, keeping zero, unknown and cancellation distinct', () => {
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'0'}).salesCents,0);
@@ -546,4 +546,16 @@ test('Tiendanube sync stores checkout shipping and updates cancellations without
     assert.equal(stored.shipping_cost_customer,'1200');
     assert.equal((await db.execute('SELECT COUNT(*) n FROM tiendanube_orders')).rows[0].n,1);
   } finally {delete globalThis.__tiendanubeFinanceDb;cleanup();}
+});
+
+test('detailed settlement lists each package by delivery day with account names and totals', () => {
+  const items = [
+    { shipmentId: '47900000002', orderId: '2002', connectionId: 91, deliveryDay: '2026-09-02', dispatchDay: '2026-09-02', zone: 'GBA 3', partido: 'la_plata', recipient: 'Ana', amountCents: 819000, stateLabel: 'Entregado' },
+    { shipmentId: '47900000001', orderId: '2001', connectionId: 3, deliveryDay: '2026-09-01', dispatchDay: '2026-09-01', zone: 'CABA', partido: 'caba', recipient: 'Beto', amountCents: 316000, stateLabel: 'Entregado' },
+  ];
+  const lines = settlementDetailCsv(items, [{ reason: 'Doble cobro', amount_cents: -316000 }], { 3: 'PCMIDICENTER', 91: 'ARTURIA ARGENTINA' }).split('\r\n');
+  assert.match(lines[1], /^"01\/09\/2026";"01\/09\/2026";"47900000001";"2001";"PCMIDICENTER";"Beto";"caba";"CABA";"3160,00";"Entregado"$/);
+  assert.match(lines[2], /"ARTURIA ARGENTINA";"Ana";"la plata";"GBA 3";"8190,00"/);
+  assert.match(lines[3], /^"Total";"";"2 envíos";.*"11350,00"/);
+  assert.match(lines[5], /^"Total a pagar";.*"8190,00"/);
 });

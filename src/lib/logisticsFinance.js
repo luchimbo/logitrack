@@ -339,6 +339,22 @@ export function settlementMatrixCsv(matrix, adjustments = []) {
   const columns = [['Día', 0], ...matrix.zones.map((z, i) => [z, i + 1]), ['Paquetes', matrix.zones.length + 1], ['Total $', matrix.zones.length + 2]];
   return csv(rows, columns);
 }
+// Settlement shipment by shipment, as carriers send it: one row per package, sorted by delivery day.
+export function settlementDetailCsv(items, adjustments = [], accounts = {}) {
+  const pesos = (cents) => (cents / 100).toFixed(2).replace('.', ',');
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('/') : value || '';
+  const sorted = [...items].sort((a, b) => String(a.deliveryDay || '').localeCompare(String(b.deliveryDay || '')) || String(a.zone || '').localeCompare(String(b.zone || '')));
+  const total = items.reduce((n, i) => n + (Number(i.amountCents) || 0), 0);
+  const adjusted = total + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0);
+  const rows = [
+    ...sorted.map((i) => [day(i.deliveryDay), day(i.dispatchDay), i.trackingNumber || i.shipmentId, i.orderId || '', accounts[i.connectionId] || (i.sellerId ? `Vendedor ${i.sellerId}` : ''),
+      i.recipient || '', String(i.partido || '').replaceAll('_', ' '), i.zone || 'Sin zona', pesos(Number(i.amountCents) || 0), i.stateLabel || '']),
+    ['Total', '', `${items.length} envíos`, '', '', '', '', '', pesos(total), ''],
+    ...adjustments.map((a) => [`Ajuste: ${a.reason}`, '', '', '', '', '', '', '', pesos(Number(a.amount_cents)), '']),
+    ...(adjustments.length ? [['Total a pagar', '', '', '', '', '', '', '', pesos(adjusted), '']] : []),
+  ];
+  return csv(rows, ['Fecha entrega', 'Despacho', 'Número de envío', 'Venta ML', 'Cuenta', 'Destinatario', 'Partido', 'Zona', 'Precio', 'Estado'].map((name, i) => [name, i]));
+}
 export function csv(rows, columns) {
   const cell = (value) => {
     let text = String(value ?? '');

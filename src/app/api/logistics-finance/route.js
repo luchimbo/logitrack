@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { createFinanceRepository } from '@/lib/financeRepository';
 import { csv, validDate } from '@/lib/logisticsFinance';
 import { startSettlementFetch } from '@/lib/settlementFetch';
+import { listIntegrationConnections } from '@/lib/integrationService';
 
 export const dynamic = 'force-dynamic';
 const repository = createFinanceRepository(db);
@@ -27,7 +28,9 @@ export async function GET(request) {
         if (p.get('format') === 'csv') return csvResponse([...detail.items,
           ...detail.adjustments.map((a) => ({ shipmentId: 'AJUSTE', amountCents: Number(a.amount_cents), missing: a.reason })),
         ], columns, `liquidacion-${p.get('id')}`);
-        return NextResponse.json(detail);
+        // Account names for the detailed download (PCMIDICENTER, ARTURIA ARGENTINA…).
+        const accounts = Object.fromEntries((await listIntegrationConnections({ workspaceId, provider: 'mercadolibre' }).catch(() => [])).map((c) => [c.id, c.displayName]));
+        return NextResponse.json({ ...detail, accounts });
       }
       return NextResponse.json({ settlements: await repository.listSettlements(workspaceId) });
     }
