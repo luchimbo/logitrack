@@ -187,3 +187,12 @@ la ejecución secuencial ejecuta la misma suite completa y termina correctamente
 Los controles HMAC, dominios de tiendas y recursos de cross-selling pasaron antes
 de promover. En el espacio de `camilopcmidi` se observaron dos cuentas ML y ninguna
 conexión activa de Tiendanube; no se cambiaron conexiones ni se repitió OAuth.
+
+Verificación posterior con Chrome Camilo: el período 01/10 al 22/10 cargó 859
+registros, ventas $180.767.500,56, cargos ML $36.880.940,78, gasto conocido
+$5.615.680,00 y saldo provisional $138.270.879,78. Respecto del resumen
+inmediatamente anterior (913 registros), desaparecieron exactamente los 54
+registros Zipnova y sus $2.373.788 de gasto, conservando ventas y cargos ML.
+El CSV contiene 859 filas, cero registros Zipnova y la columna de envío cobrado
+TN. Los totales ya difieren de la captura inicial de 887 porque durante la
+investigación se incorporaron datos de Mercado Libre adicionales.
