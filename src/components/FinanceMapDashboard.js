@@ -184,6 +184,8 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
               return <g key={shape.key} role="button" tabIndex={0} aria-label={`${provinceLabel(key)}: ${data?.count || 0} envíos`} aria-pressed={active} className={styles.zone} style={{ '--zone-color': fill, opacity: muted ? .3 : 1 }} onClick={pick} onDoubleClick={() => { if (AMBA_PROVINCES.includes(key)) onLevel('amba'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }} onMouseEnter={() => setHovered(key)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(key)} onBlur={() => setHovered(null)}>
                 <title>{provinceLabel(key)} · Flex {data?.flexCount || 0} · Colecta {data?.colectaCount || 0} · Ventas {money(data?.salesCents)}</title>
                 <path d={shape.path} fillRule="evenodd" className={active ? styles.selectedPath : styles.provincePath} style={{ fillOpacity: active ? undefined : intensity }} />
+                {/* Malvinas belong to Tierra del Fuego, Antártida e Islas del Atlántico Sur. */}
+                {key === 'tierra_del_fuego' ? provinceShapes.islands.map((island) => <path key={island.name} d={island.path} fillRule="evenodd" className={active ? styles.selectedPath : styles.provincePath} style={{ fillOpacity: active ? undefined : intensity }} />) : null}
               </g>;
             }) : byPartido ? shapes.shapes.map((shape) => {
               const keys = shapePartidoKeys(shape.name);
@@ -212,6 +214,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
                 {total ? <text x={x} y={y + (filters.method ? 10 : 14)} className={styles.provinceCount}>{filters.method === 'flex' ? flexN : filters.method === 'colecta' ? colectaN : `${flexN} · ${colectaN}`}</text> : null}
               </g>;
             }) : null}
+            {country ? provinceShapes.islands.map(({ name, label: [x, y] }) => <text key={name} x={x} y={y} className={styles.islandLabel}>{name}</text>) : null}
             {!country && !byPartido && shapes.labels.map(({ zone, point }) => <text key={zone} x={point[0]} y={point[1]} className={styles.zoneLabel} style={{ fill: ZONE_COLORS[zone] }}>{zone}</text>)}
             {!country ? <text x={shapes.river[0]} y={shapes.river[1]} className={styles.river} transform={`rotate(-32 ${shapes.river[0]} ${shapes.river[1]})`}>RÍO DE LA PLATA</text> : null}
           </svg>
