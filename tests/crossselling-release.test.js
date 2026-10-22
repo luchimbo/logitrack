@@ -32,7 +32,7 @@ test('release: Mostrador, storefront y callbacks llegan a su propia autorizació
   for (const path of [
     '/api/cross-selling/config', '/api/cross-selling/module', '/api/cross-selling/report',
     '/api/cross-selling/storefront/offers', '/api/cross-selling/storefront/accept',
-    '/api/cross-selling/storefront/seen', '/api/reviews/config', '/api/reviews/storefront',
+    '/api/cross-selling/storefront/seen', '/api/reviews/config', '/api/reviews/storefront', '/api/reviews/meli',
     `/api/cross-selling/offer-callback/${'a'.repeat(32)}`,
     `/api/cross-selling/demo-callback/${'a'.repeat(64)}`,
   ]) {
