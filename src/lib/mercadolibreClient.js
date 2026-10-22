@@ -14,7 +14,7 @@ export function createMercadoLibreClient({ accessToken } = {}) {
 
     if (!res.ok) {
       const data = isJson ? await res.json().catch(() => ({})) : { message: await res.text().catch(() => '') };
-      throw new Error(data.error_description || data.message || data.error || `Mercado Libre error ${res.status}`);
+      throw Object.assign(new Error(data.error_description || data.message || data.error || `Mercado Libre error ${res.status}`), { status: res.status });
     }
 
     if (options.responseType === 'arrayBuffer') {

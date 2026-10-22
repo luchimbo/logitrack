@@ -55,3 +55,25 @@ test('indica en qué paso falla Mercado Libre y conserva el primer error de opin
   const out = await collectMeliReviews({ client: noReviews, sellerId: '1' });
   assert.deepEqual([out.errors, out.firstError], [1, 'policy UNAUTHORIZED']);
 });
+
+test('reintenta cuando Mercado Libre limita el ritmo y termina trayendo las opiniones', async () => {
+  const client = fakeClient({ items: [item('MLA1')], reviews: { MLA1: [review(1, 5, 'Excelente producto')] } });
+  const original = client.getItemReviews; let attempts = 0;
+  client.getItemReviews = async (id, o) => { if (attempts++ < 2) throw Object.assign(new Error('too many requests'), { status: 429 }); return original(id, o); };
+  const out = await collectMeliReviews({ client, sellerId: '1', waits: [0, 0, 0] });
+  assert.deepEqual([out.reviews.length, out.errors, attempts], [1, 0, 3]);
+  // Sin reintentos disponibles el error queda contado en lugar de perderse en silencio.
+  attempts = 0;
+  const limited = await collectMeliReviews({ client, sellerId: '1', waits: [] });
+  assert.deepEqual([limited.reviews.length, limited.errors, limited.firstError], [0, 1, 'too many requests']);
+});
+
+test('lee las publicaciones por tandas e informa dónde seguir', async () => {
+  const items = Array.from({ length: 5 }, (_, i) => item(`MLA${i + 1}`));
+  const reviews = Object.fromEntries(items.map((i, n) => [i.body.id, [review(n + 1, 5, `Opinión número ${n + 1}`)]]));
+  const client = fakeClient({ items, reviews });
+  const first = await collectMeliReviews({ client, sellerId: '1', offset: 0, limit: 2 });
+  assert.deepEqual([first.total, first.items, first.nextOffset, first.reviews.map((r) => r.externalId)], [5, 2, 2, ['ml:1', 'ml:2']]);
+  const last = await collectMeliReviews({ client, sellerId: '1', offset: 4, limit: 2 });
+  assert.deepEqual([last.items, last.nextOffset, last.reviews.map((r) => r.externalId)], [1, null, ['ml:5']]);
+});
