@@ -98,7 +98,7 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     throw error;
   }
 
-  async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', q = '' } = {}) {
+  async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', updatedAtMin = '', updatedAtMax = '', fields = '', q = '' } = {}) {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('per_page', String(perPage));
@@ -107,6 +107,9 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     if (shippingStatus) params.set('shipping_status', shippingStatus);
     if (createdAtMin) params.set('created_at_min', createdAtMin);
     if (createdAtMax) params.set('created_at_max', createdAtMax);
+    if (updatedAtMin) params.set('updated_at_min', updatedAtMin);
+    if (updatedAtMax) params.set('updated_at_max', updatedAtMax);
+    if (fields) params.set('fields', fields);
     if (q) params.set('q', q);
 
     const payload = await tiendanubeFetch(`/orders?${params.toString()}`);

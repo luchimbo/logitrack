@@ -2,6 +2,7 @@ import { authorizePublication } from '@/lib/crossselling/publication-auth';
 import { onlineReport } from '@/lib/crossselling/storefront-runtime';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 // Informe online de cross-selling para Mostrador, firmado igual que la publicación.
 export async function GET(request) {
   const headers = { 'Cache-Control': 'no-store' };

@@ -530,6 +530,7 @@ test('Tiendanube sync stores checkout shipping and updates cancellations without
     let source=readFileSync(new URL('../src/lib/tiendanubeStore.js',import.meta.url),'utf8');
     source=source.replace("import { db } from '@/lib/db';",'const db = globalThis.__tiendanubeFinanceDb;')
       .replace("import { ensureDb } from '@/lib/ensureDb';",'const ensureDb = async () => {};')
+      .replace("import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';",'const recordOnlineOrder = async () => {};')
       .replace("'./tiendanubeFinance.js'",JSON.stringify(new URL('../src/lib/tiendanubeFinance.js',import.meta.url).href));
     const {upsertTiendanubeOrder}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const order={id:100,number:100,payment_status:'paid',status:'open',currency:'ARS',total:'11000',

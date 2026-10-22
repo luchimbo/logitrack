@@ -9,10 +9,13 @@ import { createOfferStore, offerStoreConfig } from './offer-store.js';
 import { isStorefrontStore } from './stores.js';
 import { attributeOrder, dayAR, daysBetween, orderSummary, sumDailyCounters } from './online-sales.js';
 import { round2 } from './engine/pricing.js';
+import { createOnlineOrderRepository } from './order-repository.js';
+import { createOrderReconciler } from './order-reconciliation.js';
 
 const NAME = 'LogiTrack · Completá tu equipo';
 const failure = (message, status = 409) => Object.assign(new Error(message), { status });
 const repository = createCrossSellingRepository(db);
+const orderRepository = createOnlineOrderRepository(db);
 const signer = (storeId) => createOfferSigner(process.env.ZIPNOVA_ENCRYPTION_KEY, storeId);
 const allowed = (storeId) => {
   if (!isStorefrontStore(storeId)) throw failure('Tienda no habilitada para el módulo', 404);
@@ -30,13 +33,7 @@ async function init() {
       cart_id TEXT NOT NULL, rule_id TEXT NOT NULL, accessory_variant TEXT NOT NULL, trigger_variant TEXT NOT NULL,
       pct REAL NOT NULL, accepted_at TEXT NOT NULL)`,
     'CREATE INDEX IF NOT EXISTS crossselling_acceptances_lookup ON crossselling_acceptances(store_id, accessory_variant, accepted_at)',
-    `CREATE TABLE IF NOT EXISTS crossselling_online_orders (store_id TEXT NOT NULL, order_id TEXT NOT NULL, number TEXT,
-      created_at TEXT NOT NULL, total REAL NOT NULL, paid INTEGER NOT NULL, cancelled INTEGER NOT NULL, updated_at TEXT NOT NULL,
-      PRIMARY KEY(store_id, order_id))`,
-    `CREATE TABLE IF NOT EXISTS crossselling_online_sales (store_id TEXT NOT NULL, order_id TEXT NOT NULL, variant_id TEXT NOT NULL,
-      rule_id TEXT NOT NULL, product_name TEXT, quantity INTEGER NOT NULL, revenue REAL NOT NULL, discount REAL NOT NULL,
-      PRIMARY KEY(store_id, order_id, variant_id))`,
-  ], 'write').catch((e) => { initialized = null; throw e; }));
+  ], 'write').then(() => orderRepository.init()).catch((e) => { initialized = null; throw e; }));
 }
 // Las vistas de la tienda leen el estado de memoria hasta 15 s; los cambios del interruptor
 // llegan a las demás instancias en ese plazo. Las acciones de administración leen siempre la base.
@@ -272,28 +269,26 @@ export async function recordOnlineOrder(storeId, order) {
   const summary = orderSummary(order);
   const state = await readState(storeId);
   const from = new Date(new Date(summary.createdAt).getTime() - 6 * 60 * 60_000).toISOString();
+  const until = new Date(new Date(summary.createdAt).getTime() + 10 * 60_000).toISOString();
   const { rows } = await db.execute({ sql: `SELECT rule_id, accessory_variant, trigger_variant, pct, accepted_at
-    FROM crossselling_acceptances WHERE store_id=? AND accepted_at>=? ORDER BY id DESC LIMIT 200`, args: [storeId, from] });
+    FROM crossselling_acceptances WHERE store_id=? AND accepted_at>=? AND accepted_at<=? ORDER BY id DESC`, args: [storeId, from, until] });
   const acceptances = rows.map((r) => ({ ruleId: r.rule_id, accessoryVariant: r.accessory_variant, triggerVariant: r.trigger_variant,
     pct: Number(r.pct), acceptedAt: r.accepted_at }));
   const sales = attributeOrder({ order, acceptances, promotionId: state?.promotionId });
-  await db.batch([
-    { sql: `INSERT INTO crossselling_online_orders(store_id,order_id,number,created_at,total,paid,cancelled,updated_at) VALUES(?,?,?,?,?,?,?,?)
-      ON CONFLICT(store_id,order_id) DO UPDATE SET number=excluded.number, total=excluded.total, paid=excluded.paid,
-      cancelled=excluded.cancelled, updated_at=excluded.updated_at`,
-    args: [storeId, summary.orderId, summary.number, summary.createdAt, summary.total, summary.paid ? 1 : 0, summary.cancelled ? 1 : 0, new Date().toISOString()] },
-    // Un pedido editado se vuelve a atribuir completo.
-    { sql: 'DELETE FROM crossselling_online_sales WHERE store_id=? AND order_id=?', args: [storeId, summary.orderId] },
-    ...sales.map((r) => ({ sql: `INSERT INTO crossselling_online_sales(store_id,order_id,variant_id,rule_id,product_name,quantity,revenue,discount)
-      VALUES(?,?,?,?,?,?,?,?)`, args: [storeId, summary.orderId, r.variantId, r.ruleId, r.productName, r.quantity, r.revenue, r.discount] })),
-  ], 'write');
+  const sourceUpdatedAt = new Date(order.updated_at || order.created_at).toISOString();
+  return orderRepository.save(storeId, summary, sales, sourceUpdatedAt);
 }
 
-// Informe por período (días de Argentina, inclusive). Sólo pedidos pagados y no cancelados.
+const reconcileOrders = createOrderReconciler({ repository: orderRepository,
+  clientFor: (storeId) => storeClient(storeId), record: recordOnlineOrder });
+
+// Informe por creación (Argentina). Sólo pagos recibidos y no cancelados.
+// Conciliar antes de leer evita presentar un reporte incompleto como actualizado.
 export async function onlineReport(storeId, { from, to }) {
   storeId = allowed(storeId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '') || from > to) throw failure('Período inválido', 400);
   await init();
+  const reconciliation = await reconcileOrders(storeId);
   const start = new Date(`${from}T03:00:00.000Z`).toISOString();
   const endDate = new Date(`${to}T03:00:00.000Z`); endDate.setUTCDate(endDate.getUTCDate() + 1);
   const end = endDate.toISOString();
@@ -316,7 +311,7 @@ export async function onlineReport(storeId, { from, to }) {
     rules[r.rule_id] ||= { shown: 0, accepted: 0, sold: 0, revenue: 0 };
     rules[r.rule_id].sold = Number(r.n); rules[r.rule_id].revenue = round2(Number(r.revenue));
   }
-  return { storeId, from, to, orders: Number(orders.rows[0].n), total: round2(Number(orders.rows[0].total)),
+  return { storeId, from, to, dateBasis: 'created_at', reconciliation, orders: Number(orders.rows[0].n), total: round2(Number(orders.rows[0].total)),
     ordersWithCrossSelling: Number(withCs.rows[0].n), crossSellingRevenue: round2(Number(withCs.rows[0].revenue)),
     crossSellingDiscount: round2(Number(withCs.rows[0].discount)), countersAvailable: Boolean(offerStoreFor(storeId)), rules,
     products: byProduct.rows.map((r) => ({ name: r.product_name, sales: Number(r.n), units: Number(r.units), revenue: round2(Number(r.revenue)) })) };

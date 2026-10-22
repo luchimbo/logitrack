@@ -1,6 +1,7 @@
 import { tiendanubeShippingAmounts } from './tiendanubeFinance.js';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';
 
 function normalizeDispatchStatus(value) {
   return String(value || '').toLowerCase() === 'dispatched' ? 'dispatched' : 'to_send';
@@ -208,6 +209,8 @@ export async function syncTiendanubeOrders({ workspaceId, client, status = '', p
     }
     for (const order of items) {
       await upsertTiendanubeOrder(workspaceId, order, { connectionId, externalStoreId });
+      // La logística no depende del informe online; la conciliación recupera lo pendiente.
+      await recordOnlineOrder(String(externalStoreId), order).catch((e) => console.warn('Cross-selling order record failed', e.message));
       totalSynced++;
     }
     hasMore = items.length === perPage;
