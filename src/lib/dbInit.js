@@ -772,7 +772,8 @@ export async function initDb() {
     // Migration: Tiendanube orders must allow the same external order id across multiple stores.
     try {
       const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
-      const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
+      // The new per-connection index is unique too; only an older unique index means the legacy table.
+      const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1 && row.name !== "idx_tiendanube_orders_connection_unique");
 
       if (hasLegacyUnique) {
         await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
@@ -823,6 +824,8 @@ export async function initDb() {
         await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
         await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
         await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
+        // The rebuilt table only has the columns copied above; later column checks must look again.
+        columnsByTable?.delete("tiendanube_orders");
         console.log("Tiendanube migration: enabled multi-store order ids");
       }
     } catch (e) {
