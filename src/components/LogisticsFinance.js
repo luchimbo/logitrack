@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { api } from '@/lib/api';
+import { api, toast } from '@/lib/api';
 import { ZONE_ORDER } from '@/lib/zoneGroups';
 import { partidoLabel, provinceLabel } from '@/lib/financeMap';
 import { STATE_LABELS, toCents, deliveryEventLabel, settlementMatrix, settlementMatrixCsv } from '@/lib/logisticsFinance';
@@ -112,8 +112,17 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
   }, [loadConfig]);
   const searchAgain = async (id) => {
     setSettlementError('');
-    try { await api(`${endpoint}/jobs`, { method: 'POST', body: JSON.stringify({ action: 'fetch', id }) }); window.dispatchEvent(new Event('settlement-jobs-refresh')); }
-    catch (err) { setSettlementError(err.message); }
+    // Shown at once, before the server confirms: the search starts in the next few seconds.
+    const running = { settlementId: id, status: 'running', phase: 'orders', progress: {} };
+    jobsRef.current = { ...jobsRef.current, [id]: running }; setJobs(jobsRef.current);
+    try {
+      await api(`${endpoint}/jobs`, { method: 'POST', body: JSON.stringify({ action: 'fetch', id }) });
+      toast(`Buscando los envíos de la liquidación #${id}. Te avisamos cuando esté lista.`, 'info', 6000);
+      window.dispatchEvent(new Event('settlement-jobs-refresh'));
+    } catch (err) {
+      const { [id]: _, ...rest } = jobsRef.current; jobsRef.current = rest; setJobs(rest);
+      setSettlementError(`No se pudo iniciar la búsqueda de la liquidación #${id}: ${err.message}`);
+    }
   };
   const [settlementError, setSettlementError] = useState('');
   // Opens a settlement, or downloads its day × zone table straight away.
