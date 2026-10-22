@@ -8,7 +8,7 @@ import { csv, validDate } from '@/lib/logisticsFinance';
 
 export const dynamic = 'force-dynamic';
 const repository = createFinanceRepository(db);
-const columns = [['Envío','shipmentId'],['Cuenta','sellerId'],['Modalidad','method'],['Transportista','carrierName'],['Provincia','province'],['Zona','zone'],['Partido','partido'],['Despacho','dispatchDay'],['Entrega','deliveryDay'],['Estado','stateLabel'],['Importe ARS', (r) => r.amountCents === null ? '' : (r.amountCents / 100).toFixed(2)],['Ventas brutas ARS', (r) => r.salesCents == null ? '' : (r.salesCents / 100).toFixed(2)],['Cargos ML ARS', (r) => r.feesCents == null ? '' : (r.feesCents / 100).toFixed(2)],['Pedidos pagados','paidOrderCount'],['Ventas no computables','salesMissingCount'],['Observación','missing']];
+const columns = [['Envío','shipmentId'],['Cuenta','sellerId'],['Modalidad','method'],['Transportista','carrierName'],['Provincia','province'],['Zona','zone'],['Partido','partido'],['Despacho','dispatchDay'],['Entrega','deliveryDay'],['Estado','stateLabel'],['Importe ARS', (r) => r.amountCents === null ? '' : (r.amountCents / 100).toFixed(2)],['Ventas brutas ARS', (r) => r.salesCents == null ? '' : (r.salesCents / 100).toFixed(2)],['Envío cobrado TN ARS', (r) => r.shippingCollectedCents == null ? '' : (r.shippingCollectedCents / 100).toFixed(2)],['Cargos ML ARS', (r) => r.feesCents == null ? '' : (r.feesCents / 100).toFixed(2)],['Pedidos pagados','paidOrderCount'],['Ventas no computables','salesMissingCount'],['Observación','missing']];
 function csvResponse(rows, selectedColumns, name) {
   return new Response(csv(rows, selectedColumns), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}.csv"`, 'Cache-Control': 'no-store' } });
 }

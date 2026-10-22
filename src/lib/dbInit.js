@@ -832,6 +832,12 @@ export async function initDb() {
     }
   }
 
+  if (!schemaCurrent) {
+    await addColumnIfMissing("tiendanube_orders", "shipping_cost_customer", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "shipping_cost_owner", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "order_source", "TEXT");
+  }
+
   // Datos que se reconcilian en cada arranque (no dependen del esquema): todo en un solo viaje.
   const legacy = "(SELECT id FROM workspaces WHERE slug = 'legacy')";
   const dataStatements = [
