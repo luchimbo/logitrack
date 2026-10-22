@@ -29,17 +29,19 @@ export async function GET(request) {
       targets = await listMercadoLibreClientTargets(connection.workspaceId);
       if (!targets.length) return Response.json({ error: 'No hay una cuenta de Mercado Libre conectada' }, { status: 409, headers });
     }
-    const result = { accounts: targets.length, items: 0, withoutSkuCount: 0, withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0, reviews: [] };
+    const result = { accounts: targets.length, firstError: '', items: 0, withoutSkuCount: 0, withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0, reviews: [] };
     const seen = new Set();
     for (const target of targets) {
       const part = await collectMeliReviews({ client: target.client, sellerId: target.externalStoreId });
       for (const key of ['items', 'withoutSkuCount', 'errors', 'withoutText', 'withoutReviews']) result[key] += part[key];
+      result.firstError ||= part.firstError;
       result.withoutSku.push(...part.withoutSku);
       for (const r of part.reviews) if (!seen.has(`${r.externalId}|${r.sku}`)) { seen.add(`${r.externalId}|${r.sku}`); result.reviews.push(r); }
     }
     return Response.json(result, { headers });
   } catch (error) {
     console.error('Opiniones de Mercado Libre:', error.message || error);
-    return Response.json({ error: 'No se pudieron leer las opiniones de Mercado Libre' }, { status: 502, headers });
+    // El mensaje de Mercado Libre (por ejemplo, un permiso faltante) ayuda a quien administra; no trae datos de clientes.
+    return Response.json({ error: `No se pudieron leer las opiniones de Mercado Libre: ${String(error.message || '').slice(0, 200)}` }, { status: 502, headers });
   }
 }

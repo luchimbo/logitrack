@@ -45,3 +45,13 @@ test('un error en una publicación no corta el resto y queda contado', async () 
   assert.equal(out.errors, 1);
   assert.deepEqual(out.reviews.map((r) => r.sku), ['SKU-MLA2']);
 });
+
+test('indica en qué paso falla Mercado Libre y conserva el primer error de opiniones', async () => {
+  const denied = fakeClient({ items: [item('MLA1')], reviews: {} });
+  denied.searchSellerItems = async () => { throw new Error('At least one policy returned UNAUTHORIZED.'); };
+  await assert.rejects(collectMeliReviews({ client: denied, sellerId: '1' }), /al listar las publicaciones: At least one policy returned UNAUTHORIZED/);
+  const noReviews = fakeClient({ items: [item('MLA1')], reviews: {} });
+  noReviews.getItemReviews = async () => { throw new Error('policy UNAUTHORIZED'); };
+  const out = await collectMeliReviews({ client: noReviews, sellerId: '1' });
+  assert.deepEqual([out.errors, out.firstError], [1, 'policy UNAUTHORIZED']);
+});

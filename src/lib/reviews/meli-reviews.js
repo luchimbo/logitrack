@@ -19,7 +19,8 @@ async function pool(list, size, fn) {
 export async function collectMeliReviews({ client, sellerId, concurrency = 6 }) {
   const ids = [];
   for (let offset = 0; offset < MAX_ITEMS; offset += PAGE_ITEMS) {
-    const page = await client.searchSellerItems({ sellerId, offset, limit: PAGE_ITEMS });
+    const page = await client.searchSellerItems({ sellerId, offset, limit: PAGE_ITEMS })
+      .catch((error) => { throw new Error(`al listar las publicaciones: ${error.message}`); });
     const found = page?.results || [];
     ids.push(...found);
     if (found.length < PAGE_ITEMS || ids.length >= (page?.paging?.total ?? 0)) break;
@@ -29,7 +30,7 @@ export async function collectMeliReviews({ client, sellerId, concurrency = 6 }) 
   const items = (await pool(chunks, concurrency, (chunk) => client.getItems(chunk).catch(() => [])))
     .flat().filter((r) => r?.code === 200 && r.body).map((r) => r.body);
 
-  const stats = { items: ids.length, withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0 };
+  const stats = { items: ids.length, firstError: '', withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0 };
   const withSku = items.filter((item) => {
     if (skuOf(item)) return true;
     stats.withoutSku.push(item.id); return false;
@@ -62,7 +63,7 @@ export async function collectMeliReviews({ client, sellerId, concurrency = 6 }) 
         reviews.push({ externalId, sku, rating, texto: text, fecha: String(r.date_created || '').slice(0, 10),
           enlace: /^https:\/\//.test(item.permalink || '') ? item.permalink : '' });
       }
-    } catch { stats.errors++; }
+    } catch (error) { stats.errors++; stats.firstError ||= String(error.message || '').slice(0, 200); }
   });
   return { ...stats, withoutSku: stats.withoutSku.slice(0, 20), withoutSkuCount: stats.withoutSku.length, reviews };
 }
