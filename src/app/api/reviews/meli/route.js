@@ -29,15 +29,20 @@ export async function GET(request) {
       targets = await listMercadoLibreClientTargets(connection.workspaceId);
       if (!targets.length) return Response.json({ error: 'No hay una cuenta de Mercado Libre conectada' }, { status: 409, headers });
     }
-    const result = { accounts: targets.length, firstError: '', items: 0, withoutSkuCount: 0, withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0, reviews: [] };
+    const result = { accounts: targets.length, accountErrors: [], firstError: '', items: 0, withoutSkuCount: 0, withoutSku: [], errors: 0, withoutText: 0, withoutReviews: 0, reviews: [] };
     const seen = new Set();
     for (const target of targets) {
-      const part = await collectMeliReviews({ client: target.client, sellerId: target.externalStoreId });
+      // Una cuenta sin permisos (o sin reconectar) no bloquea a las demás.
+      let part;
+      try { part = await collectMeliReviews({ client: target.client, sellerId: target.externalStoreId }); }
+      catch (error) { result.accountErrors.push(`${target.externalStoreId}: ${String(error.message || '').slice(0, 160)}`); continue; }
       for (const key of ['items', 'withoutSkuCount', 'errors', 'withoutText', 'withoutReviews']) result[key] += part[key];
       result.firstError ||= part.firstError;
       result.withoutSku.push(...part.withoutSku);
       for (const r of part.reviews) if (!seen.has(`${r.externalId}|${r.sku}`)) { seen.add(`${r.externalId}|${r.sku}`); result.reviews.push(r); }
     }
+    // Si ninguna cuenta pudo leerse, se informa como error y no como búsqueda vacía.
+    if (result.accountErrors.length === targets.length) throw new Error(result.accountErrors.join(' | '));
     return Response.json(result, { headers });
   } catch (error) {
     console.error('Opiniones de Mercado Libre:', error.message || error);
