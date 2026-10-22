@@ -174,3 +174,16 @@ mercadería y cobro de envío, importes faltantes/cero, cancelaciones, duplicado
 aislamiento por espacio, detalle y resumen y persistencia SQL de la sincronización.
 
 Referencia de campos: https://tiendanube.github.io/api-documentation/v1/resources/order
+
+Publicado en `www.geomodi.ai` mediante `npm run deploy:production`:
+`dpl_6ED1JkZ4Q1j9Rc9Y3LAM5v35kJNC`,
+`https://logitrack-fydk2trvs-lucio-tamborinis-projects.vercel.app`.
+Código: `1230c4a`, rama `codex/tiendanube-envios-finanzas-20261022`.
+Se publicaron conjuntamente la fuente TN y la conciliación del saldo provisional.
+Compilación local y remota correctas, lint sin errores y 122 pruebas aprobadas
+con `npm test -- --test-concurrency=1`. La ejecución paralela de Node en Windows
+cerraba el proceso nativo SQLite con `3221225477` después de aprobar sus casos;
+la ejecución secuencial ejecuta la misma suite completa y termina correctamente.
+Los controles HMAC, dominios de tiendas y recursos de cross-selling pasaron antes
+de promover. En el espacio de `camilopcmidi` se observaron dos cuentas ML y ninguna
+conexión activa de Tiendanube; no se cambiaron conexiones ni se repitió OAuth.
