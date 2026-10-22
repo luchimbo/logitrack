@@ -317,6 +317,7 @@ function jobLabel(job) {
   const p = job.progress || {};
   if (job.phase === 'orders') return `ventas: ${p.orders || 0}${p.ordersTotal ? ` de ${p.ordersTotal}` : ''}`;
   if (job.phase === 'labels') return `etiquetas sin venta: ${p.labels || 0}${p.labelsTotal ? ` de ${p.labelsTotal}` : ''}`;
+  if (job.phase === 'details') return `fechas de entrega: ${p.details || 0}${p.detailsTotal ? ` de ${p.detailsTotal}` : ''}`;
   return 'recalculando';
 }
 function JobStatus({ job, onRetry }) {

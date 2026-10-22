@@ -21,7 +21,7 @@ export async function listSettlementFetchJobs(workspaceId) {
   return (await execute(`SELECT j.settlement_id, j.status, j.phase, j.progress_json, j.error, j.finished_at, j.notified_at, j.lease_until,
     c.display_name AS carrier_name, l.date_from, l.date_to
     FROM settlement_fetch_jobs j JOIN carrier_settlements l ON l.id = j.settlement_id LEFT JOIN carriers c ON c.id = l.carrier_id
-    WHERE j.workspace_id = ? AND (j.status = 'running' OR j.notified_at IS NULL) ORDER BY j.settlement_id`, [workspaceId])).rows
+    WHERE j.workspace_id = ? AND (j.status <> 'done' OR j.notified_at IS NULL) ORDER BY j.settlement_id`, [workspaceId])).rows
     .map((j) => ({ settlementId: Number(j.settlement_id), status: j.status, phase: j.phase, progress: parse(j.progress_json, {}), error: j.error,
       carrierName: j.carrier_name, dateFrom: j.date_from, dateTo: j.date_to, finishedAt: j.finished_at, notified: Boolean(j.notified_at), leaseUntil: j.lease_until }));
 }
@@ -111,7 +111,37 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
         progress.labels++; cursor.misses = [...skip];
         if (progress.labels % 10 === 0) await save();
       }
-      if (labels.every((t) => skip.has(t))) { phase = 'snapshot'; }
+      if (labels.every((t) => skip.has(t))) { phase = 'details'; cursor.misses = []; }
+      await save();
+    }
+    if (phase === 'details' && inBudget()) {
+      // The light order sync has no delivery date: delivered packages of this carrier without history get the full detail.
+      const pending = (await execute(`SELECT DISTINCT mo.order_id, mo.integration_connection_id FROM mercadolibre_orders mo
+        JOIN shipments s ON s.workspace_id = mo.workspace_id AND (s.id = mo.shipment_row_id OR (s.tracking_number = mo.shipment_id AND mo.shipment_id <> ''))
+        LEFT JOIN daily_batches b ON b.id = s.batch_id AND b.workspace_id = s.workspace_id
+        WHERE mo.workspace_id=? AND s.shipping_method='flex' AND (s.assigned_carrier = ? OR s.assigned_carrier = ?)
+          AND COALESCE(b.date, substr(s.created_at, 1, 10)) BETWEEN ? AND ? AND mo.shipment_status = 'delivered'
+          AND (mo.history_json IS NULL OR mo.history_json IN ('', '[]', 'null'))
+        ORDER BY mo.order_id`, [workspaceId, String(job.carrier_key || ''), String(job.carrier_id), shift(job.date_from, -10), job.date_to])).rows;
+      const skip = new Set(cursor.misses || []);
+      const todo = pending.filter((r) => !skip.has(String(r.order_id)));
+      progress.detailsTotal = (progress.details || 0) + todo.length; progress.details ??= 0;
+      for (let i = 0; i < todo.length && inBudget(); i += 5) {
+        await Promise.all(todo.slice(i, i + 5).map(async (row) => {
+          const account = accounts.find((a) => Number(a.connectionId) === Number(row.integration_connection_id));
+          try {
+            if (!account) throw new Error('Cuenta no disponible');
+            const full = await syncOrder({ workspaceId, client: account.client, orderId: row.order_id, connectionId: account.connectionId,
+              externalStoreId: account.externalStoreId, siteId: account.config?.siteId || 'MLA' });
+            // A detail without history would be listed again: remember it.
+            if (!full?.history) skip.add(String(row.order_id));
+          } catch { skip.add(String(row.order_id)); }
+          progress.details++;
+        }));
+        cursor.misses = [...skip];
+        await save();
+      }
+      if (todo.every((r) => skip.has(String(r.order_id))) || !todo.length) phase = 'snapshot';
       await save();
     }
     if (phase === 'snapshot' && inBudget()) {
