@@ -59,6 +59,8 @@ export default function proxy(req, event) {
   // Módulo «Completá tu equipo» de la demo: firma en la URL o validación de origen y carrito en el handler.
   if (/^\/api\/cross-selling\/offer-callback\/[a-f0-9]{32}$/.test(req.nextUrl.pathname)) return NextResponse.next();
   if (/^\/api\/cross-selling\/storefront\/(offers|accept|seen)$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  // Reseñas: Mostrador publica con HMAC por tienda; la tienda lee con validación de origen en el handler.
+  if (req.nextUrl.pathname === "/api/reviews/config" || req.nextUrl.pathname === "/api/reviews/storefront") return NextResponse.next();
   return clerkGuard(req, event);
 }
 

@@ -1,5 +1,15 @@
 // «Completá tu equipo» · tiendas habilitadas en Logitrack (demo 7570182 y PC MIDI 78394).
 // Lo carga el script registrado en Partners. No depende del JavaScript del tema.
+// Opiniones de productos: módulo aparte, se carga junto a este script (sin otra versión en Partners).
+(function () {
+  try {
+    if (!window.LS || !LS.store || ['7570182', '78394'].indexOf(String(LS.store.id)) < 0) return;
+    var o = document.createElement('script');
+    o.src = 'https://www.geomodi.ai/reviews/opiniones.js?v=' + Math.floor(Date.now() / 300000);
+    o.async = true;
+    document.head.appendChild(o);
+  } catch (e) { /* sin opiniones */ }
+})();
 (function () {
   'use strict';
   var STORES = ['7570182', '78394'];
