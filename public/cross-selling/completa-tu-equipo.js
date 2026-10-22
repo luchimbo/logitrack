@@ -220,16 +220,50 @@
       .then(function (d) {
         var line = d.item && d.item.id, id = (d.cart && d.cart.id) || (d.item && d.item.cart_id) || (LS.cart && LS.cart.id);
         if (!line || !id) { window.location.href = '/comprar/'; return null; }
-        return acceptAndAdd(offer, String(id), String(line));
+        return acceptAndAdd(offer, String(id), String(line), d.item.quantity);
       })
       .catch(failed(btn, msg, 'Agregar los dos con descuento'));
   }
 
-  function acceptAndAdd(offer, id, triggerLineId) {
-    // 1) Registrar la aceptación (el servidor valida contra el carrito confirmado por TN).
+  // Cantidad actual de una línea: la del renglón del carrito o la de LS.cart.
+  function currentQuantity(lineId) {
+    var input = document.querySelector('input[name="quantity[' + lineId + ']"]');
+    var n = input ? parseInt(input.value, 10) : NaN;
+    if (n > 0) return n;
+    var item = cartItems().filter(function (i) { return String(i.item_id) === String(lineId); })[0];
+    return item && item.quantity > 0 ? Number(item.quantity) : 0;
+  }
+  // TN llama al callback de descuentos cuando cambia el carrito, no al mostrarlo. Volver a guardar
+  // la misma cantidad del principal (como el botón de cantidad del tema) hace que lo llame.
+  function recalculateCart(lineId, quantity) {
+    if (!(quantity > 0)) return Promise.resolve(false);
+    var body = new URLSearchParams();
+    body.set('quantity[' + lineId + ']', String(quantity));
+    body.set('cart_page', /^\/comprar\/?$/.test(location.pathname) ? '1' : '0');
+    return fetch('/cart/update/', { method: 'POST', body: body, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { return Boolean(d && d.success); })
+      .catch(function () { return false; });
+  }
+
+  function postAccept(offer, id, triggerLineId, quantity, retries) {
     return fetch(API + 'accept', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ store: STORE, cartId: id, triggerLineId: String(triggerLineId), accessoryVariant: String(offer.variantId) }) })
-      .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'No se pudo aplicar la oferta'); return d; }); })
+      .then(function (r) { return r.json().then(function (d) {
+        if (r.ok) return d;
+        // Carrito sin confirmar por TN: forzar el recálculo y reintentar (el servidor espera el callback).
+        if (d.code === 'cart_pending' && retries > 0) {
+          return recalculateCart(triggerLineId, quantity || currentQuantity(triggerLineId)).then(function () {
+            return postAccept(offer, id, triggerLineId, quantity, retries - 1);
+          });
+        }
+        throw new Error(d.error || 'No se pudo aplicar la oferta');
+      }); });
+  }
+
+  function acceptAndAdd(offer, id, triggerLineId, quantity) {
+    // 1) Registrar la aceptación (el servidor valida contra el carrito confirmado por TN).
+    return postAccept(offer, id, triggerLineId, quantity, 2)
       // Sin Redis, TN tarda unos segundos en usar la URL nueva del callback: si el accesorio entra
       // antes, el descuento recién aparece en el próximo cambio. Con Redis la URL no cambia.
       .then(function (d) { return d.mode === 'redis' ? null : new Promise(function (resolve) { setTimeout(resolve, 4000); }); })

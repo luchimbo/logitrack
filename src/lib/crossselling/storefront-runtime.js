@@ -212,7 +212,8 @@ export async function acceptOffer(storeId, { cartId, triggerLineId, accessoryVar
   await init();
   const { record, catalog } = await publication(storeId);
   const callbackCart = await latestCallbackCart(storeId, String(cartId));
-  if (!callbackCart || (callbackCart.storeId && callbackCart.storeId !== storeId)) throw failure('Tiendanube todavía no confirmó este carrito. Volvé a intentar en unos segundos.');
+  // TN llama al callback cuando cambia el carrito, no al mostrarlo: el script fuerza ese cambio y reintenta.
+  if (!callbackCart || (callbackCart.storeId && callbackCart.storeId !== storeId)) throw Object.assign(failure('Tiendanube todavía no confirmó este carrito. Volvé a intentar en unos segundos.'), { code: 'cart_pending' });
   const acceptance = buildAcceptance({ snapshot: record.snapshot, catalog, callbackCart, cartId, triggerLineId, accessoryVariant });
   await recordAcceptance(storeId, acceptance).catch((e) => console.warn('Cross-selling acceptance log failed', e.name));
   const store = offerStoreFor(storeId);
