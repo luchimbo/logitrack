@@ -40,18 +40,21 @@
   var css = [
     '.cte-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2147483000;display:flex;align-items:flex-end;justify-content:center}',
     '@media(min-width:720px){.cte-overlay{align-items:center}}',
-    '.cte-modal{background:#fff;color:#111827;width:100%;max-width:640px;max-height:90vh;overflow:auto;border-radius:16px 16px 0 0;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.3);font:inherit}',
+    '.cte-modal{position:relative;box-sizing:border-box;background:#fff;color:#111827;width:100%;max-width:640px;max-height:90vh;overflow:auto;border-radius:16px 16px 0 0;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.3);font:inherit}',
     '@media(min-width:720px){.cte-modal{border-radius:16px}}',
-    '.cte-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}',
     '.cte-title{font-size:20px;font-weight:700;margin:0}.cte-sub{margin:4px 0 0;color:#4b5563;font-size:14px}',
-    '.cte-close{background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:#6b7280;padding:4px 8px}',
+    '.cte-close{position:absolute;right:12px;top:12px;background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:#6b7280;padding:4px 8px}',
+    '.cte-group+.cte-group{margin-top:24px}.cte-main{padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid #e5e7eb}',
+    '.cte-main-label{margin:0 0 4px;color:#4b5563;font-size:13px}.cte-main-name{margin:0;font-size:14px;font-weight:600}',
+    '.cte-modal .cte-main{padding-right:32px}.cte-group .cte-sub{margin-bottom:12px}',
+    '.cte-main-name,.cte-name,.cte-row-name,.cte-sub{overflow-wrap:anywhere}.cte-card>div{min-width:0}',
     '.cte-list{display:grid;gap:12px}',
-    '.cte-card{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center;border:1px solid #e5e7eb;border-radius:12px;padding:12px}',
+    '.cte-card{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;border:1px solid #e5e7eb;border-radius:12px;padding:12px}',
     '.cte-img{width:72px;height:72px;object-fit:contain;border-radius:8px;background:#f3f4f6}',
-    '.cte-name{font-weight:600;font-size:15px;margin:0 0 4px}.cte-reason{color:#6b7280;font-size:13px;margin:0 0 6px}',
-    '.cte-prices{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin-bottom:8px}',
-    '.cte-old{text-decoration:line-through;color:#9ca3af;font-size:13px}.cte-new{font-weight:700;font-size:17px}',
-    '.cte-save{background:#dcfce7;color:#166534;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:600}',
+    '.cte-name{font-weight:600;font-size:15px;margin:0 0 6px}',
+    '.cte-prices{display:grid;gap:4px;margin-bottom:10px}',
+    '.cte-new{font-weight:700;font-size:18px}',
+    '.cte-save{display:block;color:#166534;font-size:13px;font-weight:600;overflow-wrap:anywhere}',
     '.cte-btn{background:#111827;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;width:100%;font-size:14px}',
     '.cte-btn[disabled]{opacity:.6;cursor:wait}.cte-msg{font-size:13px;margin:6px 0 0}.cte-msg.err{color:#b91c1c}',
     '.cte-inline{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px;background:#fff;color:#111827}',
@@ -62,7 +65,7 @@
     '.cte-applied b{font-size:15px}',
     '.cte-strike{color:#9ca3af;font-weight:400;margin-right:4px}.cte-final{color:#166534;font-weight:700}',
     '.cte-line-badge{display:block;width:max-content;margin-top:4px;background:#dcfce7;color:#166534;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600}',
-    '.cte-inline .cte-title{font-size:16px}.cte-inline .cte-card{grid-template-columns:56px 1fr;padding:8px}.cte-inline .cte-img{width:56px;height:56px}',
+    '.cte-inline .cte-title{font-size:18px}.cte-inline .cte-card{grid-template-columns:56px minmax(0,1fr);padding:8px}.cte-inline .cte-img{width:56px;height:56px}',
   ].join('');
   var style = document.createElement('style');
   style.textContent = css;
@@ -114,7 +117,7 @@
     var line = o && o.triggerLineId && String(o.triggerLineId) !== '0' &&
       cartItems().filter(function (i) { return String(i.item_id) === String(o.triggerLineId); })[0];
     if (line && line.name) return line.name;
-    if (window.LS && LS.product && LS.product.name) return LS.product.name;
+    if ((!o || !o.triggerLineId || String(o.triggerLineId) === '0') && window.LS && LS.product && LS.product.name) return LS.product.name;
     var m = String((o && o.reason) || '').match(/^Ideal para tu (.+)$/);
     return m ? m[1] : 'producto';
   }
@@ -122,23 +125,37 @@
     var unique = names.filter(function (n, i) { return n && names.indexOf(n) === i; });
     return unique.length > 1 ? unique.slice(0, -1).join(', ') + ' y ' + unique[unique.length - 1] : (unique[0] || '');
   }
-  function onlyNowLabel(o) { return '-' + esc(o.pct) + '% sólo si lo sumás ahora'; }
-  function withMainText(o) { return 'Precio especial llevándolo con tu ' + esc(mainName(o)) + ' · Ahorrás ' + money(o.savings); }
-  function onlyNowNote(main) {
-    return 'Estos precios valen sólo si los agregás ahora, en esta compra' + (main ? ', junto a tu ' + esc(main) : '') +
-      '. Por separado se cobran a precio normal.';
+  function savingsText(o) { return 'Ahorrás ' + money(o.savings) + ' · ' + esc(o.pct) + '% de descuento'; }
+  function offerHeading(tag, id) {
+    return '<' + tag + ' class="cte-title"' + (id ? ' id="' + id + '"' : '') + '>Completá tu equipo</' + tag + '>' +
+      '<p class="cte-sub">Sumá estos accesorios con descuento al comprarlos junto con este producto</p>';
+  }
+  // Una condición por principal, incluso cuando distintos productos comparten el mismo nombre.
+  function offerGroups(offers, native, titleId) {
+    var groups = [];
+    offers.forEach(function (o) {
+      var key = String(o.triggerLineId || mainName(o));
+      var group = groups.filter(function (g) { return g.key === key; })[0];
+      if (!group) { group = { key: key, name: mainName(o), offers: [] }; groups.push(group); }
+      group.offers.push(o);
+    });
+    return groups.map(function (g, index) {
+      return '<div class="cte-group"><div class="cte-main"><p class="cte-main-label">Ya tenés en tu carrito</p>' +
+        '<p class="cte-main-name">' + esc(g.name) + '</p></div>' +
+        offerHeading(titleId ? 'h2' : 'h3', index === 0 ? titleId : '') +
+        '<div class="' + (native ? 'cte-native-list' : 'cte-list') + '">' +
+        g.offers.map(function (o) { return native ? nativeRow(o) : card(o); }).join('') + '</div></div>';
+    }).join('');
   }
 
-  // Mismo renglón que los productos del carrito del tema (grilla, tipografía, precio tachado y botón).
+  // Conservar la grilla, tipografía y botón del tema, con un único precio y el ahorro debajo.
   function nativeRow(o) {
     return '<div class="cte-row row align-items-md-center" data-variant="' + esc(o.variantId) + '">' +
       '<div class="col-3 col-md-1">' + (o.image ? '<img class="img-fluid" alt="" loading="lazy" src="' + esc(o.image) + '">' : '') + '</div>' +
       '<div class="col-9 col-md-11 pl-0 pl-md-3"><div class="row align-items-md-center">' +
-        '<h6 class="col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') +
-          '<div class="mt-2"><span class="d-inline-block label label-accent label-small font-smallest mb-1">' + onlyNowLabel(o) + '</span></div>' +
-          '<div class="font-small opacity-50">' + withMainText(o) + '</div></h6>' +
-        '<div class="col-12 col-md-3 text-md-center"><div><span class="price-compare font-small opacity-50 mr-0">' + money(o.price) + '</span></div>' +
-          '<div class="h4 font-weight-normal mb-0">' + money(o.discountedPrice) + '</div></div>' +
+        '<h6 class="cte-row-name col-12 col-md-5 h4-md font-weight-normal mb-2 mb-md-0">' + esc(o.name) + (o.variant ? ' <small>' + esc(o.variant) + '</small>' : '') + '</h6>' +
+        '<div class="col-12 col-md-3 text-md-center"><div class="cte-new">' + money(o.discountedPrice) + '</div>' +
+          '<span class="cte-save">' + savingsText(o) + '</span></div>' +
         '<div class="col-12 col-md-4 mt-2 mt-md-0"><button type="button" class="cte-accept btn btn-primary btn-block">Agregar con descuento</button>' +
           '<p class="cte-row-msg font-small mb-0" role="status"></p></div>' +
       '</div></div>' +
@@ -149,9 +166,8 @@
     return '<div class="cte-card" data-variant="' + esc(o.variantId) + '">' +
       (o.image ? '<img class="cte-img" alt="" loading="lazy" src="' + esc(o.image) + '">' : '<div class="cte-img"></div>') +
       '<div><p class="cte-name">' + esc(o.name) + (o.variant ? ' · ' + esc(o.variant) : '') + '</p>' +
-      '<p class="cte-reason">Precio especial llevándolo con tu ' + esc(mainName(o)) + '</p>' +
-      '<div class="cte-prices"><span class="cte-old">' + money(o.price) + '</span><span class="cte-new">' + money(o.discountedPrice) + '</span>' +
-      '<span class="cte-save">' + onlyNowLabel(o) + ' · Ahorrás ' + money(o.savings) + '</span></div>' +
+      '<div class="cte-prices"><span class="cte-new">' + money(o.discountedPrice) + '</span>' +
+      '<span class="cte-save">' + savingsText(o) + '</span></div>' +
       '<button type="button" class="cte-btn">' + (label || 'Agregar con descuento') + '</button><p class="cte-msg" role="status"></p></div></div>';
   }
 
@@ -395,10 +411,8 @@
     var overlay = document.createElement('div');
     overlay.className = 'cte-overlay';
     overlay.innerHTML = '<div class="cte-modal" role="dialog" aria-modal="true" aria-labelledby="cte-title">' +
-      '<div class="cte-head"><div><h2 class="cte-title" id="cte-title">Completá tu equipo</h2>' +
-      '<p class="cte-sub">' + onlyNowNote(joinNames(offers.map(mainName))) + '</p></div>' +
-      '<button type="button" class="cte-close" aria-label="Cerrar">×</button></div>' +
-      '<div class="cte-list">' + offers.map(function (o) { return card(o); }).join('') + '</div></div>';
+      '<button type="button" class="cte-close" aria-label="Cerrar">×</button>' +
+      offerGroups(offers, false, 'cte-title') + '</div>';
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
     overlay.querySelector('.cte-close').addEventListener('click', closeModal);
     document.addEventListener('keydown', onKey);
@@ -433,14 +447,9 @@
     if (!target || (!offers.length && !notice)) return;
     var box = document.createElement('section');
     box.className = 'cte-inline';
-    box.setAttribute('aria-label', 'Oferta especial por completar tu compra');
-    var note = '<p class="cte-sub font-small mb-3">' + onlyNowNote(joinNames(offers.map(mainName))) + '</p>';
+    box.setAttribute('aria-label', 'Completá tu equipo');
     if (native) box.className = 'cte-inline cte-native';
-    box.innerHTML = notice + (offers.length ? (native
-      ? '<h5 class="cte-native-title h4-md font-weight-normal mb-1">Oferta especial por completar tu compra</h5>' + note + '<div class="cte-native-list">' +
-        offers.map(nativeRow).join('') + '</div>'
-      : '<h3 class="cte-title">Oferta especial por completar tu compra</h3>' + note + '<div class="cte-list">' +
-        offers.map(function (o) { return card(o); }).join('') + '</div>') : '');
+    box.innerHTML = notice + offerGroups(offers, native);
     target.parent.insertBefore(box, target.before);
     bind(box, offers);
     if (offers.length) reportSeen('cart', offers);
@@ -471,7 +480,7 @@
         var box = document.createElement('section');
         box.className = 'cte-inline cte-product';
         box.setAttribute('aria-label', 'Completá tu equipo');
-        box.innerHTML = '<h3 class="cte-title">Completá tu equipo</h3><p class="cte-sub">Precio especial sólo si los sumás ahora, junto a este producto. Por separado se cobran a precio normal.</p>' +
+        box.innerHTML = offerHeading('h3') +
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
         form.parentNode.insertBefore(box, form.nextSibling);
         bind(box, offers, acceptWithProduct);
