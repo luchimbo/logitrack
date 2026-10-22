@@ -9,6 +9,7 @@ import { buildAppNavigation, buildMobileNavigation, resolveAppTab } from "@/lib/
 import AppSectionRenderer from "@/components/AppSectionRenderer";
 import AppShell from "@/components/AppShell";
 import OnboardingTour from "@/components/OnboardingTour";
+import { useSettlementJobs } from "@/hooks/useSettlementJobs";
 
 export default function AppHome() {
   const { signOut } = useClerk();
@@ -60,6 +61,7 @@ export default function AppHome() {
   }, [workspaceSlug, handleBadgeUpdate]);
 
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
+  useSettlementJobs(Boolean(currentUser?.workspaceId) && canManageWorkspace);
   const canManageUsers = canManageWorkspace;
 
   const handleLogout = async () => {

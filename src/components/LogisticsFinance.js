@@ -86,12 +86,35 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
       const result = await api(endpoint, { method: 'POST', body: JSON.stringify(input) });
       // Rates only change the rates list right away; the heavy report refreshes in the background.
       if (input.action === 'rates') { load(); await loadConfig(); } else await Promise.all([load(), loadConfig()]);
+      if (input.action === 'draft') window.dispatchEvent(new Event('settlement-jobs-refresh'));
       if (input.id || result.id) setDetail(await api(`${endpoint}?view=settlements&id=${input.id || result.id}`));
       setMessage('Cambios guardados.');
       return true;
     } catch (err) { setError(err.message); return false; } finally { setBusy(false); }
   };
   const [opening, setOpening] = useState(null);
+  const [jobs, setJobs] = useState({});
+  const jobsRef = useRef({}), detailIdRef = useRef(null);
+  detailIdRef.current = detail?.settlement.id ?? null;
+  useEffect(() => {
+    const onJobs = (e) => {
+      const prev = jobsRef.current, next = Object.fromEntries(e.detail.map((j) => [j.settlementId, j]));
+      const ended = Object.values(prev).filter((j) => j.status === 'running' && next[j.settlementId]?.status !== 'running').map((j) => j.settlementId);
+      jobsRef.current = next; setJobs(next);
+      // A search that just ended refreshes the list and the open settlement.
+      if (ended.length) {
+        loadConfig().catch(() => {});
+        if (ended.includes(detailIdRef.current)) api(`${endpoint}?view=settlements&id=${detailIdRef.current}`).then(setDetail).catch(() => {});
+      }
+    };
+    window.addEventListener('settlement-jobs', onJobs);
+    return () => window.removeEventListener('settlement-jobs', onJobs);
+  }, [loadConfig]);
+  const searchAgain = async (id) => {
+    setSettlementError('');
+    try { await api(`${endpoint}/jobs`, { method: 'POST', body: JSON.stringify({ action: 'fetch', id }) }); window.dispatchEvent(new Event('settlement-jobs-refresh')); }
+    catch (err) { setSettlementError(err.message); }
+  };
   const [settlementError, setSettlementError] = useState('');
   // Opens a settlement, or downloads its day × zone table straight away.
   const openSettlement = async (id, then = 'show') => {
@@ -205,8 +228,8 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
     </> : null}
     {!delivery && tab === 'rates' ? <RatesPanel carriers={carriers} rates={rates} canEdit={canEdit} busy={busy} onSave={mutate} /> : null}
     {!delivery && tab === 'settlements' ? <>
-      <section className={styles.panel}><h2>Liquidaciones por transportista</h2><p className={styles.muted}>Período según fecha de entrega confirmada por Mercado Libre. Mientras está abierta se recalcula con cada entrega nueva; al cerrarla queda fija.</p>{canEdit ? <DraftForm carriers={carriers} busy={busy} onSave={mutate} /> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Número</th><th>Transportista</th><th>Entregas entre</th><th>Estado</th><th className={styles.number}>Importe cerrado + ajustes</th><th /></tr></thead><tbody>{settlements.map((s) => <tr key={s.id}><td>#{s.id}</td><td>{s.carrier_name}</td><td>{when(s.date_from)} — {when(s.date_to)}</td><td><span className={styles.badge}>{statusNames[s.status]}</span></td><td className={styles.number}>{s.status === 'draft' ? '—' : money(Number(s.total_cents) + Number(s.adjustments_cents))}</td><td><div className={styles.actions}><button className="btn btn-primary btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id, 'download')}>{opening === `download:${s.id}` ? 'Preparando…' : 'Descargar'}</button><button className="btn btn-ghost btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id)}>{opening === `show:${s.id}` ? 'Abriendo…' : 'Revisar'}</button></div></td></tr>)}</tbody></table>{!settlements.length ? <p className={styles.empty}>Todavía no hay liquidaciones.</p> : null}</div>{settlementError ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{settlementError}</div> : null}</section>
-      {detail ? <SettlementDetail detail={detail} canEdit={canEdit} busy={busy} onSave={mutate} onClose={() => setDetail(null)} /> : null}
+      <section className={styles.panel}><h2>Liquidaciones por transportista</h2><p className={styles.muted}>Período según fecha de entrega confirmada por Mercado Libre. Mientras está abierta se recalcula con cada entrega nueva; al cerrarla queda fija.</p>{canEdit ? <DraftForm carriers={carriers} busy={busy} onSave={mutate} /> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Número</th><th>Transportista</th><th>Entregas entre</th><th>Estado</th><th className={styles.number}>Importe cerrado + ajustes</th><th /></tr></thead><tbody>{settlements.map((s) => <tr key={s.id}><td>#{s.id}</td><td>{s.carrier_name}</td><td>{when(s.date_from)} — {when(s.date_to)}</td><td><span className={styles.badge}>{statusNames[s.status]}</span><JobStatus job={jobs[s.id]} onRetry={canEdit && s.status === 'draft' ? () => searchAgain(s.id) : null} /></td><td className={styles.number}>{s.status === 'draft' ? '—' : money(Number(s.total_cents) + Number(s.adjustments_cents))}</td><td><div className={styles.actions}><button className="btn btn-primary btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id, 'download')}>{opening === `download:${s.id}` ? 'Preparando…' : 'Descargar'}</button><button className="btn btn-ghost btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id)}>{opening === `show:${s.id}` ? 'Abriendo…' : 'Revisar'}</button></div></td></tr>)}</tbody></table>{!settlements.length ? <p className={styles.empty}>Todavía no hay liquidaciones.</p> : null}</div>{settlementError ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{settlementError}</div> : null}</section>
+      {detail ? <SettlementDetail job={jobs[detail.settlement.id]} detail={detail} canEdit={canEdit} busy={busy} onSave={mutate} onClose={() => setDetail(null)} /> : null}
     </> : null}
   </div>;
 }
@@ -290,6 +313,17 @@ function RatesPanel({ carriers, rates, canEdit, busy, onSave }) {
 }
 function DraftForm({ carriers, busy, onSave }) { return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSave({ action:'draft', carrierId:Number(f.get('carrier')), from:f.get('from'), to:f.get('to') }); }}><label>Transportista<select required name="carrier"><option value="">Elegir…</option>{carriers.map((c) => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}</select></label><label>Entregado desde<input type="date" name="from" required defaultValue={`${getArgentinaDateString().slice(0,7)}-01`} /></label><label>Entregado hasta<input type="date" name="to" required defaultValue={getArgentinaDateString()} /></label><button className="btn btn-primary" disabled={busy}>Crear liquidación</button></form>; }
 // Built in the browser from the settlement data, as a CSV that Excel opens directly.
+function jobLabel(job) {
+  const p = job.progress || {};
+  if (job.phase === 'orders') return `ventas: ${p.orders || 0}${p.ordersTotal ? ` de ${p.ordersTotal}` : ''}`;
+  if (job.phase === 'labels') return `etiquetas sin venta: ${p.labels || 0}${p.labelsTotal ? ` de ${p.labelsTotal}` : ''}`;
+  return 'recalculando';
+}
+function JobStatus({ job, onRetry }) {
+  if (job?.status === 'running') return <small>Buscando envíos · {jobLabel(job)}</small>;
+  if (job?.status === 'error') return <small>No se pudo buscar: {job.error}{onRetry ? <> <button className={styles.link} onClick={onRetry}>Reintentar</button></> : null}</small>;
+  return onRetry ? <small><button className={styles.link} onClick={onRetry}>Buscar envíos de nuevo</button></small> : null;
+}
 function downloadSettlement({ settlement: s, items, adjustments }) {
   const url = URL.createObjectURL(new Blob([settlementMatrixCsv(settlementMatrix(items, ZONE_ORDER), adjustments)], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');
@@ -310,10 +344,12 @@ function SettlementMatrix({ matrix, adjustments, totalCents }) {
     </tfoot>
   </table></div>;
 }
-function SettlementDetail({ detail, canEdit, busy, onSave, onClose }) {
-  const { settlement:s, items, adjustments, totalCents } = detail;
+function SettlementDetail({ detail, job, canEdit, busy, onSave, onClose }) {
+  const { settlement:s, items, adjustments, totalCents, excluded = {} } = detail;
   const matrix = settlementMatrix(items, ZONE_ORDER);
   return <section className={`${styles.panel} ${styles.detail}`} id="settlement-detail"><div className={styles.actions}><h2>Liquidación #{s.id} · {statusNames[s.status]}</h2><button className="btn btn-primary btn-sm" disabled={!items.length} onClick={() => downloadSettlement(detail)}>Descargar Excel</button><a className="btn btn-ghost btn-sm" href={`/api${endpoint}?view=settlements&id=${s.id}&format=csv`}>Detalle por envío</a><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button></div><p className={styles.muted}>{items.length} entregados · {when(s.date_from)} al {when(s.date_to)} · Total {money(totalCents)}</p>
+    {job?.status === 'running' ? <div className={styles.notice} role="status">Buscando en Mercado Libre los envíos del período ({jobLabel(job)}). Te avisamos cuando esté lista; podés seguir usando la app.</div> : null}
+    {Object.keys(excluded).length ? <div className={styles.notice}><strong>Quedan afuera:</strong> {Object.entries(excluded).map(([reason, n]) => `${n} ${reason.toLowerCase()}`).join(' · ')}.{excluded['Sin tarifa'] ? ' Cargá el precio vigente desde el inicio del período en «Tarifas por zona».' : ''}</div> : null}
     {items.length ? <SettlementMatrix matrix={matrix} adjustments={adjustments} totalCents={totalCents} /> : <p className={styles.empty}>No hay envíos Flex entregados con tarifa para este transportista en el período.</p>}
     <details><summary className={styles.link}>Ver envío por envío ({items.length})</summary><ShipmentTable rows={items} /></details>
     {adjustments.map((a) => <p className={styles.muted} key={a.id}>Ajuste: {money(Number(a.amount_cents))} · {a.reason} · {when(a.created_at)}</p>)}

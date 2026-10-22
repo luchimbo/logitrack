@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { createFinanceRepository } from '@/lib/financeRepository';
 import { csv, validDate } from '@/lib/logisticsFinance';
+import { startSettlementFetch } from '@/lib/settlementFetch';
 
 export const dynamic = 'force-dynamic';
 const repository = createFinanceRepository(db);
@@ -64,6 +65,8 @@ export async function POST(request) {
     }
     if (input.action === 'draft') {
       const id = await repository.createSettlement(workspaceId, input, actorId);
+      // The period may predate the data already synced: search it in Mercado Libre in the background.
+      await startSettlementFetch(workspaceId, id);
       await logAudit({ workspaceId, appUserId: actorId, actorType: 'user', action: 'settlement.draft', entityType: 'carrier_settlement', entityId: id, metadata: input });
       return NextResponse.json({ ok: true, id });
     }

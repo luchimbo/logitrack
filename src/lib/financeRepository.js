@@ -282,7 +282,15 @@ export function createFinanceRepository(db) {
     const since = new Date(`${settlement.date_from}T12:00:00Z`); since.setUTCDate(since.getUTCDate() - 30);
     const [rates, result] = await Promise.all([listRates(workspaceId), execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day >= ? AND dispatch_day <= ?`,
       [workspaceId, since.toISOString().slice(0, 10), settlement.date_to])]);
-    return settlementCandidates(result.rows.map((row) => applyRates(JSON.parse(row.data_json), rates)), settlement.carrier_id, settlement.date_from, settlement.date_to);
+    const rows = result.rows.map((row) => applyRates(JSON.parse(row.data_json), rates));
+    const items = settlementCandidates(rows, settlement.carrier_id, settlement.date_from, settlement.date_to);
+    // What stays out and why: delivered without a rate, or labels Mercado Libre has not confirmed yet.
+    const own = rows.filter((r) => r.method === 'flex' && Number(r.carrierId) === Number(settlement.carrier_id) && !r.settlementId);
+    const inPeriod = (day) => day && day >= settlement.date_from && day <= settlement.date_to;
+    const left = own.filter((r) => !items.includes(r) && (r.state === 'delivered' ? inPeriod(r.deliveryDay) : !r.orderId && inPeriod(r.dispatchDay)));
+    const excluded = {};
+    for (const r of left) { const reason = r.state === 'delivered' ? r.missing || 'Sin importe' : 'Sin confirmación de Mercado Libre'; excluded[reason] = (excluded[reason] || 0) + 1; }
+    return { items, excluded };
   }
   async function settlementDetail(workspaceId, id, connection = db, { fast = false } = {}) {
     const query = (sql, args) => connection.execute({ sql, args });
@@ -290,14 +298,14 @@ export function createFinanceRepository(db) {
     const settlement = result.rows[0];
     if (!settlement) throw new Error('Liquidación no encontrada');
     const adjustments = (await query('SELECT * FROM carrier_settlement_adjustments WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows;
-    let items;
+    let items, excluded = {};
     if (settlement.status === 'draft') {
-      items = fast ? await snapshotCandidates(workspaceId, settlement) : settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
+      if (fast) ({ items, excluded } = await snapshotCandidates(workspaceId, settlement)); else items = settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
     } else {
       items = (await query('SELECT * FROM carrier_settlement_items WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows
         .map((r) => ({ ...parseJson(r.snapshot_json), amountCents: Number(r.amount_cents) }));
     }
-    return { settlement, items, adjustments, totalCents: items.reduce((n, i) => n + i.amountCents, 0) + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0) };
+    return { settlement, items, adjustments, excluded, totalCents: items.reduce((n, i) => n + i.amountCents, 0) + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0) };
   }
   async function createSettlement(workspaceId, input, actorId) {
     if (!validDate(input.from) || !validDate(input.to) || input.from > input.to) throw new Error('Período inválido');

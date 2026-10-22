@@ -276,6 +276,7 @@ test('closure freezes rate, snapshots responsibility and prevents duplicate sett
     const preview=await repo.settlementDetail(1,first,undefined,{fast:true}), full=await repo.settlementDetail(1,first);
     assert.deepEqual(preview.items.map(i=>[i.shipmentId,i.amountCents,i.zone,i.deliveryDay]),full.items.map(i=>[i.shipmentId,i.amountCents,i.zone,i.deliveryDay]));
     assert.equal(preview.totalCents,10000);
+    assert.deepEqual(preview.excluded,{});
     await repo.mutateSettlement(1,first,'close',{},7);
     assert.equal((await repo.settlementDetail(1,first)).totalCents,10000);
     await assert.rejects(repo.mutateSettlement(1,second,'close',{},7),/No hay entregados/);
