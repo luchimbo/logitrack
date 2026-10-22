@@ -1,8 +1,6 @@
 import { financeRecord, filterRecords, summarize, groupRecords, parseJson, validDate, settlementCandidates, shipmentSales, chooseRate, internalDispatchDay,
-  localDay, toCents, matchZipnovaToOrders } from './logisticsFinance.js';
-import { provinceKey } from './financeMap.js';
-import { zoneForPartido } from './zoneGroups.js';
-import { resolvePartidoFromGeo } from './zplParser.js';
+  localDay } from './logisticsFinance.js';
+import { tiendanubeFinanceRecords } from './tiendanubeFinance.js';
 import { ZONE_ORDER } from './zoneGroups.js';
 
 // Bound each database response, without capping the history used by totals.
@@ -33,10 +31,10 @@ async function readFinancePages(connection, sql, args, idColumn) {
 
 const LEAN_FIELDS = ['connectionId', 'shipmentId', 'orderId', 'method', 'partido', 'zone', 'carrierId', 'carrierName', 'dispatchDay', 'deliveryDay',
   'estimatedDay', 'state', 'stateLabel', 'delayed', 'overdue', 'incident', 'amountCents', 'missing', 'settlementId', 'salesCents', 'salesMissingCount',
-  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'zipnova', 'trackingNumber'];
+  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'shippingCollectedCents', 'trackingNumber', 'sellerId', 'recipient'];
 const SNAPSHOT_TTL_MS = 5 * 60_000;
 // Bump when the calculation changes, so stored summaries are rebuilt on next read.
-const SNAPSHOT_VERSION = 6;
+const SNAPSHOT_VERSION = 8;
 const rebuilding = new Map();
 // Flex amounts that come straight from the rate table are recomputed on read, so changing a rate never needs a rebuild.
 function leanRecord(r) {
@@ -75,8 +73,17 @@ export function createFinanceRepository(db) {
     // Prices are frozen per shipment on the next sync; recomputing every record here made saving very slow.
     return inserted;
   }
+  async function tiendanubeRecords(workspaceId, connection = db) {
+    const result = await readFinancePages(connection, `SELECT id, integration_connection_id, external_store_id, tiendanube_id,
+      status, payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatched_at_external,
+      contact_name, shipping_address_json, total, currency, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
+      FROM tiendanube_orders WHERE workspace_id = ?`, [workspaceId], 'id');
+    return tiendanubeFinanceRecords(result.rows);
+  }
   async function records(workspaceId, connection = db, identity = null) {
-    const [rates, result, unlinked, custom, zipnovaRows] = await Promise.all([
+    if (identity?.shipmentId?.startsWith('tn:')) return (await tiendanubeRecords(workspaceId, connection))
+      .filter((r) => r.shipmentId === identity.shipmentId && Number(r.connectionId) === Number(identity.connectionId));
+    const [rates, result, unlinked, custom, tiendanube] = await Promise.all([
       listRates(workspaceId, connection),
       readFinancePages(connection, `SELECT mo.id, mo.integration_connection_id, mo.shipment_id, mo.order_id,
         mo.user_id, mo.external_store_id, mo.logistic_type, mo.shipping_method, mo.shipment_status, mo.shipment_substatus,
@@ -110,8 +117,10 @@ export function createFinanceRepository(db) {
         s.shipping_method, s.dispatch_date, s.created_at, s.status AS internal_status, lb.date AS batch_date, c.id AS carrier_id, c.display_name AS carrier_display_name
         FROM shipments s LEFT JOIN daily_batches lb ON lb.id = s.batch_id AND lb.workspace_id = s.workspace_id
         LEFT JOIN carriers c ON c.workspace_id=0 AND (c.name=s.assigned_carrier OR CAST(c.id AS TEXT)=s.assigned_carrier)
-        WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta') AND NOT EXISTS (
-          SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND (mo.shipment_row_id=s.id OR (mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'') OR (mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')))`, [workspaceId], 's.id'),
+        WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta')
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_row_id=s.id)
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')`, [workspaceId], 's.id'),
       // Paid Mercado Libre sales with shipping "a coordinar": no ML shipment exists for them.
       identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT mo.id, mo.integration_connection_id, mo.order_id, mo.pack_id,
         mo.user_id, mo.external_store_id, mo.status, mo.currency, mo.total, mo.recipient_name, mo.buyer_nickname, mo.synced_at,
@@ -125,9 +134,7 @@ export function createFinanceRepository(db) {
           'order_items', json(COALESCE((SELECT json_group_array(json_object('quantity', json_extract(it.value, '$.quantity'),
             'sale_fee', json_extract(it.value, '$.sale_fee'))) FROM json_each(mo.raw_order_json, '$.order_items') it), '[]'))) ELSE NULL END AS raw_order_json
         FROM mercadolibre_orders mo WHERE mo.workspace_id = ? AND (mo.shipment_id IS NULL OR mo.shipment_id = '') AND mo.status = 'paid'`, [workspaceId], 'mo.id'),
-      identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT id, zipnova_id, created_date, status, status_name, province, city,
-        recipient_name, price, declared_value, carrier_name FROM zipnova_shipments WHERE workspace_id = ?`, [workspaceId], 'id')
-        .catch((error) => { if (/no such table/i.test(error.message)) return { rows: [] }; throw error; }),
+      identity ? Promise.resolve([]) : tiendanubeRecords(workspaceId, connection),
     ]);
     // Preserve the newest-copy rule for orders repeated across connections,
     // even when the matching rows arrived in different database pages.
@@ -151,10 +158,10 @@ export function createFinanceRepository(db) {
       return { ...record, connectionId: null, orderId: null, trackingNumber: row.tracking_number || '', stateLabel: 'Sin confirmación de Mercado Libre',
         salesCents: null, salesMissingCount: 0, paidOrderCount: 0 };
     });
-    return [...unique.values(), ...local, ...shippingToArrange(custom.rows, zipnovaRows.rows)].filter((r) => r.method !== 'other');
+    return [...unique.values(), ...local, ...shippingToArrange(custom.rows), ...tiendanube].filter((r) => r.method !== 'other');
   }
-  // Colecta outside Mercado Libre's own logistics: "a coordinar" sales and the Zipnova shipments that carry them.
-  function shippingToArrange(customRows, zipRows) {
+  // Mercado Libre a coordinar sales remain independent of Tiendanube checkout shipping.
+  function shippingToArrange(customRows) {
     const byOrder = new Map();
     for (const row of [...customRows].sort((a, b) => String(b.synced_at || '').localeCompare(String(a.synced_at || '')))) {
       const key = String(row.pack_id || row.order_id);
@@ -165,36 +172,12 @@ export function createFinanceRepository(db) {
       const first = rows[0];
       const orderDay = localDay(first.order_created || '');
       return { connectionId: Number(first.integration_connection_id), shipmentId: `order:${key}`, orderId: first.order_id, sellerId: first.user_id || first.external_store_id,
-        recipient: first.buyer_name || first.recipient_name || '', method: 'colecta', source: 'ml_custom', zipnova: false, partido: '', zone: '', province: '',
+        recipient: first.buyer_name || first.recipient_name || '', method: 'colecta', source: 'ml_custom', partido: '', zone: '', province: '',
         carrierId: null, carrierName: 'A coordinar', dispatchDay: orderDay, deliveryDay: '', estimatedDay: '', state: 'pending', stateLabel: 'Envío a coordinar',
         delayed: false, overdue: false, incident: false, history: [], amountCents: null, missing: 'Sin costo de envío (a coordinar)', settlementId: null,
         stale: false, buyerName: first.buyer_name || '', ...shipmentSales(rows) };
     });
-    const shipments = zipRows.map((row) => {
-      const partido = resolvePartidoFromGeo(row.city || '', row.province || '') || '';
-      const zone = zoneForPartido(partido) || '';
-      const status = String(row.status || '').toLowerCase();
-      const state = /cancel/.test(status) ? 'canceled' : /deliver|entreg/.test(status) ? 'delivered' : /ship|transit|camino/.test(status) ? 'in_transit' : 'pending';
-      const amountCents = toCents(row.price);
-      return { connectionId: null, shipmentId: `zipnova:${row.zipnova_id}`, orderId: null, sellerId: null, recipient: row.recipient_name || '',
-        method: 'colecta', source: 'zipnova', zipnova: true, partido, zone, province: zone === 'CABA' ? 'caba' : zone ? 'buenos_aires' : provinceKey(row.province || ''),
-        carrierId: null, carrierName: `Zipnova · ${row.carrier_name || 'sin transportista'}`, dispatchDay: validDate(row.created_date) ? row.created_date : '',
-        deliveryDay: '', estimatedDay: '', state, stateLabel: row.status_name || row.status || 'Zipnova', delayed: false, overdue: false, incident: false, history: [],
-        amountCents: amountCents && amountCents > 0 ? amountCents : null, missing: amountCents && amountCents > 0 ? '' : 'Costo no disponible', settlementId: null,
-        stale: false, salesCents: null, salesMissingCount: 0, paidOrderCount: 0, paidKnownOrderCount: 0, feesCents: null, feesMissingCount: 0, netCents: null,
-        declaredValue: row.declared_value };
-    });
-    const pairs = matchZipnovaToOrders(
-      shipments.map((s) => ({ recipientName: s.recipient, createdDay: s.dispatchDay, declaredValue: s.declaredValue })),
-      sales.map((s) => ({ buyerName: s.buyerName, recipientName: s.recipient, orderDay: s.dispatchDay, totalCents: s.salesCents })));
-    const linked = new Set();
-    for (const [zi, oi] of pairs) {
-      const zip = shipments[zi];
-      linked.add(zi);
-      Object.assign(sales[oi], { zipnova: true, amountCents: zip.amountCents, missing: zip.missing, partido: zip.partido, zone: zip.zone, province: zip.province,
-        carrierName: zip.carrierName, dispatchDay: zip.dispatchDay || sales[oi].dispatchDay, state: zip.state, stateLabel: zip.stateLabel, zipnovaId: zip.shipmentId });
-    }
-    return [...sales, ...shipments.filter((_, index) => !linked.has(index))];
+    return sales;
   }
   async function captureResponsibilities(workspaceId, identity = null) {
     const rows = await records(workspaceId, db, identity);
@@ -236,15 +219,18 @@ export function createFinanceRepository(db) {
     return job;
   }
   // Reads the precomputed snapshot. A missing snapshot is built once; an old one is refreshed after the response.
-  async function snapshotReport(workspaceId, filters, { refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
+  async function snapshotReport(workspaceId, filters, { refresh = false, scheduleRefresh = null, withTargets = false, withRows = false } = {}) {
     const readMeta = async () => (await execute('SELECT built_at, options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
     let meta = await readMeta();
     if (!meta || refresh || parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION) {
       await rebuildSnapshot(workspaceId);
       meta = await readMeta();
-    } else if (Date.now() - Date.parse(meta.built_at) > SNAPSHOT_TTL_MS) {
+    } else if (Date.now() - Date.parse(meta.built_at) > (parseJson(meta.options_json, {}).version !== SNAPSHOT_VERSION ? 60_000 : SNAPSHOT_TTL_MS)) {
+      // An old summary is still shown while the new one is built after the response. Only the request that
+      // claims the refresh rebuilds it, so many open pages do not rebuild at once.
+      const claimed = await execute('UPDATE finance_snapshot_meta SET built_at = ? WHERE workspace_id = ? AND built_at = ?', [new Date().toISOString(), workspaceId, meta.built_at]);
       const refreshJob = () => rebuildSnapshot(workspaceId).catch((error) => console.error('Finance snapshot refresh failed:', error.message));
-      if (scheduleRefresh) scheduleRefresh(refreshJob); else refreshJob();
+      if (Number(claimed.rowsAffected)) { if (scheduleRefresh) scheduleRefresh(refreshJob); else refreshJob(); }
     }
     const byDispatch = filters.dateBasis !== 'delivery';
     const conditions = ['workspace_id = ?'], args = [workspaceId];
@@ -258,7 +244,7 @@ export function createFinanceRepository(db) {
       const undated = await execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day = '' LIMIT 5000`, [workspaceId]);
       // Colecta shipments of the period still without Mercado Libre's cost go first: only the full detail brings it.
       const syncTargets = [...rows.filter((r) => r.method === 'colecta' && r.source === 'ml' && r.amountCents === null), ...undated.rows.map((row) => JSON.parse(row.data_json)), ...rows.filter((r) => r.stale)]
-        .filter((r) => r.orderId && r.connectionId && !['canceled'].includes(r.state))
+        .filter((r) => r.source !== 'tiendanube' && r.orderId && r.connectionId && !['canceled'].includes(r.state))
         .map((r) => ({ orderId: r.orderId, connectionId: r.connectionId }))
         .filter((r, i, list) => list.findIndex((o) => o.orderId === r.orderId && o.connectionId === r.connectionId) === i).slice(0, 5000);
       // Labels of the period never matched to a Mercado Libre order: their tracking number is the ML shipment id, which leads to the order.
@@ -266,16 +252,16 @@ export function createFinanceRepository(db) {
       targets = { syncTargets, labelTargets };
     }
     return { summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
-      byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: JSON.parse(meta.options_json), snapshotAt: meta.built_at, ...targets, dispatchMonths: months.rows.map((row) => ({ month: row.month, count: Number(row.n) })) };
+      byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: JSON.parse(meta.options_json), snapshotAt: meta.built_at, ...targets, ...(withRows ? { rows: rows.sort((a, b) => String(b.dispatchDay || '').localeCompare(String(a.dispatchDay || ''))) } : {}), dispatchMonths: months.rows.map((row) => ({ month: row.month, count: Number(row.n) })) };
   }
-  async function report(workspaceId, filters, { compact = false, refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
-    if (compact) {
-      try { return await snapshotReport(workspaceId, filters, { refresh, scheduleRefresh, withTargets }); }
+  async function report(workspaceId, filters, { compact = false, withRows = false, refresh = false, scheduleRefresh = null, withTargets = false } = {}) {
+    if (compact || withRows) {
+      try { return await snapshotReport(workspaceId, filters, { refresh, scheduleRefresh, withTargets, withRows }); }
       catch (error) { console.error('Finance snapshot unavailable, using full calculation:', error.message); }
     }
     const all = await records(workspaceId);
     const rows = filterRecords(all, filters);
-    return { ...(compact ? {} : { rows }), summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
+    return { ...(compact && !withRows ? {} : { rows }), summary: summarize(rows), byZone: groupRecords(rows, 'zone'), byPartido: groupRecords(rows, 'partido'), byProvince: groupRecords(rows, 'province'),
       byCarrier: groupRecords(rows.filter((r) => r.method === 'flex'), 'carrierName'), options: {
         parties: [...new Set(all.map((r) => r.partido).filter(Boolean))].sort(),
         connections: [...new Set(all.map((r) => r.connectionId).filter(Boolean))],
@@ -289,20 +275,37 @@ export function createFinanceRepository(db) {
       COALESCE((SELECT SUM(a.amount_cents) FROM carrier_settlement_adjustments a WHERE a.settlement_id = l.id),0) AS adjustments_cents
       FROM carrier_settlements l LEFT JOIN carriers c ON c.id = l.carrier_id WHERE l.workspace_id = ? ORDER BY l.id DESC`, [workspaceId])).rows;
   }
-  async function settlementDetail(workspaceId, id, connection = db) {
+  // Draft preview from the precomputed snapshot: reading every order again takes too long for an interactive request.
+  async function snapshotCandidates(workspaceId, settlement) {
+    const meta = (await execute('SELECT options_json FROM finance_snapshot_meta WHERE workspace_id = ?', [workspaceId])).rows[0];
+    if (!meta) await rebuildSnapshot(workspaceId);
+    const since = new Date(`${settlement.date_from}T12:00:00Z`); since.setUTCDate(since.getUTCDate() - 30);
+    const [rates, result] = await Promise.all([listRates(workspaceId), execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day >= ? AND dispatch_day <= ?`,
+      [workspaceId, since.toISOString().slice(0, 10), settlement.date_to])]);
+    const rows = result.rows.map((row) => applyRates(JSON.parse(row.data_json), rates));
+    const items = settlementCandidates(rows, settlement.carrier_id, settlement.date_from, settlement.date_to);
+    // What stays out and why: delivered without a rate, or labels Mercado Libre has not confirmed yet.
+    const own = rows.filter((r) => r.method === 'flex' && Number(r.carrierId) === Number(settlement.carrier_id) && !r.settlementId);
+    const inPeriod = (day) => day && day >= settlement.date_from && day <= settlement.date_to;
+    const left = own.filter((r) => !items.includes(r) && (r.state === 'delivered' ? inPeriod(r.deliveryDay) : !r.orderId && inPeriod(r.dispatchDay)));
+    const excluded = {};
+    for (const r of left) { const reason = r.state === 'delivered' ? r.missing || 'Sin importe' : 'Sin confirmación de Mercado Libre'; excluded[reason] = (excluded[reason] || 0) + 1; }
+    return { items, excluded };
+  }
+  async function settlementDetail(workspaceId, id, connection = db, { fast = false } = {}) {
     const query = (sql, args) => connection.execute({ sql, args });
-    const result = await query('SELECT * FROM carrier_settlements WHERE workspace_id = ? AND id = ?', [workspaceId, id]);
+    const result = await query('SELECT l.*, c.display_name AS carrier_name FROM carrier_settlements l LEFT JOIN carriers c ON c.id = l.carrier_id WHERE l.workspace_id = ? AND l.id = ?', [workspaceId, id]);
     const settlement = result.rows[0];
     if (!settlement) throw new Error('Liquidación no encontrada');
     const adjustments = (await query('SELECT * FROM carrier_settlement_adjustments WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows;
-    let items;
+    let items, excluded = {};
     if (settlement.status === 'draft') {
-      items = settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
+      if (fast) ({ items, excluded } = await snapshotCandidates(workspaceId, settlement)); else items = settlementCandidates(await records(workspaceId, connection), settlement.carrier_id, settlement.date_from, settlement.date_to);
     } else {
       items = (await query('SELECT * FROM carrier_settlement_items WHERE workspace_id = ? AND settlement_id = ? ORDER BY id', [workspaceId, id])).rows
         .map((r) => ({ ...parseJson(r.snapshot_json), amountCents: Number(r.amount_cents) }));
     }
-    return { settlement, items, adjustments, totalCents: items.reduce((n, i) => n + i.amountCents, 0) + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0) };
+    return { settlement, items, adjustments, excluded, totalCents: items.reduce((n, i) => n + i.amountCents, 0) + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0) };
   }
   async function createSettlement(workspaceId, input, actorId) {
     if (!validDate(input.from) || !validDate(input.to) || input.from > input.to) throw new Error('Período inválido');
@@ -316,7 +319,7 @@ export function createFinanceRepository(db) {
       const detail = await settlementDetail(workspaceId, id, tx);
       const s = detail.settlement;
       if (action === 'close') {
-        if (s.status !== 'draft') throw new Error('Solo se pueden cerrar borradores');
+        if (s.status !== 'draft') throw new Error('Esta liquidación ya está cerrada');
         if (!detail.items.length) throw new Error('No hay entregados con tarifa completa para liquidar');
         for (const item of detail.items) await tx.execute({
           sql: `INSERT INTO carrier_settlement_items(settlement_id,workspace_id,connection_id,shipment_id,amount_cents,snapshot_json) VALUES(?,?,?,?,?,?)`,

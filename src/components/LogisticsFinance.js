@@ -2,22 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { api } from '@/lib/api';
+import { api, toast } from '@/lib/api';
 import { ZONE_ORDER } from '@/lib/zoneGroups';
 import { partidoLabel, provinceLabel } from '@/lib/financeMap';
-import { STATE_LABELS, toCents, deliveryEventLabel } from '@/lib/logisticsFinance';
+import { STATE_LABELS, toCents, deliveryEventLabel, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '@/lib/logisticsFinance';
 import { getArgentinaDateString, formatArgentinaDateTime } from '@/lib/dateUtils';
 import styles from './LogisticsFinance.module.css';
 
 const money = (cents) => cents === null || cents === undefined ? '—' : new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(cents / 100);
 const percent = (value) => value === null || value === undefined ? '—' : `${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(value)} %`;
 const when = (value) => !value ? 'No disponible' : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split('-').reverse().join('/') : formatArgentinaDateTime(value);
-const statusNames = { draft: 'Borrador', closed: 'Cerrada', paid: 'Pagada' };
+const statusNames = { draft: 'Abierta', closed: 'Cerrada', paid: 'Pagada' };
 const keyOf = (r) => `${r.connectionId}:${r.shipmentId}`;
 const endpoint = '/logistics-finance';
 const blankMap = (level) => ({ selection: [], partidos: [], mode: 'zone', provinces: [], level });
 // The last map summary of each query is kept in this browser, so the page opens with numbers while it refreshes.
-const cacheKey = (workspaceId, query) => `geomodi-finance-map:${workspaceId ?? ''}:${query}`;
+const cacheKey = (workspaceId, query) => `geomodi-finance-map:v8:${workspaceId ?? ''}:${query}`;
 function readCache(key) { try { return JSON.parse(window.localStorage.getItem(key) || 'null'); } catch { return null; } }
 function writeCache(key, data) { try { window.localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data })); } catch { /* Storage full or blocked: the page still works. */ } }
 const FinanceMapDashboard = dynamic(() => import('./FinanceMapDashboard'), { loading: () => <div role="status">Cargando mapa…</div> });
@@ -66,12 +66,12 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
     }
     setRefreshing(true);
     try {
-      const data = await api(`${endpoint}?${query}${mapView ? '&view=map' : ''}${force === true ? '&refresh=1' : ''}`);
+      const data = await api(`${endpoint}?${query}${mapView ? '&view=map' : delivery ? '' : '&view=detail'}${force === true ? '&refresh=1' : ''}`);
       if (id === sequence.current) { setReport({ ...data, queryKey }); setError(''); setLoading(false); setRefreshing(false); }
       if (mapView) writeCache(key, data);
       return data;
     } catch (err) { if (id === sequence.current) { setError(err.message); setLoading(false); setRefreshing(false); } return null; }
-  }, [query, mapView, workspaceId]);
+  }, [query, mapView, workspaceId, delivery]);
   const loadConfig = useCallback(async () => {
     const [r, c, s] = await Promise.all([api(`${endpoint}?view=rates`), api('/carriers'), api(`${endpoint}?view=settlements`)]);
     setRates(r.rates); setCarriers(c); setSettlements(s.settlements);
@@ -86,12 +86,53 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
       const result = await api(endpoint, { method: 'POST', body: JSON.stringify(input) });
       // Rates only change the rates list right away; the heavy report refreshes in the background.
       if (input.action === 'rates') { load(); await loadConfig(); } else await Promise.all([load(), loadConfig()]);
+      if (input.action === 'draft') window.dispatchEvent(new Event('settlement-jobs-refresh'));
       if (input.id || result.id) setDetail(await api(`${endpoint}?view=settlements&id=${input.id || result.id}`));
       setMessage('Cambios guardados.');
       return true;
     } catch (err) { setError(err.message); return false; } finally { setBusy(false); }
   };
-  const openSettlement = async (id) => { setError(''); try { setDetail(await api(`${endpoint}?view=settlements&id=${id}`)); } catch (err) { setError(err.message); } };
+  const [opening, setOpening] = useState(null);
+  const [jobs, setJobs] = useState({});
+  const jobsRef = useRef({}), detailIdRef = useRef(null);
+  detailIdRef.current = detail?.settlement.id ?? null;
+  useEffect(() => {
+    const onJobs = (e) => {
+      const prev = jobsRef.current, next = Object.fromEntries(e.detail.map((j) => [j.settlementId, j]));
+      const ended = Object.values(prev).filter((j) => j.status === 'running' && next[j.settlementId]?.status !== 'running').map((j) => j.settlementId);
+      jobsRef.current = next; setJobs(next);
+      // A search that just ended refreshes the list and the open settlement.
+      if (ended.length) {
+        loadConfig().catch(() => {});
+        if (ended.includes(detailIdRef.current)) api(`${endpoint}?view=settlements&id=${detailIdRef.current}`).then(setDetail).catch(() => {});
+      }
+    };
+    window.addEventListener('settlement-jobs', onJobs);
+    return () => window.removeEventListener('settlement-jobs', onJobs);
+  }, [loadConfig]);
+  const searchAgain = async (id) => {
+    setSettlementError('');
+    // Shown at once, before the server confirms: the search starts in the next few seconds.
+    const running = { settlementId: id, status: 'running', phase: 'orders', progress: {} };
+    jobsRef.current = { ...jobsRef.current, [id]: running }; setJobs(jobsRef.current);
+    try {
+      await api(`${endpoint}/jobs`, { method: 'POST', body: JSON.stringify({ action: 'fetch', id }) });
+      toast(`Buscando los envíos de la liquidación #${id}. Te avisamos cuando esté lista.`, 'info', 6000);
+      window.dispatchEvent(new Event('settlement-jobs-refresh'));
+    } catch (err) {
+      const { [id]: _, ...rest } = jobsRef.current; jobsRef.current = rest; setJobs(rest);
+      setSettlementError(`No se pudo iniciar la búsqueda de la liquidación #${id}: ${err.message}`);
+    }
+  };
+  const [settlementError, setSettlementError] = useState('');
+  // Opens a settlement, or downloads its day × zone table straight away.
+  const openSettlement = async (id, then = 'show') => { // then: show | download | detail
+    setSettlementError(''); setOpening(`${then}:${id}`);
+    try {
+      const data = await api(`${endpoint}?view=settlements&id=${id}`);
+      if (then !== 'show') downloadSettlement(data, then === 'detail'); else { setDetail(data); setTimeout(() => document.getElementById('settlement-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
+    } catch (err) { setSettlementError(`No se pudo abrir la liquidación #${id}: ${err.message}`); } finally { setOpening(null); }
+  };
   // Pulls every Mercado Libre order of the period (with its sale amount and fees), page by page with real progress.
   const syncOrders = async () => {
     const plan = await api(`${endpoint}/sync`, { method: 'POST', body: JSON.stringify({ mode: 'plan' }) });
@@ -112,15 +153,15 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
       totals.found += total ?? offset;
       setProgress({ label: `Ventas de Mercado Libre · ${saved} órdenes guardadas`, done: total ?? offset, total: total ?? offset });
     }
-    // Zipnova shipments ("a coordinar" sales): their cost is Zipnova's price.
-    const zipFrom = filters.from ? day(filters.from, -1) : '', zipTo = filters.to ? day(filters.to, 1) : '';
-    for (let page = 1; page <= 200; page++) {
-      setProgress({ label: 'Envíos de Zipnova', done: page - 1, total: totals.zipnovaPages || 0 });
-      const result = await api(`${endpoint}/sync`, { method: 'POST', body: JSON.stringify({ mode: 'zipnova', page, from: zipFrom, to: zipTo }) });
-      if (result.skipped) break;
-      totals.zipnova = (totals.zipnova || 0) + result.synced;
-      totals.zipnovaPages = result.lastPage || 0;
-      if (result.done) break;
+    for (const account of plan.tiendanubeConnections || []) {
+      let page = 1;
+      while (true) {
+        setProgress({ label: 'Pedidos y envíos cobrados · Tiendanube', done: (page - 1) * 50, total: null });
+        const result = await api(`${endpoint}/sync`, { method: 'POST', body: JSON.stringify({ mode: 'tiendanube', connectionId: account.connectionId, page }) });
+        totals.tiendanube = (totals.tiendanube || 0) + result.synced;
+        if (result.done) break;
+        page = result.nextPage;
+      }
     }
     return totals;
   };
@@ -149,9 +190,9 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
           source = await api(`${endpoint}?${query}&view=targets`);
         }
       }
-      const rows = (source?.rows || source?.syncTargets || []).filter((r) => r.orderId && r.connectionId);
+      const rows = (source?.rows || source?.syncTargets || []).filter((r) => r.source !== 'tiendanube' && !String(r.shipmentId || '').startsWith('tn:') && r.orderId && r.connectionId);
       if (!rows.length && !mapView) { setMessage('No hay envíos pendientes de actualizar desde Mercado Libre.'); return; }
-      const orderNote = orderTotals ? `Mercado Libre devolvió ${orderTotals.found} órdenes del período: ${orderTotals.saved} guardadas${orderTotals.failed ? `, ${orderTotals.failed} con error` : ''}.${orderTotals.zipnova ? ` Zipnova: ${orderTotals.zipnova} envíos.` : ''}${orderTotals.labels ? ` Etiquetas sin venta: ${orderTotals.labels.found} de ${orderTotals.labels.total} encontradas en Mercado Libre.` : ''} ` : '';
+      const orderNote = orderTotals ? `Mercado Libre devolvió ${orderTotals.found} órdenes del período: ${orderTotals.saved} guardadas${orderTotals.failed ? `, ${orderTotals.failed} con error` : ''}.${orderTotals.tiendanube ? ` Tiendanube: ${orderTotals.tiendanube} pedidos.` : ''}${orderTotals.labels ? ` Etiquetas sin venta: ${orderTotals.labels.found} de ${orderTotals.labels.total} encontradas en Mercado Libre.` : ''} ` : '';
       if (orderNote) setMessage(`${orderNote}Completando el detalle de ${rows.length} envíos…`);
       // Three batches of 10 at a time, newest shipments first.
       let next = 0, done = 0;
@@ -174,7 +215,7 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
   const selectedRow = rows.find((r) => keyOf(r) === selected);
   const shown = rows.slice((page - 1) * 50, page * 50);
   return <div className={`section ${styles.page}`}>
-    <header className={styles.header}><div><p className={styles.eyebrow}>{delivery ? 'Seguimiento · Mercado Libre' : 'Administración · ARS'}</p><h1>{delivery ? 'Control de entregas' : mapView ? 'Ventas y costos por zona' : 'Ventas, costos y liquidaciones'}</h1><p>{delivery ? 'Cada envío, su plazo y sus incidencias. Los datos se consultan localmente cada 60 segundos.' : mapView ? 'Elegí un período y seleccioná zonas. El resumen se calcula automáticamente.' : 'Ventas y gasto logístico por zona y partido. Tarifas Flex y liquidaciones de transportistas.'}</p></div><div className={styles.actions}><button className="btn btn-primary" disabled={busy || loading} onClick={sync}>{busy ? 'Actualizando…' : mapView ? 'Actualizar datos' : 'Actualizar desde Mercado Libre'}</button><a className="btn btn-ghost" href={`/api${endpoint}?${exportQuery}&format=csv`}>Exportar CSV</a></div></header>
+    <header className={styles.header}><div><p className={styles.eyebrow}>{delivery ? 'Seguimiento · Mercado Libre' : 'Administración · ARS'}</p><h1>{delivery ? 'Control de entregas' : mapView ? 'Ventas y costos por zona' : 'Ventas, costos y liquidaciones'}</h1><p>{delivery ? 'Cada envío, su plazo y sus incidencias. Los datos se consultan localmente cada 60 segundos.' : mapView ? 'Elegí un período y seleccioná zonas. El resumen se calcula automáticamente.' : 'Ventas y gasto logístico por zona y partido. Tarifas Flex y liquidaciones de transportistas.'}</p></div><div className={styles.actions}><button className="btn btn-primary" disabled={busy || loading} onClick={sync}>{busy ? 'Actualizando…' : mapView ? 'Actualizar datos' : 'Actualizar desde Mercado Libre'}</button><a className="btn btn-ghost" href={`/api${endpoint}?${exportQuery}${delivery ? '' : '&view=detail'}&format=csv`}>Exportar CSV</a></div></header>
     {progress ? <div className={styles.progress} role="status" aria-live="polite"><div className={styles.progressTop}><strong>{progress.label}</strong><span>{progress.total ? `${Math.min(progress.done, progress.total)} de ${progress.total}` : `${progress.done}…`}</span></div><div className={styles.progressTrack}><span style={{ width: progress.total ? `${Math.min(100, Math.round(progress.done / progress.total * 100))}%` : '8%' }} /></div></div> : null}
     {error ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{error}</div> : null}
     {message ? <div role="status" className={styles.notice}>{message}</div> : null}
@@ -188,16 +229,16 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
       <div className={styles.metrics}>{delivery ? <>
         <Metric label="Envíos" value={summary.count || 0} note="En la selección" /><Metric label="Con demora" value={summary.delayed || 0} note="Informada por ML o plazo vencido" /><Metric label="Incidencias" value={summary.incidents || 0} note="Intentos fallidos y problemas" /><Metric label="Entregados" value={rows.filter((r) => r.state === 'delivered').length} note="Confirmados por Mercado Libre" />
       </> : <><Metric label="Gasto conocido" value={money(summary.totalCents)} note={`${summary.knownCount || 0} envíos con importe`} /><Metric label="Envíos" value={summary.count || 0} note="En la selección" /><Metric label="Sin costo" value={summary.missingCount || 0} note="Importes pendientes" /><Metric label="Promedio por envío" value={money(summary.averageCents)} note="Solo envíos con importe conocido" /></>}</div>
-      {!delivery ? <><div className={styles.metrics}><Metric label="Ventas brutas pagadas" value={money(summary.salesCents)} note={`${summary.paidOrderCount || 0} pedidos pagados · ARS`} /><Metric label="Gasto / ventas" value={percent(summary.logisticsPercent)} note={`${summary.comparableCount || 0} envíos con ventas y costo completos`} /><Metric label="Flex" value={money(summary.flexCents)} note="Gasto logístico Flex" /><Metric label="Colecta" value={money(summary.colectaCents)} note="Gasto logístico Colecta" /></div><p className={styles.muted}>Ventas brutas de pedidos pagados de Mercado Libre, agrupadas por el despacho de sus envíos. No descuentan comisiones, impuestos ni devoluciones parciales. {summary.salesMissingCount || 0} pedidos con venta no computable; {summary.salesUnavailableCount || 0} envíos sin importe de venta. El porcentaje usa solo envíos con ventas y costo completos.</p></> : null}
+      {!delivery ? <><div className={styles.metrics}><Metric label="Ventas brutas pagadas" value={money(summary.salesCents)} note={`${summary.paidOrderCount || 0} pedidos pagados · ARS`} /><Metric label="Gasto / ventas" value={percent(summary.logisticsPercent)} note={`${summary.comparableCount || 0} envíos con ventas y costo completos`} /><Metric label="Flex" value={money(summary.flexCents)} note="Gasto logístico Flex" /><Metric label="Colecta" value={money(summary.colectaCents)} note="Gasto logístico Colecta" /></div><p className={styles.muted}>Ventas de mercadería de pedidos pagados de Mercado Libre y Tiendanube, agrupadas por despacho. El envío cobrado en Tiendanube se muestra separado. No descuentan comisiones, impuestos ni devoluciones parciales. {summary.salesMissingCount || 0} pedidos con venta no computable; {summary.salesUnavailableCount || 0} envíos sin importe de venta. El porcentaje usa solo envíos con ventas y costo completos.</p></> : null}
       {!delivery ? <div className={styles.notice}><strong>{summary.count || 0} envíos · {summary.missingCount || 0} sin importe.</strong> Flex en curso: {money(summary.estimatedFlexCents)}. Entregados aún sin liquidar: {money(summary.payableFlexCents)}. Son partes del gasto Flex, no importes adicionales.{report?.options.noDispatchCount ? <p>{report.options.noDispatchCount} envíos sin despacho confirmado en el espacio ({report.options.unmatchedCount} sin vínculo con Mercado Libre). Quitá el período para revisarlos.</p> : null}</div> : null}
       {!delivery ? <div className={styles.breakdown}><GroupTable title={filters.zone ? `Partidos · ${filters.zone === '__missing__' ? 'Sin zona' : filters.zone}` : 'Por zona'} groups={filters.zone ? report?.byPartido : report?.byZone} onChoose={(name) => change(filters.zone ? 'partido' : 'zone', name === 'Sin dato' ? '__missing__' : name)} /><GroupTable title="Transportistas Flex" groups={report?.byCarrier} onChoose={(name) => { const carrier = carriers.find((c) => (c.display_name || c.name) === name); change('carrierId', carrier ? String(carrier.id) : '__missing__'); }} /></div> : null}
       <section className={styles.panel}><h2>{delivery ? 'Seguimiento de envíos' : filters.partido ? `Envíos · ${filters.partido === '__missing__' ? 'Sin partido' : filters.partido.replaceAll('_',' ')}` : 'Detalle de envíos'}</h2>{loading || !report ? <div className={styles.empty} role="status">Cargando envíos…</div> : <ShipmentTable rows={shown} delivery={delivery} onSelect={(r) => setSelected(keyOf(r))} />}<div className={styles.footer}><span>{rows.length} envíos · página {page} de {Math.max(1, Math.ceil(rows.length / 50))}</span><div className={styles.actions}><button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><button className="btn btn-ghost btn-sm" disabled={page * 50 >= rows.length} onClick={() => setPage(page + 1)}>Siguiente</button></div></div></section>
-      {selectedRow ? <ShipmentDetail row={selectedRow} onClose={() => setSelected(null)} /> : null}
+      {selectedRow ? <ShipmentDetail key={keyOf(selectedRow)} row={selectedRow} full={delivery} onClose={() => setSelected(null)} /> : null}
     </> : null}
     {!delivery && tab === 'rates' ? <RatesPanel carriers={carriers} rates={rates} canEdit={canEdit} busy={busy} onSave={mutate} /> : null}
     {!delivery && tab === 'settlements' ? <>
-      <section className={styles.panel}><h2>Liquidaciones por transportista</h2><p className={styles.muted}>Período según fecha de entrega confirmada por Mercado Libre. El borrador se vuelve a calcular al cerrar.</p>{canEdit ? <DraftForm carriers={carriers} busy={busy} onSave={mutate} /> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Número</th><th>Transportista</th><th>Entregas entre</th><th>Estado</th><th className={styles.number}>Importe cerrado + ajustes</th><th /></tr></thead><tbody>{settlements.map((s) => <tr key={s.id}><td>#{s.id}</td><td>{s.carrier_name}</td><td>{when(s.date_from)} — {when(s.date_to)}</td><td><span className={styles.badge}>{statusNames[s.status]}</span></td><td className={styles.number}>{s.status === 'draft' ? 'Ver borrador' : money(Number(s.total_cents) + Number(s.adjustments_cents))}</td><td><button className={styles.link} onClick={() => openSettlement(s.id)}>Revisar</button></td></tr>)}</tbody></table>{!settlements.length ? <p className={styles.empty}>Todavía no hay liquidaciones.</p> : null}</div></section>
-      {detail ? <SettlementDetail detail={detail} canEdit={canEdit} busy={busy} onSave={mutate} onClose={() => setDetail(null)} /> : null}
+      <section className={styles.panel}><h2>Liquidaciones por transportista</h2><p className={styles.muted}>Período según fecha de entrega confirmada por Mercado Libre. Mientras está abierta se recalcula con cada entrega nueva; al cerrarla queda fija.</p>{canEdit ? <DraftForm carriers={carriers} busy={busy} onSave={mutate} /> : null}<div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Número</th><th>Transportista</th><th>Entregas entre</th><th>Estado</th><th className={styles.number}>Importe cerrado + ajustes</th><th /></tr></thead><tbody>{settlements.map((s) => <tr key={s.id}><td>#{s.id}</td><td>{s.carrier_name}</td><td>{when(s.date_from)} — {when(s.date_to)}</td><td><span className={styles.badge}>{statusNames[s.status]}</span><JobStatus job={jobs[s.id]} onRetry={canEdit && s.status === 'draft' ? () => searchAgain(s.id) : null} /></td><td className={styles.number}>{s.status === 'draft' ? '—' : money(Number(s.total_cents) + Number(s.adjustments_cents))}</td><td><div className={styles.actions}><button className="btn btn-primary btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id, 'download')} title="Cuadro por día y zona">{opening === `download:${s.id}` ? 'Preparando…' : 'Resumen'}</button><button className="btn btn-ghost btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id, 'detail')} title="Envío por envío">{opening === `detail:${s.id}` ? 'Preparando…' : 'Detalle'}</button><button className="btn btn-ghost btn-sm" disabled={Boolean(opening)} onClick={() => openSettlement(s.id)}>{opening === `show:${s.id}` ? 'Abriendo…' : 'Revisar'}</button></div></td></tr>)}</tbody></table>{!settlements.length ? <p className={styles.empty}>Todavía no hay liquidaciones.</p> : null}</div>{settlementError ? <div role="alert" className={`${styles.notice} ${styles.error}`}>{settlementError}</div> : null}</section>
+      {detail ? <SettlementDetail job={jobs[detail.settlement.id]} detail={detail} canEdit={canEdit} busy={busy} onSave={mutate} onClose={() => setDetail(null)} /> : null}
     </> : null}
   </div>;
 }
@@ -206,7 +247,7 @@ function Metric({ label, value, note }) { return <div className={styles.metric}>
 function Select({ label, value, onChange, options, all = 'Todos' }) { return <label>{label}<select value={value || ''} onChange={(e) => onChange(e.target.value)}><option value="">{all}</option>{options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select></label>; }
 function Filters({ filters, change, carriers, report, delivery }) {
   return <div className={styles.filters}><label>Despacho desde<input type="date" value={filters.from || ''} onChange={(e) => change('from', e.target.value)} /></label><label>Despacho hasta<input type="date" value={filters.to || ''} onChange={(e) => change('to', e.target.value)} /></label>
-    <Select label="Cuenta Mercado Libre" value={filters.connectionId} onChange={(v) => change('connectionId', v)} options={(report?.options.connections || []).map((id) => { const seller = report.rows.find((r) => r.connectionId === id)?.sellerId; return [id, seller ? `Vendedor ${seller}` : `Conexión ${id}`]; })} />
+    <Select label="Cuenta" value={filters.connectionId} onChange={(v) => change('connectionId', v)} options={(report?.options.connections || []).map((id) => { const seller = report.rows.find((r) => r.connectionId === id)?.sellerId; return [id, seller ? `Cuenta ${seller}` : `Conexión ${id}`]; })} />
     <Select label="Modalidad" value={filters.method} onChange={(v) => change('method', v)} options={['flex','colecta'].map((v) => [v, v === 'flex' ? 'Flex' : 'Colecta'])} />
     <Select label="Transportista" value={filters.carrierId} onChange={(v) => change('carrierId', v)} options={[...carriers.map((c) => [c.id, c.display_name || c.name]), ['__missing__','Sin transportista']]} />
     <Select label="Zona" value={filters.zone} onChange={(v) => change('zone', v)} options={[...ZONE_ORDER.map((v) => [v,v]), ['__missing__','Sin zona']]} />
@@ -217,9 +258,18 @@ function Filters({ filters, change, carriers, report, delivery }) {
 }
 function GroupTable({ title, groups = [], onChoose }) { return <section className={styles.panel}><h2>{title}</h2><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Grupo</th><th className={styles.number}>Envíos</th><th className={styles.number}>Ventas brutas</th><th className={styles.number}>Gasto conocido</th><th className={styles.number}>Gasto / ventas</th><th className={styles.number}>Sin costo / venta</th></tr></thead><tbody>{groups.map((g) => <tr key={g.name}><td><button className={styles.link} onClick={() => onChoose(g.name)}>{g.name.replaceAll('_',' ')}</button></td><td className={styles.number}>{g.count}</td><td className={styles.number}>{money(g.salesCents)}<small>{g.paidOrderCount || 0} pedidos pagados</small></td><td className={styles.number}>{money(g.totalCents)}</td><td className={styles.number}>{percent(g.logisticsPercent)}</td><td className={styles.number}>{g.missingCount} / {g.salesUnavailableCount || 0}</td></tr>)}</tbody></table>{!groups.length ? <p className={styles.empty}>Sin envíos para estos filtros.</p> : null}</div></section>; }
 function ShipmentTable({ rows, delivery = false, onSelect = null }) {
-  return <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Envío / comprador</th><th>Modalidad / transportista</th><th>Zona / partido</th><th>Estado</th>{delivery ? <><th>Entrega estimada</th><th>Entrega real</th><th>Última consulta completa</th></> : <><th>Despacho</th><th className={styles.number}>Ventas brutas</th><th className={styles.number}>Gasto</th></>}<th /></tr></thead><tbody>{rows.map((r) => <tr key={keyOf(r)}><td>{r.shipmentId}<small>{r.recipient}</small></td><td>{r.method === 'flex' ? 'Flex' : 'Colecta'}<small>{r.carrierName || 'Sin transportista propio'}</small></td><td>{r.zone || 'Sin zona'}<small>{r.partido?.replaceAll('_',' ') || 'Sin partido'}</small></td><td><span className={`${styles.badge} ${r.state === 'delivered' ? styles.success : ''}`}>{r.stateLabel}</span>{r.delayed ? <span className={`${styles.badge} ${styles.warning}`}>Demora informada por ML</span> : null}{r.overdue ? <span className={`${styles.badge} ${styles.warning}`}>Plazo vencido</span> : null}{delivery && r.history[0] ? <small>{deliveryEventLabel(r.history[0])} · {when(r.history[0].date)}</small> : null}{r.stale ? <small>Datos desactualizados</small> : null}</td>{delivery ? <><td>{when(r.estimatedDay)}</td><td>{when(r.deliveredAt)}</td><td>{when(r.syncedAt)}</td></> : <><td>{when(r.dispatchDay)}</td><td className={styles.number}>{money(r.salesCents)}<small>{r.paidOrderCount || 0} pedidos pagados{r.salesMissingCount ? ` · ${r.salesMissingCount} sin computar` : ""}</small></td><td className={styles.number}>{money(r.amountCents)}<small>{r.missing || (r.settlementId ? `Liquidación #${r.settlementId}` : '')}</small></td></>}<td>{onSelect ? <button className={styles.link} onClick={() => onSelect(r)}>Detalle</button> : null}</td></tr>)}</tbody></table>{!rows.length ? <p className={styles.empty}>No hay envíos para esta selección.</p> : null}</div>;
+  return <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Envío / comprador</th><th>Modalidad / transportista</th><th>Zona / partido</th><th>Estado</th>{delivery ? <><th>Entrega estimada</th><th>Entrega real</th><th>Última consulta completa</th></> : <><th>Despacho</th><th className={styles.number}>Ventas brutas</th><th className={styles.number}>Envío cobrado TN</th><th className={styles.number}>Gasto</th></>}<th /></tr></thead><tbody>{rows.map((r) => <tr key={keyOf(r)}><td>{r.shipmentId}<small>{r.recipient}</small></td><td>{r.method === 'flex' ? 'Flex' : 'Colecta'}<small>{r.carrierName || 'Sin transportista propio'}</small></td><td>{r.zone || 'Sin zona'}<small>{r.partido?.replaceAll('_',' ') || 'Sin partido'}</small></td><td><span className={`${styles.badge} ${r.state === 'delivered' ? styles.success : ''}`}>{r.stateLabel}</span>{r.delayed ? <span className={`${styles.badge} ${styles.warning}`}>Demora informada por ML</span> : null}{r.overdue ? <span className={`${styles.badge} ${styles.warning}`}>Plazo vencido</span> : null}{delivery && r.history[0] ? <small>{deliveryEventLabel(r.history[0])} · {when(r.history[0].date)}</small> : null}{r.stale ? <small>Datos desactualizados</small> : null}</td>{delivery ? <><td>{when(r.estimatedDay)}</td><td>{when(r.deliveredAt)}</td><td>{when(r.syncedAt)}</td></> : <><td>{when(r.dispatchDay)}</td><td className={styles.number}>{money(r.salesCents)}<small>{r.paidOrderCount || 0} pedidos pagados{r.salesMissingCount ? ` · ${r.salesMissingCount} sin computar` : ""}</small></td><td className={styles.number}>{money(r.shippingCollectedCents)}</td><td className={styles.number}>{money(r.amountCents)}<small>{r.missing || (r.settlementId ? `Liquidación #${r.settlementId}` : '')}</small></td></>}<td>{onSelect ? <button className={styles.link} onClick={() => onSelect(r)}>Detalle</button> : null}</td></tr>)}</tbody></table>{!rows.length ? <p className={styles.empty}>No hay envíos para esta selección.</p> : null}</div>;
 }
-function ShipmentDetail({ row: r, onClose }) { return <section className={`${styles.panel} ${styles.detail}`} id="shipment-detail" aria-label="Detalle de envío"><div className={styles.actions}><h2>Envío {r.shipmentId}</h2><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button></div>{r.syncError ? <div className={`${styles.notice} ${styles.error}`}>Última consulta con errores: {r.syncError}. Se conserva el último dato válido.</div> : null}<dl className={styles.facts}>{[['Estado Mercado Libre',r.stateLabel],['Entrega estimada',when(r.estimatedDay)],['Entrega real',when(r.deliveredAt)],['Incidencia',r.incidentReason || 'Sin incidencia informada'],['Última consulta completa',when(r.syncedAt)],['Costo actualizado',when(r.costsSyncedAt)],['Preparación interna',r.internalImportedAt ? `Etiqueta importada: ${when(r.internalImportedAt)}` : 'Sin etiqueta importada'],['Impresión interna',when(r.internalPrintedAt)],['Tarifa aplicada',r.rateId ? `#${r.rateId} · ${money(r.amountCents)}` : r.missing || money(r.amountCents)]].map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><h2>Historial de Mercado Libre</h2><ol className={styles.timeline}>{r.history.map((e,i) => <li key={`${e.date}:${i}`}>{deliveryEventLabel(e)}<time>{when(e.date)}</time></li>)}</ol>{!r.history.length ? <p className={styles.muted}>Mercado Libre no informó historial.</p> : null}</section>; }
+// The summary rows carry no history; the full record of one shipment is read when it is opened.
+function ShipmentDetail({ row, full, onClose }) {
+  const [loaded, setLoaded] = useState(null);
+  useEffect(() => {
+    if (full || !row.connectionId) return;
+    api(`${endpoint}?view=shipment&connectionId=${row.connectionId}&shipmentId=${encodeURIComponent(row.shipmentId)}`).then(setLoaded).catch(() => setLoaded({}));
+  }, [row.connectionId, row.shipmentId, full]);
+  const r = { history: [], ...row, ...(loaded || {}) };
+  return <section className={`${styles.panel} ${styles.detail}`} id="shipment-detail" aria-label="Detalle de envío"><div className={styles.actions}><h2>Envío {r.shipmentId}</h2><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button></div>{r.syncError ? <div className={`${styles.notice} ${styles.error}`}>Última consulta con errores: {r.syncError}. Se conserva el último dato válido.</div> : null}<dl className={styles.facts}>{[['Estado Mercado Libre',r.stateLabel],['Entrega estimada',when(r.estimatedDay)],['Entrega real',when(r.deliveredAt)],['Incidencia',r.incidentReason || 'Sin incidencia informada'],['Última consulta completa',when(r.syncedAt)],['Costo actualizado',when(r.costsSyncedAt)],['Preparación interna',r.internalImportedAt ? `Etiqueta importada: ${when(r.internalImportedAt)}` : 'Sin etiqueta importada'],['Impresión interna',when(r.internalPrintedAt)],['Tarifa aplicada',r.rateId ? `#${r.rateId} · ${money(r.amountCents)}` : r.missing || money(r.amountCents)]].map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><h2>Historial de Mercado Libre</h2><ol className={styles.timeline}>{r.history.map((e,i) => <li key={`${e.date}:${i}`}>{deliveryEventLabel(e)}<time>{when(e.date)}</time></li>)}</ol>{!r.history.length ? <p className={styles.muted}>{!full && row.connectionId && !loaded ? 'Cargando historial…' : 'Mercado Libre no informó historial.'}</p> : null}</section>;
+}
 function currentRate(rates, carrierId, zone, day) {
   return rates.filter((r) => Number(r.carrier_id) === Number(carrierId) && r.zone === zone && r.valid_from <= day)
     .sort((x, y) => y.valid_from.localeCompare(x.valid_from) || Number(y.id) - Number(x.id))[0] || null;
@@ -270,10 +320,49 @@ function RatesPanel({ carriers, rates, canEdit, busy, onSave }) {
     {!carriers.length ? <p className={styles.empty}>Todavía no hay transportistas cargados.</p> : null}
   </section>;
 }
-function DraftForm({ carriers, busy, onSave }) { return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSave({ action:'draft', carrierId:Number(f.get('carrier')), from:f.get('from'), to:f.get('to') }); }}><label>Transportista<select required name="carrier"><option value="">Elegir…</option>{carriers.map((c) => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}</select></label><label>Entregado desde<input type="date" name="from" required defaultValue={`${getArgentinaDateString().slice(0,7)}-01`} /></label><label>Entregado hasta<input type="date" name="to" required defaultValue={getArgentinaDateString()} /></label><button className="btn btn-primary" disabled={busy}>Crear borrador</button></form>; }
-function SettlementDetail({ detail, canEdit, busy, onSave, onClose }) {
-  const { settlement:s, items, adjustments, totalCents } = detail;
-  return <section className={`${styles.panel} ${styles.detail}`}><div className={styles.actions}><h2>Liquidación #{s.id} · {statusNames[s.status]}</h2><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button><a className="btn btn-ghost btn-sm" href={`/api${endpoint}?view=settlements&id=${s.id}&format=csv`}>Exportar detalle</a></div><p className={styles.muted}>{items.length} entregados · {when(s.date_from)} al {when(s.date_to)} · Total {money(totalCents)}</p><ShipmentTable rows={items} />
+function DraftForm({ carriers, busy, onSave }) { return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onSave({ action:'draft', carrierId:Number(f.get('carrier')), from:f.get('from'), to:f.get('to') }); }}><label>Transportista<select required name="carrier"><option value="">Elegir…</option>{carriers.map((c) => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}</select></label><label>Entregado desde<input type="date" name="from" required defaultValue={`${getArgentinaDateString().slice(0,7)}-01`} /></label><label>Entregado hasta<input type="date" name="to" required defaultValue={getArgentinaDateString()} /></label><button className="btn btn-primary" disabled={busy}>Crear liquidación</button></form>; }
+// Built in the browser from the settlement data, as a CSV that Excel opens directly.
+function jobLabel(job) {
+  const p = job.progress || {};
+  if (job.phase === 'orders') return `ventas: ${p.orders || 0}${p.ordersTotal ? ` de ${p.ordersTotal}` : ''}`;
+  if (job.phase === 'labels') return `etiquetas sin venta: ${p.labels || 0}${p.labelsTotal ? ` de ${p.labelsTotal}` : ''}`;
+  if (job.phase === 'details') return `fechas de entrega: ${p.details || 0}${p.detailsTotal ? ` de ${p.detailsTotal}` : ''}`;
+  return 'recalculando';
+}
+function JobStatus({ job, onRetry }) {
+  if (job?.status === 'running') return <small>Buscando envíos · {jobLabel(job)}</small>;
+  if (job?.status === 'error') return <small>No se pudo buscar: {job.error}{onRetry ? <> <button className={styles.link} onClick={onRetry}>Reintentar</button></> : null}</small>;
+  return onRetry ? <small><button className={styles.link} onClick={onRetry}>Buscar envíos de nuevo</button></small> : null;
+}
+function downloadSettlement({ settlement: s, items, adjustments, accounts = {} }, detailed = false) {
+  const text = detailed ? settlementDetailCsv(items, adjustments, accounts) : settlementMatrixCsv(settlementMatrix(items, ZONE_ORDER), adjustments);
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = `liquidacion-${s.id}${detailed ? '-detalle' : ''}-${s.carrier_name || 'transportista'}-${s.date_from}_${s.date_to}.csv`.replace(/[^\w.-]+/g, '-');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function SettlementMatrix({ matrix, adjustments, totalCents }) {
+  const { zones, days, total } = matrix;
+  return <div className={styles.tableWrap}><table className={styles.table}>
+    <thead><tr><th>Día</th>{zones.map((z) => <th key={z} className={styles.number}>{z}</th>)}<th className={styles.number}>Paquetes</th><th className={styles.number}>Total</th></tr></thead>
+    <tbody>{days.map((d) => <tr key={d.day}><td>{when(d.day)}</td>{zones.map((z) => <td key={z} className={styles.number}>{d.counts[z] || '—'}</td>)}<td className={styles.number}>{d.count}</td><td className={styles.number}>{money(d.totalCents)}</td></tr>)}</tbody>
+    <tfoot>
+      <tr><th>Total paquetes</th>{zones.map((z) => <th key={z} className={styles.number}>{total.counts[z]}</th>)}<th className={styles.number}>{total.count}</th><th /></tr>
+      <tr><th>Total $</th>{zones.map((z) => <th key={z} className={styles.number}>{money(total.cents[z])}</th>)}<th /><th className={styles.number}>{money(total.totalCents)}</th></tr>
+      {adjustments.map((a) => <tr key={a.id}><td colSpan={zones.length + 2}>Ajuste: {a.reason}</td><td className={styles.number}>{money(Number(a.amount_cents))}</td></tr>)}
+      {adjustments.length ? <tr><th colSpan={zones.length + 2}>Total a pagar</th><th className={styles.number}>{money(totalCents)}</th></tr> : null}
+    </tfoot>
+  </table></div>;
+}
+function SettlementDetail({ detail, job, canEdit, busy, onSave, onClose }) {
+  const { settlement:s, items, adjustments, totalCents, excluded = {} } = detail;
+  const matrix = settlementMatrix(items, ZONE_ORDER);
+  return <section className={`${styles.panel} ${styles.detail}`} id="settlement-detail"><div className={styles.actions}><h2>Liquidación #{s.id} · {statusNames[s.status]}</h2><button className="btn btn-primary btn-sm" disabled={!items.length} onClick={() => downloadSettlement(detail)}>Descargar resumen</button><button className="btn btn-ghost btn-sm" disabled={!items.length} onClick={() => downloadSettlement(detail, true)}>Descargar detalle</button><button className="btn btn-ghost btn-sm" onClick={onClose}>Cerrar detalle</button></div><p className={styles.muted}>{items.length} entregados · {when(s.date_from)} al {when(s.date_to)} · Total {money(totalCents)}</p>
+    {job?.status === 'running' ? <div className={styles.notice} role="status">Buscando en Mercado Libre los envíos del período ({jobLabel(job)}). Te avisamos cuando esté lista; podés seguir usando la app.</div> : null}
+    {Object.keys(excluded).length ? <div className={styles.notice}><strong>Quedan afuera:</strong> {Object.entries(excluded).map(([reason, n]) => `${n} ${reason.toLowerCase()}`).join(' · ')}.{excluded['Sin tarifa'] ? ' Cargá el precio vigente desde el inicio del período en «Tarifas por zona».' : ''}</div> : null}
+    {items.length ? <SettlementMatrix matrix={matrix} adjustments={adjustments} totalCents={totalCents} /> : <p className={styles.empty}>No hay envíos Flex entregados con tarifa para este transportista en el período.</p>}
+    <details><summary className={styles.link}>Ver envío por envío ({items.length})</summary><ShipmentTable rows={items} /></details>
     {adjustments.map((a) => <p className={styles.muted} key={a.id}>Ajuste: {money(Number(a.amount_cents))} · {a.reason} · {when(a.created_at)}</p>)}
     {s.status === 'paid' ? <div className={styles.notice}>Pagada el {when(s.paid_at)}. Referencia: {s.payment_reference || 'Sin referencia'}.</div> : null}
     {canEdit && s.status === 'draft' ? <div className={styles.notice}><p>Revisá los envíos y el importe antes de cerrar. El cierre reserva cada envío y congela su tarifa.</p><button className="btn btn-primary" disabled={busy || !items.length} onClick={() => onSave({ action:'close', id:s.id })}>Cerrar liquidación · {money(totalCents)}</button></div> : null}

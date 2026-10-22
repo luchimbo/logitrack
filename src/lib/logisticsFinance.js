@@ -261,23 +261,28 @@ export function filterRecords(rows, filters = {}) {
   });
 }
 export function summarize(rows) {
-  const known = rows.filter((r) => r.amountCents !== null);
+  const known = rows.filter((r) => r.amountCents !== null && r.amountCents !== undefined);
   const sum = (list) => list.reduce((n, r) => n + r.amountCents, 0);
   const flex = known.filter((r) => r.method === 'flex');
   const colecta = known.filter((r) => r.method === 'colecta');
   const sales = rows.filter((r) => r.salesCents !== null && r.salesCents !== undefined);
   const salesCents = sales.length ? sales.reduce((n, r) => n + r.salesCents, 0) : null;
   // Compare only packages with complete sales and costs; avoid mismatched denominators.
-  const comparable = rows.filter((r) => r.amountCents !== null && r.salesCents > 0 && !r.salesMissingCount);
+  const comparable = known.filter((r) => r.salesCents > 0 && !r.salesMissingCount);
   const comparableSalesCents = comparable.reduce((n, r) => n + r.salesCents, 0);
   const comparableCostCents = sum(comparable);
   const paidKnownOrderCount = rows.reduce((n, r) => n + (r.paidKnownOrderCount || 0), 0);
   const withFees = rows.filter((r) => r.feesCents !== null && r.feesCents !== undefined);
-  const withNet = rows.filter((r) => r.netCents !== null && r.netCents !== undefined);
-  const withNetShipping = withNet.filter((r) => r.amountCents !== null);
-  return { feesCents: withFees.reduce((n, r) => n + r.feesCents, 0), feesCount: withFees.length,
-    netCents: withNet.reduce((n, r) => n + r.netCents, 0), netCount: withNet.length,
-    netAfterShippingCents: withNetShipping.reduce((n, r) => n + r.netCents - r.amountCents, 0), netAfterShippingCount: withNetShipping.length,
+  // Keep the same sales base: missing fees or shipping must not remove a sale.
+  // This is a provisional balance of known amounts, not a final settlement.
+  const feesCents = withFees.reduce((n, r) => n + r.feesCents, 0);
+  const totalCents = sum(known);
+  const shippingCollectedCents = rows.reduce((n, r) => n + (r.shippingCollectedCents || 0), 0);
+  const netCents = salesCents === null ? null : salesCents + shippingCollectedCents - feesCents;
+  return { feesCents, feesCount: withFees.length,
+    feesUnavailableCount: rows.filter((r) => r.source !== 'tiendanube' && r.salesCents > 0 && (r.feesCents == null || r.feesMissingCount > 0)).length,
+    netCents, netCount: sales.length,
+    netAfterShippingCents: netCents === null ? null : netCents - totalCents, netAfterShippingCount: sales.length,
     count: rows.length, knownCount: known.length, missingCount: rows.length - known.length,
     salesCents, paidOrderCount: rows.reduce((n, r) => n + (r.paidOrderCount || 0), 0),
     paidKnownOrderCount, averageSaleCents: paidKnownOrderCount && salesCents !== null ? Math.round(salesCents / paidKnownOrderCount) : null,
@@ -287,8 +292,12 @@ export function summarize(rows) {
     logisticsPercent: comparableSalesCents ? comparableCostCents / comparableSalesCents * 100 : null,
     flexCents: sum(flex), colectaCents: sum(colecta), totalCents: sum(known),
     flexCount: rows.filter((r) => r.method === 'flex').length, colectaCount: rows.filter((r) => r.method === 'colecta').length,
-    zipnovaCents: sum(colecta.filter((r) => r.zipnova)), colectaMlCents: sum(colecta.filter((r) => !r.zipnova)),
-    zipnovaLinkedCount: rows.filter((r) => r.zipnova && r.orderId).length, zipnovaUnlinkedCount: rows.filter((r) => r.zipnova && !r.orderId).length,
+    colectaMlCents: sum(colecta.filter((r) => r.source !== 'tiendanube')),
+    tiendanubeCostCents: sum(colecta.filter((r) => r.source === 'tiendanube')),
+    tiendanubeCostCount: colecta.filter((r) => r.source === 'tiendanube').length,
+    shippingCollectedCents,
+    shippingCollectedCount: rows.filter((r) => r.shippingCollectedCents !== null && r.shippingCollectedCents !== undefined).length,
+    shippingCollectedMissingCount: rows.filter((r) => r.source === 'tiendanube' && r.shippingCollectedCents == null).length,
     customWithoutCostCount: rows.filter((r) => r.source === 'ml_custom' && r.amountCents === null).length,
     averageCents: known.length ? Math.round(sum(known) / known.length) : null,
     estimatedFlexCents: sum(flex.filter((r) => !['delivered', 'canceled', 'problem'].includes(r.state))),
@@ -300,41 +309,56 @@ export function groupRecords(rows, key) {
   for (const row of rows) { const value = row[key] || 'Sin dato'; if (!groups.has(value)) groups.set(value, []); groups.get(value).push(row); }
   return [...groups].map(([name, records]) => ({ name, ...summarize(records) })).sort((a, b) => b.totalCents - a.totalCents);
 }
-const nameTokens = (text) => new Set(String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  .split(/[^a-z0-9]+/).filter((token) => token.length > 2));
-// Mercado Libre "a coordinar" sales carry no shipment, and Zipnova shipments carry no ML id: pair them by recipient and
-// declared value, inside a window from the sale day to 10 days later. Each order is used once, nearest date first.
-export function matchZipnovaToOrders(zipnova, orders) {
-  const day = (value) => Date.parse(`${String(value || '').slice(0, 10)}T12:00:00Z`);
-  const candidates = [];
-  zipnova.forEach((zip, zi) => {
-    const zipNames = nameTokens(zip.recipientName);
-    orders.forEach((order, oi) => {
-      const gap = (day(zip.createdDay) - day(order.orderDay)) / 86400000;
-      if (!Number.isFinite(gap) || gap < -1 || gap > 10) return;
-      const orderNames = new Set([...nameTokens(order.buyerName), ...nameTokens(order.recipientName)]);
-      const shared = [...zipNames].filter((token) => orderNames.has(token)).length;
-      const value = Number(zip.declaredValue) > 0 && Number(order.totalCents) > 0
-        && Math.abs(Number(zip.declaredValue) * 100 - Number(order.totalCents)) <= Number(order.totalCents) * 0.02;
-      if (shared < 2 && !(shared >= 1 && value)) return;
-      candidates.push({ zi, oi, score: shared * 2 + (value ? 3 : 0) - Math.abs(gap) / 10 });
-    });
-  });
-  const usedZip = new Set(), usedOrder = new Set(), pairs = new Map();
-  for (const c of candidates.sort((a, b) => b.score - a.score)) {
-    if (usedZip.has(c.zi) || usedOrder.has(c.oi)) continue;
-    usedZip.add(c.zi); usedOrder.add(c.oi); pairs.set(c.zi, c.oi);
-  }
-  return pairs;
-}
 export function settlementCandidates(rows, carrierId, from, to) {
   return rows.filter((r) => r.method === 'flex' && r.state === 'delivered' && r.amountCents !== null && !r.missing
     && !r.settlementId && Number(r.carrierId) === Number(carrierId) && r.deliveryDay && r.deliveryDay >= from && r.deliveryDay <= to);
 }
+// Settlement summary as the carrier reads it: one row per delivery day, packages per zone and the day's amount.
+export function settlementMatrix(items, zoneOrder) {
+  const extra = [...new Set(items.map((i) => i.zone || 'Sin zona'))].filter((z) => !zoneOrder.includes(z)).sort();
+  const zones = [...zoneOrder, ...extra];
+  const blank = () => ({ counts: Object.fromEntries(zones.map((z) => [z, 0])), cents: Object.fromEntries(zones.map((z) => [z, 0])), count: 0, totalCents: 0 });
+  const byDay = new Map(), total = blank();
+  for (const item of items) {
+    const day = item.deliveryDay || 'Sin fecha', zone = item.zone || 'Sin zona', cents = Number(item.amountCents) || 0;
+    if (!byDay.has(day)) byDay.set(day, { day, ...blank() });
+    for (const row of [byDay.get(day), total]) { row.counts[zone] += 1; row.cents[zone] += cents; row.count += 1; row.totalCents += cents; }
+  }
+  return { zones, days: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)), total };
+}
+export function settlementMatrixCsv(matrix, adjustments = []) {
+  const pesos = (cents) => (cents / 100).toFixed(2).replace('.', ',');
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split('-').reverse().join('/') : value;
+  const rows = [
+    ...matrix.days.map((d) => [day(d.day), ...matrix.zones.map((z) => d.counts[z]), d.count, pesos(d.totalCents)]),
+    ['Total paquetes', ...matrix.zones.map((z) => matrix.total.counts[z]), matrix.total.count, ''],
+    ['Total $', ...matrix.zones.map((z) => pesos(matrix.total.cents[z])), '', pesos(matrix.total.totalCents)],
+    ...adjustments.map((a) => [`Ajuste: ${a.reason}`, ...matrix.zones.map(() => ''), '', pesos(Number(a.amount_cents))]),
+  ];
+  if (adjustments.length) rows.push(['Total a pagar', ...matrix.zones.map(() => ''), '', pesos(matrix.total.totalCents + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0))]);
+  const columns = [['Día', 0], ...matrix.zones.map((z, i) => [z, i + 1]), ['Paquetes', matrix.zones.length + 1], ['Total $', matrix.zones.length + 2]];
+  return csv(rows, columns);
+}
+// Settlement shipment by shipment, as carriers send it: one row per package, sorted by delivery day.
+export function settlementDetailCsv(items, adjustments = [], accounts = {}) {
+  const pesos = (cents) => (cents / 100).toFixed(2).replace('.', ',');
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('/') : value || '';
+  const sorted = [...items].sort((a, b) => String(a.deliveryDay || '').localeCompare(String(b.deliveryDay || '')) || String(a.zone || '').localeCompare(String(b.zone || '')));
+  const total = items.reduce((n, i) => n + (Number(i.amountCents) || 0), 0);
+  const adjusted = total + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0);
+  const rows = [
+    ...sorted.map((i) => [day(i.deliveryDay), day(i.dispatchDay), i.trackingNumber || i.shipmentId, i.orderId || '', accounts[i.connectionId] || (i.sellerId ? `Vendedor ${i.sellerId}` : ''),
+      i.recipient || '', String(i.partido || '').replaceAll('_', ' '), i.zone || 'Sin zona', pesos(Number(i.amountCents) || 0), i.stateLabel || '']),
+    ['Total', '', `${items.length} envíos`, '', '', '', '', '', pesos(total), ''],
+    ...adjustments.map((a) => [`Ajuste: ${a.reason}`, '', '', '', '', '', '', '', pesos(Number(a.amount_cents)), '']),
+    ...(adjustments.length ? [['Total a pagar', '', '', '', '', '', '', '', pesos(adjusted), '']] : []),
+  ];
+  return csv(rows, ['Fecha entrega', 'Despacho', 'Número de envío', 'Venta ML', 'Cuenta', 'Destinatario', 'Partido', 'Zona', 'Precio', 'Estado'].map((name, i) => [name, i]));
+}
 export function csv(rows, columns) {
   const cell = (value) => {
     let text = String(value ?? '');
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    if (/^[=+\-@\t\r]/.test(text) && !/^-\d+(,\d+)?$/.test(text)) text = `'${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
   return '\uFEFF' + [columns.map(([name]) => cell(name)).join(';'), ...rows.map((r) => columns.map(([, key]) => cell(typeof key === 'function' ? key(r) : r[key])).join(';'))].join('\r\n');

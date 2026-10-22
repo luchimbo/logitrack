@@ -61,6 +61,7 @@
 
 .provinceTag{pointer-events:none}
 .provinceCount{font-size:7px;font-weight:700;fill:currentColor;opacity:.9;text-anchor:middle}
+.islandLabel{font-size:6px;fill:currentColor;opacity:.6;pointer-events:none;text-anchor:middle;font-weight:600}
 .methodLegend{position:absolute;left:20px;bottom:60px;z-index:1;display:grid;gap:6px;max-width:210px;padding:10px 12px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--map-line);font-size:12px}
 .methodLegend span{display:flex;align-items:center;gap:8px;font-weight:600}
 .methodLegend i{width:12px;height:12px;border-radius:3px}

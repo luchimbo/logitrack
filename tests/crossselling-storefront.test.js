@@ -39,7 +39,7 @@ test('ofertas de la tienda: sólo con descuento, sin costos y con la línea que 
 test('la aceptación se valida contra el carrito del callback, no contra el navegador', () => {
   const a = buildAcceptance({ snapshot, catalog, callbackCart, cartId: '2096317729', triggerLineId: '3610271214', accessoryVariant: '1503397906', now });
   assert.deepEqual(a, { ...acceptance, ruleId: 'r1', expiresAt: now + 2 * 3600_000 });
-  assert.throws(() => buildAcceptance({ snapshot, catalog, callbackCart, cartId: '2096317729', triggerLineId: '999', accessoryVariant: '1503397906', now }), /principal/);
+  assert.throws(() => buildAcceptance({ snapshot, catalog, callbackCart, cartId: '2096317729', triggerLineId: '999', accessoryVariant: '1503397906', now }), { message: /principal/, code: 'cart_pending' });
   assert.throws(() => buildAcceptance({ snapshot, catalog, callbackCart, cartId: '2096317729', triggerLineId: '3610271214', accessoryVariant: '1503397000', now }), /no está disponible/);
   assert.throws(() => buildAcceptance({ snapshot, catalog, callbackCart, cartId: 'x', triggerLineId: '3610271214', accessoryVariant: '1503397906', now }), /inválidos/);
 });

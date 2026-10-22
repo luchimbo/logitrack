@@ -31,3 +31,20 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Validación: 116 pruebas aprobadas, lint de los controles sin errores y compilación de Vercel correcta. Se retiró la opción de Node `--experimental-default-type=module`, incompatible con el runtime actual de Vercel, y se agregó inspección de URLs protegidas mediante la sesión del CLI.
 - Versión pública anterior: `dpl_BBqzi96vESFzgqRGNgBaR3mZja4S`. No promoverla para resolver este incidente: contiene la regresión del módulo.
 - Mostrador y la tienda sólo requieren recargar las páginas. La promoción permanece activa; no es necesario volver a autorizar Tiendanube ni reiniciar Mostrador.
+
+## Simplificación visual publicada el 22/10/2026
+
+- Despliegue final: `dpl_3xUXp6BC8MNbxjhmtmG2AcBZb2Q6`, `https://logitrack-kfclwkhzg-lucio-tamborinis-projects.vercel.app`, promovido a `www.geomodi.ai` mediante `npm run deploy:production`. Código en `4e44bb8` y `23b276b`.
+- Carrito y ventana: resumen del principal antes de «Completá tu equipo», condición una vez por grupo y sugerencias agrupadas por línea principal. Página de producto: condición breve sin afirmar que ya está en el carrito. Se conservan nombres completos y variantes; cada sugerencia muestra precio final, ahorro y porcentaje, sin precio tachado. No se incorporaron «HOY» ni emojis.
+- El tema elimina productos por AJAX sin emitir `productAddedToCart`. El observador existente ahora retira los grupos cuyo principal ya no tiene una línea visible, aunque `LS.cart` aún conserve datos anteriores. Se mantiene la presentación de descuentos confirmados por Tiendanube.
+- Validación: 124 pruebas aprobadas, compilación local y de Vercel correctas. Revisión visual en escritorio y celular del carrito, ventana, página de producto y carrito lateral con datos controlados y estilos del tema; nombres largos, varios principales, ofertas sin imagen, variantes y agregados. Dos pruebas nuevas cubren la retirada del principal por AJAX y el bloque vacío.
+- Prueba pública en PC MIDI, sin comprar: LM-103 y soporte agregados desde «Agregar los dos con descuento»; Tiendanube confirmó `-$3.464,76` y total `$338.690,07`. Al quitar el piano, sin recargar, desaparecieron sus sugerencias y el descuento; el soporte quedó en `$34.647,60`. Se vaciaron los carritos temporales de Chrome y del navegador integrado.
+- Verificación posterior: rutas HMAC, dominios separados de ambas tiendas y script público aprobados; el archivo servido coincide exactamente con la fuente (SHA-256 `1890197cebc71b7b853c489d9fc3092eabd24ec5b20569ad61379dbbe355bcc5`). Tiendanube carga el script de Partners después de la primera interacción; no se cambiaron instalación, credenciales, promoción ni reglas.
+- Captura del carrito público: [Completá tu equipo en escritorio](evidence/completa-tu-equipo-ux-desktop-20261022.png). La ventana y el carrito lateral se validaron localmente; el agregado normal del tema Amazonas redirige al carrito.
+
+## Conciliación de ventas online publicada el 22/10/2026
+
+- Despliegue: `dpl_Gb56LCmGG2D6JMxRMxAM5u6Khtkw`, `https://logitrack-6xvy1n6w5-lucio-tamborinis-projects.vercel.app`, promovido mediante `npm run deploy:production`. Código en `e6acd25`.
+- Causa: el webhook respondía éxito aunque fallara el registro del informe, y la sincronización manual sólo actualizaba logística. Faltaban #11025 y #11026 del 21/10.
+- El informe concilia antes de responder, como máximo cada 5 minutos: pedidos modificados en Tiendanube desde la última revisión (margen de 10 minutos, desde el 19/10), sin filtrar estado. Cuentan pagos `paid` (Recibido) no cancelados, agrupados por fecha de creación; las transferencias confirmadas tarde entran al día en que se creó el pedido.
+- Verificación con la conexión firmada de Mostrador: 21/10 = 4 ventas, `$2.319.230,46`, igual que Tiendanube; 20/10 = 5 ventas, `$5.110.099,18`.
