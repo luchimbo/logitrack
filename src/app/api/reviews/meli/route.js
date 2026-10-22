@@ -1,7 +1,7 @@
 import { authorizePublication } from '@/lib/crossselling/publication-auth';
 import { lookupCrossSellingConnection } from '@/lib/crossselling/runtime';
-import { storeMeliNickname } from '@/lib/crossselling/stores';
-import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
+import { storeMeliOwnerEmail } from '@/lib/crossselling/stores';
+import { db } from '@/lib/db';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { collectMeliReviews } from '@/lib/reviews/meli-reviews';
 
@@ -15,14 +15,14 @@ export async function GET(request) {
   const storeId = authorizePublication({ request, rawBody: '' });
   if (!storeId) return Response.json({ error: 'Solicitud no autorizada' }, { status: 401, headers });
   try {
-    const nickname = storeMeliNickname(storeId).toLowerCase();
+    const ownerEmail = storeMeliOwnerEmail(storeId);
     let targets = [];
-    if (nickname) {
-      // La cuenta de Mercado Libre de esta tienda es una sola, aunque esté conectada en otro espacio de Logitrack.
-      const accounts = (await listAllActiveIntegrationConnections({ provider: 'mercadolibre', includeConfig: true }))
-        .filter((c) => [c.displayName, c.config?.nickname].some((n) => String(n || '').toLowerCase() === nickname));
-      for (const account of accounts) targets.push(...await listMercadoLibreClientTargets(account.workspaceId, { connectionId: account.id }));
-      if (!targets.length) return Response.json({ error: `No hay conectada la cuenta de Mercado Libre «${nickname}»` }, { status: 409, headers });
+    if (ownerEmail) {
+      // Se usan las cuentas de Mercado Libre conectadas en los espacios de ese usuario de Logitrack.
+      const members = await db.execute({ sql: `SELECT DISTINCT m.workspace_id FROM workspace_members m
+        JOIN app_users u ON u.id = m.app_user_id WHERE lower(u.email) = lower(?)`, args: [ownerEmail] });
+      for (const row of members.rows) targets.push(...await listMercadoLibreClientTargets(Number(row.workspace_id)));
+      if (!targets.length) return Response.json({ error: `No hay una cuenta de Mercado Libre conectada en los espacios de ${ownerEmail}` }, { status: 409, headers });
     } else {
       const connection = await lookupCrossSellingConnection(storeId);
       if (!connection?.workspaceId) return Response.json({ error: 'Esta tienda no está vinculada a Logitrack' }, { status: 409, headers });
