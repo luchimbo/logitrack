@@ -1,6 +1,9 @@
 // Reseñas de productos: lógica pura compartida por Mostrador y Logitrack (sin I/O).
 export const REVIEWS_SCHEMA = 1;
 export const SOURCES = Object.freeze({ mercadolibre: "MercadoLibre", google: "Google", cliente: "Cliente de PC MIDI" });
+// A la tienda viajan las más nuevas de cada producto (el promedio y el total cuentan todas): mantiene la publicación liviana.
+export const MAX_PUBLISHED_PER_PRODUCT = 25;
+const SNAPSHOT_TEXT = 500;
 export const STATES = Object.freeze(["pendiente", "publicada", "oculta"]);
 const sku = (v) => String(v || "").trim().toUpperCase();
 const clip = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -17,7 +20,9 @@ export function normalizeReview(raw, { today = new Date().toISOString().slice(0,
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || date > today) throw new Error("Fecha inválida: usá AAAA-MM-DD y no futura");
   if (link && !/^https:\/\/[^\s]+$/.test(link)) throw new Error("El enlace de origen debe empezar con https://");
   const state = STATES.includes(raw.estado) ? raw.estado : "pendiente";
-  return { id: String(raw.id || ""), sku: code, rating, autor: author, texto: text, fecha: date, origen: source, enlace: link.slice(0, 300), estado: state };
+  const external = clip(raw.externalId, 80);
+  return { id: String(raw.id || ""), sku: code, rating, autor: author, texto: text, fecha: date, origen: source, enlace: link.slice(0, 300), estado: state,
+    ...(external ? { externalId: external } : {}) };
 }
 
 // CSV con comillas y separador «,» o «;» (Excel en español exporta con «;»).
@@ -69,7 +74,9 @@ export function buildReviewsSnapshot({ storeId, reviews, enabled, now = new Date
     p.reviews.push({ rating: r.rating, autor: r.autor, texto: r.texto, fecha: r.fecha, origen: r.origen, ...(r.enlace ? { enlace: r.enlace } : {}) });
   }
   for (const [code, p] of Object.entries(products)) {
-    products[code] = { avg: Math.round((p.sum / p.count) * 10) / 10, count: p.count, reviews: p.reviews.sort((a, b) => b.fecha.localeCompare(a.fecha)) };
+    const newest = p.reviews.sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, MAX_PUBLISHED_PER_PRODUCT)
+      .map((r) => ({ ...r, texto: r.texto.slice(0, SNAPSHOT_TEXT) }));
+    products[code] = { avg: Math.round((p.sum / p.count) * 10) / 10, count: p.count, reviews: newest };
   }
   return validateReviewsSnapshot({ schemaVersion: REVIEWS_SCHEMA, storeId: String(storeId), enabled: Boolean(enabled), generatedAt: now.toISOString(), products });
 }
@@ -82,7 +89,7 @@ export function validateReviewsSnapshot(v) {
   if (codes.length > 5000) fail();
   for (const code of codes) {
     const p = v.products[code];
-    if (code !== sku(code) || !p || !Array.isArray(p.reviews) || p.reviews.length < 1 || p.reviews.length > 500 || p.count !== p.reviews.length ||
+    if (code !== sku(code) || !p || !Array.isArray(p.reviews) || p.reviews.length < 1 || p.reviews.length > 500 || !Number.isInteger(p.count) || p.count < p.reviews.length ||
         !(p.avg >= 1 && p.avg <= 5)) fail();
     for (const r of p.reviews) {
       if (!Number.isInteger(r.rating) || r.rating < 1 || r.rating > 5 || typeof r.autor !== "string" || typeof r.texto !== "string" ||

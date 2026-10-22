@@ -66,9 +66,11 @@ test('una publicación vieja no pisa a una nueva y repetir la misma es inocuo', 
   assert.equal((await service.status('78394')).revision, newer.revision);
 });
 
-test('limita las reseñas por producto que se envían a la tienda', async () => {
+test('manda las más nuevas por producto y conserva el total', async () => {
   const { service } = make();
   const many = Array.from({ length: 60 }, (_, i) => review({ autor: `Cliente ${i}`, fecha: `2026-08-${String((i % 28) + 1).padStart(2, '0')}` }));
   await service.publish('78394', body(snapshot(many)));
-  assert.equal((await service.forStorefront('78394', ['A1'])).reviews.length, 50);
+  const shown = await service.forStorefront('78394', ['A1']);
+  // La publicación manda las 25 más nuevas, pero el total y el promedio cuentan las 60.
+  assert.deepEqual([shown.reviews.length, shown.count], [25, 60]);
 });
