@@ -48,3 +48,10 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Causa: el webhook respondía éxito aunque fallara el registro del informe, y la sincronización manual sólo actualizaba logística. Faltaban #11025 y #11026 del 21/10.
 - El informe concilia antes de responder, como máximo cada 5 minutos: pedidos modificados en Tiendanube desde la última revisión (margen de 10 minutos, desde el 19/10), sin filtrar estado. Cuentan pagos `paid` (Recibido) no cancelados, agrupados por fecha de creación; las transferencias confirmadas tarde entran al día en que se creó el pedido.
 - Verificación con la conexión firmada de Mostrador: 21/10 = 4 ventas, `$2.319.230,46`, igual que Tiendanube; 20/10 = 5 ventas, `$5.110.099,18`.
+
+## Informe sin pedidos nuevos (23/10/2026)
+
+- Corregido el 404 de Tiendanube cuando el listado informa Last page is 0: listOrders devuelve una lista vacía sólo para esa respuesta de paginación; otros errores se propagan.
+- Commit ac76396. 143 pruebas aprobadas. Publicado mediante deploy:production: dpl_ESp5argrRpZtT9VHGDmJVGrikmuc.
+- Consulta HMAC real de Mostrador para 23/10: respuesta correcta, conciliación completada con 0 pedidos nuevos y 0 ventas del día.
+
