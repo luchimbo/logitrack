@@ -95,6 +95,7 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
 
     const error = new Error(lastData?.message || (typeof lastData?.error === 'string' ? lastData.error : '') || `Tiendanube error ${lastRes?.status || 'desconocido'}`);
     error.status = lastRes?.status;
+    error.description = lastData?.description;
     throw error;
   }
 
@@ -112,8 +113,15 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     if (fields) params.set('fields', fields);
     if (q) params.set('q', q);
 
-    const payload = await tiendanubeFetch(`/orders?${params.toString()}`);
-    return normalizeOrdersResponse(payload);
+    try {
+      const payload = await tiendanubeFetch(`/orders?${params.toString()}`);
+      return normalizeOrdersResponse(payload);
+    } catch (error) {
+      // TN returns 404 for an empty collection or a page beyond its last page.
+      // Keep missing routes, stores and authorization errors visible.
+      if (error.status === 404 && /last page is \d+/i.test(error.description || '')) return [];
+      throw error;
+    }
   }
 
   async function getOrder(id) {
