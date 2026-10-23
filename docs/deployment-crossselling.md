@@ -55,3 +55,10 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Commit ac76396. 143 pruebas aprobadas. Publicado mediante deploy:production: dpl_ESp5argrRpZtT9VHGDmJVGrikmuc.
 - Consulta HMAC real de Mostrador para 23/10: respuesta correcta, conciliación completada con 0 pedidos nuevos y 0 ventas del día.
 
+
+## Error 502 del rango semanal (23/10/2026)
+
+- Reproducido 502 para 17–23/10 mientras hoy y 22–23 respondían bien. El handler ocultaba la causa y no la registraba.
+- Agregado diagnóstico interno; desplegado dpl_CT2Vu3mE6f4KCHycWETUDqaKc4gt con controles aprobados. 143 pruebas aprobadas.
+- Tras publicar, cuatro consultas firmadas consecutivas del rango semanal respondieron correctamente: 21 pedidos, total 10275124.97. No se confirmó la causa original; no se cambió el cálculo del informe.
+
