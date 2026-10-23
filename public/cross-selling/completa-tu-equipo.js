@@ -539,7 +539,7 @@
         box.innerHTML = offerHeading('h3') +
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
         var buyButton = form.querySelector('[type="submit"]');
-        var buyRow = buyButton && (buyButton.closest('.row') || buyButton.parentNode);
+        var buyRow = buyButton && (buyButton.closest('.form-row, .row') || buyButton.parentNode);
         if (buyRow && buyRow !== form && form.contains(buyRow)) {
           buyRow.parentNode.insertBefore(box, buyRow.nextSibling);
         } else {
