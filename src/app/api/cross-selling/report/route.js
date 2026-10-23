@@ -11,6 +11,7 @@ export async function GET(request) {
   const params = new URL(request.url).searchParams;
   try { return Response.json(await onlineReport(storeId, { from: params.get('from'), to: params.get('to') }), { headers }); }
   catch (error) {
+    console.error('online-report failed', { storeId, from: params.get('from'), to: params.get('to'), message: error.message, code: error.code, stack: error.stack });
     const status = [400, 404].includes(error.status) ? error.status : 502;
     return Response.json({ error: status === 502 ? 'No se pudo armar el informe online' : error.message }, { status, headers });
   }
