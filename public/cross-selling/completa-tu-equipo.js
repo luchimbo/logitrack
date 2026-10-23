@@ -538,7 +538,13 @@
         box.setAttribute('aria-label', 'Completá tu equipo');
         box.innerHTML = offerHeading('h3') +
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
-        form.parentNode.insertBefore(box, form.nextSibling);
+        var buyButton = form.querySelector('[type="submit"]');
+        var buyRow = buyButton && (buyButton.closest('.row') || buyButton.parentNode);
+        if (buyRow && buyRow !== form && form.contains(buyRow)) {
+          buyRow.parentNode.insertBefore(box, buyRow.nextSibling);
+        } else {
+          form.parentNode.insertBefore(box, form.nextSibling);
+        }
         bind(box, offers, acceptWithProduct);
         reportSeen('product', offers);
       };
