@@ -519,6 +519,18 @@
     var variants = LS.variants || [];
     return variants.length === 1 ? String(variants[0].product_variant_id || variants[0].id) : '';
   }
+  // El botón de compra inmediata puede ser insertado por el tema después del formulario.
+  function positionProductOffers(form, box) {
+    var scope = form.parentNode;
+    var buttons = scope.querySelectorAll('button, a, input[type="submit"], input[type="button"]');
+    var immediate = Array.prototype.find.call(buttons, function (el) {
+      return /^comprar\s+ahora$/i.test((el.value || el.textContent || '').trim()) && !box.contains(el);
+    });
+    var buyButton = immediate || form.querySelector('[type="submit"]');
+    var target = immediate || (buyButton && (buyButton.closest('.form-row, .row') || buyButton.parentNode));
+    if (!target || target === form) target = form;
+    if (target.nextElementSibling !== box) target.parentNode.insertBefore(box, target.nextSibling);
+  }
   var productPending = null;
   function renderProduct() {
     var form = productForm();
@@ -538,13 +550,7 @@
         box.setAttribute('aria-label', 'Completá tu equipo');
         box.innerHTML = offerHeading('h3') +
           '<div class="cte-list">' + offers.map(function (o) { return card(o, 'Agregar los dos con descuento'); }).join('') + '</div>';
-        var buyButton = form.querySelector('[type="submit"]');
-        var buyRow = buyButton && (buyButton.closest('.form-row, .row') || buyButton.parentNode);
-        if (buyRow && buyRow !== form && form.contains(buyRow)) {
-          buyRow.parentNode.insertBefore(box, buyRow.nextSibling);
-        } else {
-          form.parentNode.insertBefore(box, form.nextSibling);
-        }
+        positionProductOffers(form, box);
         bind(box, offers, acceptWithProduct);
         reportSeen('product', offers);
       };
@@ -575,5 +581,11 @@
   renderProduct();
   watchCart();
   var pForm = productForm();
-  if (pForm) pForm.addEventListener('change', renderProduct);
+  if (pForm) {
+    pForm.addEventListener('change', renderProduct);
+    if (window.MutationObserver) new MutationObserver(function () {
+      var box = document.querySelector('.cte-product');
+      if (box) positionProductOffers(pForm, box);
+    }).observe(pForm.parentNode, { childList: true, subtree: true });
+  }
 })();
