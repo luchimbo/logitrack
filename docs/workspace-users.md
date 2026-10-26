@@ -14,3 +14,12 @@ Si la cuenta pertenece a otros espacios, el alta responde con conflicto. Solo el
 - AplicaciÃ³n y verificaciÃ³n: `node scripts/assign-pcmidi-workspace.mjs --apply`. Sin `--apply`, el script solo consulta el estado. Exige credenciales explÃ­citas de producciÃ³n y comprueba el propietario y el destino antes de actuar.
 - ValidaciÃ³n: 148 pruebas aprobadas, incluida la resoluciÃ³n de una sesiÃ³n existente despuÃ©s de la reasignaciÃ³n y la reversiÃ³n si falla la auditorÃ­a; compilaciÃ³n y lint de los archivos modificados aprobados.
 - Publicado con `npm run deploy:production`: `dpl_7BDmnWVSTFj8QzGJzWx8F65gQ3gA`, cÃ³digo `6a2e472`, en `https://www.geomodi.ai`. Controles previos y posteriores de rutas HMAC, dominios de ambas tiendas y script aprobados. `/api/auth/users` y `/api/auth/me` siguen respondiendo 401 sin sesiÃ³n.
+
+
+## Corrección del acceso del 26/10/2026
+
+La primera verificación usó las variables locales `TURSO_DATABASE_URL_PROD` y `TURSO_AUTH_TOKEN_PROD`, que conservan un snapshot antiguo. No constituía evidencia de la asignación en la base pública. Se corrigió el script para usar el libSQL actual por SSH y se verificó y aplicó allí la reasignación: Lucio conservaba las membresías 2, 3 y 4 además de la 1; ahora solo conserva la 1 como administrador. Guillermo ya tenía el rol admin en la base actual y lo conserva. Camilo sigue owner y administrador global.
+
+El bloqueo de acceso coincidió con agotamientos de tiempo en varias APIs. El servicio libSQL consumía unos 24 GiB y ni `SELECT 1` por HTTP local respondía en 10 segundos. Los listados administrativos cruzaban envíos, lotes y auditorías en la misma consulta, generando productos cartesianos. Se reemplazaron por conteos y agregaciones independientes, conservando sus interfaces; también se corrigió la suma de paquetes de usuarios, antes multiplicada por cada entrada de auditoría. Se reinició únicamente `geomodi-libsql.service`, sin cambiar credenciales ni datos operativos. Después, la memoria bajó a unos 162 MiB y el navegador de Lucio mostró el Dashboard con rol admin y datos de GeoModi.
+
+La carga de `/api/auth/me` tiene ahora un límite de 20 segundos y presenta el error recuperable existente en caso de demora. Validación: 149 pruebas aprobadas, con regresión de conteos para miles de envíos, varios miembros y entradas de actividad.

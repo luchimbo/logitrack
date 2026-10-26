@@ -16,20 +16,10 @@ export async function GET(request, { params }) {
     await ensureGlobalCarrierConfig();
 
     const workspaceResult = await db.execute({
-      sql: `SELECT
-              w.id,
-              w.name,
-              w.slug,
-              w.created_at,
-              owner.email AS owner_email,
-              COUNT(DISTINCT wm.id) AS members
-            FROM workspaces w
-            LEFT JOIN workspace_members wm ON wm.workspace_id = w.id
-            LEFT JOIN workspace_members owner_wm ON owner_wm.workspace_id = w.id AND owner_wm.role = 'owner'
-            LEFT JOIN app_users owner ON owner.id = owner_wm.app_user_id
-            WHERE w.id = ?
-            GROUP BY w.id, w.name, w.slug, w.created_at, owner.email
-            LIMIT 1`,
+      sql: `SELECT w.id, w.name, w.slug, w.created_at,
+              (SELECT u.email FROM workspace_members m JOIN app_users u ON u.id=m.app_user_id WHERE m.workspace_id=w.id AND m.role='owner' ORDER BY m.id LIMIT 1) AS owner_email,
+              (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id=w.id) AS members
+            FROM workspaces w WHERE w.id=? LIMIT 1`,
       args: [id],
     });
 

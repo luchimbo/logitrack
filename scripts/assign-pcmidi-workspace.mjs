@@ -1,13 +1,29 @@
-import { readFileSync } from 'node:fs';
-import { parseEnv } from 'node:util';
+import { execFileSync, spawn } from 'node:child_process';
+import { connect } from 'node:net';
+import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client';
 import { assignWorkspaceUser } from '../src/lib/workspaceMembership.js';
 
 // Read-only by default. --apply performs the user-requested assignments using
 // the same transaction and audit logic as the authenticated API.
-const env = parseEnv(readFileSync(new URL('../.env.local', import.meta.url), 'utf8'));
-if (!env.TURSO_DATABASE_URL_PROD || !env.TURSO_AUTH_TOKEN_PROD) throw new Error('Faltan credenciales explÃ­citas de producciÃ³n');
-const db = createClient({ url: env.TURSO_DATABASE_URL_PROD, authToken: env.TURSO_AUTH_TOKEN_PROD });
+// The old *_PROD environment variables point to an obsolete Turso snapshot.
+// Use the current libSQL service through SSH; never print or persist its JWT.
+const tunnel = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-N', '-L', '127.0.0.1:18088:127.0.0.1:8088', 'pcmidi'], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+let tunnelError = '';
+tunnel.stderr.on('data', data => { tunnelError += data.toString(); });
+const authToken = execFileSync('ssh', ['-o', 'BatchMode=yes', 'pcmidi', 'cat services/geomodi-libsql/keys/app-rw.jwt'], { encoding: 'utf8', windowsHide: true }).trim();
+let ready = false;
+for (let attempt = 0; attempt < 40 && !ready; attempt++) {
+  if (tunnel.exitCode !== null) throw new Error(`No se pudo abrir el túnel SSH: ${tunnelError}`);
+  ready = await new Promise(resolve => {
+    const socket = connect({ host: '127.0.0.1', port: 18088 });
+    socket.once('connect', () => { socket.destroy(); resolve(true); });
+    socket.once('error', () => { socket.destroy(); resolve(false); });
+  });
+  if (!ready) await setTimeout(100);
+}
+if (!ready) { tunnel.kill(); throw new Error('El túnel SSH no está disponible'); }
+const db = createClient({ url: 'http://127.0.0.1:18088', authToken });
 const emails = ['luciopcmidi@gmail.com', 'guillermo@pcmidicenter.com'];
 try {
   const owners = (await db.execute({
@@ -38,4 +54,4 @@ try {
     if (preservedOwner?.role !== 'owner' || Number(preservedOwner.is_global_admin) !== 1) throw new Error('VerificaciÃ³n de propietario fallida');
     console.log('Verificado:', JSON.stringify(after));
   }
-} finally { db.close(); }
+} finally { db.close(); tunnel.kill(); }

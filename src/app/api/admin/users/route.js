@@ -20,15 +20,12 @@ export async function GET(request) {
               w.name AS workspace_name,
               w.slug AS workspace_slug,
               wm.role,
-              COUNT(DISTINCT b.id) AS batches_created,
-              COALESCE(SUM(b.total_packages), 0) AS packages_uploaded,
-              MAX(al.created_at) AS last_activity_at
+              (SELECT COUNT(*) FROM daily_batches b WHERE b.created_by_app_user_id=au.id) AS batches_created,
+              (SELECT COALESCE(SUM(b.total_packages),0) FROM daily_batches b WHERE b.created_by_app_user_id=au.id) AS packages_uploaded,
+              (SELECT MAX(al.created_at) FROM audit_logs al WHERE al.app_user_id=au.id) AS last_activity_at
             FROM app_users au
-            LEFT JOIN workspace_members wm ON wm.app_user_id = au.id
-            LEFT JOIN workspaces w ON w.id = wm.workspace_id
-            LEFT JOIN daily_batches b ON b.created_by_app_user_id = au.id
-            LEFT JOIN audit_logs al ON al.app_user_id = au.id
-            GROUP BY au.id, au.email, au.created_at, au.last_seen_at, w.name, w.slug, wm.role
+            LEFT JOIN workspace_members wm ON wm.app_user_id=au.id
+            LEFT JOIN workspaces w ON w.id=wm.workspace_id
             ORDER BY au.created_at DESC`,
       args: [],
     });
