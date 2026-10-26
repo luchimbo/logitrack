@@ -67,9 +67,12 @@ test('release: la distribución incluye las rutas y recursos comerciales de prod
   ]) assert.ok(readFileSync(new URL(`../${file}`, import.meta.url)).length > 0, file);
 });
 
-function deploymentFetch({ brokenModule = false, brokenOrigin = false } = {}) {
+function deploymentFetch({ brokenModule = false, brokenOrigin = false, brokenReviews = false } = {}) {
   return async (url, options) => {
     const endpoint = url.pathname.split('/').at(-1);
+    if (url.pathname.startsWith('/api/reviews/')) {
+      return Response.json({ error: brokenReviews ? 'No autorizado' : endpoint === 'config' ? 'Publicación no autorizada' : 'Solicitud no autorizada' }, { status: 401 });
+    }
     if (['config', 'module', 'report'].includes(endpoint)) {
       return Response.json({ error: endpoint === 'config' ? 'Publicación no autorizada'
         : endpoint === 'module' && brokenModule ? 'No autorizado' : 'Solicitud no autorizada' }, { status: 401 });
@@ -85,6 +88,10 @@ function deploymentFetch({ brokenModule = false, brokenOrigin = false } = {}) {
 
 test('release: el control previo a promover admite una distribución completa', async () => {
   await checkCrossSellingDeployment('https://example.vercel.app', deploymentFetch());
+});
+
+test('release: detecta las reseñas bloqueadas por Clerk antes de promover', async () => {
+  await assert.rejects(checkCrossSellingDeployment('https://example.vercel.app', deploymentFetch({ brokenReviews: true })), /Reseñas.*Clerk/);
 });
 
 test('release: el control previo a promover detecta el 401 de Clerk aunque el código HTTP sea el esperado', async () => {
