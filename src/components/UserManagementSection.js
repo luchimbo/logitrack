@@ -12,6 +12,7 @@ export default function UserManagementSection() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [adding, setAdding] = useState(false);
+  const [reassignment, setReassignment] = useState(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -53,8 +54,10 @@ export default function UserManagementSection() {
     }
   };
 
-  const handleAddUser = async (e) => {
+  const handleAddUser = async (e, confirmed = null) => {
     e.preventDefault();
+    const assignment = confirmed || { email: newEmail, role: newRole };
+    setReassignment(null);
     setAdding(true);
     setError("");
     setSuccess("");
@@ -62,11 +65,18 @@ export default function UserManagementSection() {
       const res = await fetch("/api/auth/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: newEmail, role: newRole }),
+        body: JSON.stringify({ ...assignment, reassign: Boolean(confirmed) }),
       });
       const data = await res.json();
+      if (res.status === 409 && data.code === "OTHER_WORKSPACE" && data.canReassign) {
+        setReassignment(assignment);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "No se pudo agregar el usuario");
-      setSuccess("Usuario agregado. Se activará cuando se registre con ese email en /sign-up");
+      setSuccess(data.isPending
+        ? "Acceso asignado. La persona debe iniciar sesión o registrarse con ese email."
+        : data.reassigned ? "Usuario reasignado. Ya puede entrar a este espacio con su cuenta actual."
+        : "Acceso actualizado. El usuario ya puede entrar con su cuenta actual.");
       setNewEmail("");
       setNewRole("user");
       await loadUsers();
@@ -118,10 +128,17 @@ export default function UserManagementSection() {
           </button>
         </form>
         <p style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "10px", lineHeight: 1.6 }}>
-          El vínculo se activa cuando la persona se registra en <strong>/sign-up</strong> con ese email.
+          Si ya tiene cuenta, puede entrar con su sesión habitual. Si todavía no tiene cuenta, debe registrarse con ese email.
         </p>
       </div>
 
+      {reassignment ? (
+        <div className="card" role="alert" style={{ marginBottom: "12px" }}>
+          <p>Al reasignar a <strong>{reassignment.email}</strong> a este espacio, perderá acceso a sus espacios anteriores. Los datos de esos espacios se conservarán.</p>
+          <button type="button" className="btn" disabled={adding} onClick={(e) => handleAddUser(e, reassignment)}>Reasignar a este espacio</button>
+          <button type="button" className="btn btn-ghost" disabled={adding} onClick={() => setReassignment(null)}>Cancelar</button>
+        </div>
+      ) : null}
       {error ? <div className="card" style={{ marginBottom: "12px", background: "var(--danger-bg)", color: "var(--danger)" }}>{error}</div> : null}
       {success ? <div className="card" style={{ marginBottom: "12px", background: "var(--success-bg)", color: "var(--success)" }}>{success}</div> : null}
 
@@ -162,10 +179,10 @@ export default function UserManagementSection() {
                       className="form-select"
                       value={u.role === "owner" ? "admin" : (u.role || "user")}
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      disabled={savingId === String(u.id)}
+                      disabled={u.role === "owner" || savingId === String(u.id)}
                       style={{ maxWidth: "160px" }}
                     >
-                      <option value="admin">admin</option>
+                      <option value="admin">{u.role === "owner" ? "Propietario" : "admin"}</option>
                       <option value="user">user</option>
                     </select>
                   </div>

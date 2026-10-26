@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { assignWorkspaceUser, MembershipError } from '@/lib/workspaceMembership';
 
 export async function GET(request) {
   try {
@@ -38,60 +39,12 @@ export async function POST(request) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
 
-    const workspaceId = authResult.actor.workspaceId;
     const body = await request.json();
-    const email = (body.email || "").trim().toLowerCase();
-    const role = body.role || "user";
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Email inválido' }, { status: 400 });
-    }
-    if (!["admin", "user"].includes(role)) {
-      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
-    }
-
-    let existingUser = await db.execute({
-      sql: "SELECT id FROM app_users WHERE email = ?",
-      args: [email],
-    });
-
-    if (!existingUser.rows.length) {
-      const inserted = await db.execute({
-        sql: "INSERT INTO app_users (clerk_user_id, email) VALUES (?, ?)",
-        args: [`pending:${email}`, email],
-      });
-      existingUser = { rows: [{ id: Number(inserted.lastInsertRowid) }] };
-    }
-
-    const appUserId = Number(existingUser.rows[0].id);
-
-    const existingMembership = await db.execute({
-      sql: "SELECT id FROM workspace_members WHERE workspace_id = ? AND app_user_id = ?",
-      args: [workspaceId, appUserId],
-    });
-
-    if (existingMembership.rows.length) {
-      return NextResponse.json({ error: 'El usuario ya es miembro de este workspace' }, { status: 409 });
-    }
-
-    await db.execute({
-      sql: "INSERT INTO workspace_members (workspace_id, app_user_id, role) VALUES (?, ?, ?)",
-      args: [workspaceId, appUserId, role],
-    });
-
-    await logAudit({
-      workspaceId,
-      appUserId: authResult.actor.appUserId,
-      actorType: authResult.actor.authType,
-      actorLabel: authResult.actor.email || authResult.actor.username,
-      action: 'add_workspace_user',
-      entityType: 'workspace_member',
-      entityId: appUserId,
-      metadata: { email, role },
-    });
-
-    return NextResponse.json({ success: true, email, role });
+    return NextResponse.json(await assignWorkspaceUser(db, authResult.actor, body));
   } catch (error) {
+    if (error instanceof MembershipError) {
+      return NextResponse.json({ error: error.message, code: error.code, canReassign: error.canReassign }, { status: error.status });
+    }
     console.error('Add workspace user error:', error);
     return NextResponse.json({ error: 'Error en el servidor' }, { status: 500 });
   }
@@ -113,10 +66,13 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
     }
 
-    await db.execute({
-      sql: 'UPDATE workspace_members SET role = ? WHERE id = ? AND workspace_id = ?',
+    const updated = await db.execute({
+      sql: "UPDATE workspace_members SET role = ? WHERE id = ? AND workspace_id = ? AND role <> 'owner'",
       args: [cleanRole, membershipId, workspaceId],
     });
+    if (!updated.rowsAffected) {
+      return NextResponse.json({ error: 'Miembro no encontrado o es propietario del espacio' }, { status: 409 });
+    }
 
     await logAudit({
       workspaceId,
