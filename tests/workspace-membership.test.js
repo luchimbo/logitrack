@@ -99,3 +99,23 @@ test('existing session resolves new workspace immediately in fast and refreshed 
     assert.equal((await db.execute('SELECT * FROM workspace_members WHERE app_user_id=2 AND workspace_id IN (2,3)')).rows.length, 0);
   } finally { delete globalThis[key]; db.close(); }
 });
+
+test('first sign-in links an assigned pending identity without creating another workspace', async () => {
+  const db = await fixture();
+  globalThis.__pendingMembershipAuthTest = db;
+  try {
+    await assignWorkspaceUser(db, actor, { email: 'pending@example.com', role: 'admin' });
+    let source = readFileSync(new URL('../src/lib/auth.js', import.meta.url), 'utf8');
+    source = source.replace('import { auth, currentUser } from "@clerk/nextjs/server";', `const auth = async () => ({userId:'clerk-new'}); const currentUser = async () => ({primaryEmailAddress:{emailAddress:'pending@example.com'}});`)
+      .replace('import { jwtVerify } from "jose";', 'const jwtVerify = async () => { throw Error("unused"); };')
+      .replace('import { db } from "@/lib/db";', 'const db = globalThis.__pendingMembershipAuthTest;')
+      .replace('import { ensureDb } from "@/lib/ensureDb";', 'const ensureDb = async () => {};')
+      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};');
+    const { getCurrentActor } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+    const resolved = await getCurrentActor({ cookies: { get: () => undefined } });
+    assert.equal(resolved.workspaceId, 1);
+    assert.equal(resolved.role, 'admin');
+    assert.equal((await db.execute('SELECT * FROM workspaces')).rows.length, 3);
+    assert.equal((await db.execute("SELECT clerk_user_id FROM app_users WHERE email='pending@example.com'")).rows[0].clerk_user_id, 'clerk-new');
+  } finally { delete globalThis.__pendingMembershipAuthTest; db.close(); }
+});

@@ -33,7 +33,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
   if (currentUser?.isGlobalAdmin || canManageUsers) {
     const adminItems = [];
     if (currentUser?.isGlobalAdmin) adminItems.push({ id: "adminOverview", icon: "settings", label: "Admin Maestro" });
-    if (canManageUsers) adminItems.push({ id: "userManagement", icon: "users", label: "Usuarios" });
+    if (canManageUsers) adminItems.push({ id: "userManagement", icon: "users", label: "Espacio y miembros" });
     navGroups.push({ title: "Administración", items: adminItems });
   }
   return navGroups;

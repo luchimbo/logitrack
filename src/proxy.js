@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/support(.*)",
   "/login(.*)",
   "/sign-up(.*)",
+  "/workspace-access",
   "/transportista(.*)",
   "/api/public/carrier-portals(.*)",
   "/api/integrations/shopify/callback(.*)",
