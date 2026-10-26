@@ -1,0 +1,57 @@
+import { forwardRef } from "react";
+
+const Select = forwardRef(
+  (
+    {
+      label,
+      error,
+      helperText,
+      placeholder,
+      children,
+      className = "",
+      containerClassName = "",
+      ...props
+    },
+    ref
+  ) => {
+    const id = props.id || props.name;
+
+    return (
+      <div className={`form-group ${containerClassName}`}>
+        {label && (
+          <label htmlFor={id} className="form-label">
+            {label}
+          </label>
+        )}
+        <select
+          ref={ref}
+          className={`form-select ${error ? "form-select-error" : ""} ${className}`}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : helperText ? `${id}-helper` : undefined}
+          {...props}
+        >
+          {placeholder && (
+            <option value="" disabled>
+              {placeholder}
+            </option>
+          )}
+          {children}
+        </select>
+        {helperText && !error && (
+          <p id={`${id}-helper`} className="form-helper">
+            {helperText}
+          </p>
+        )}
+        {error && (
+          <p id={`${id}-error`} className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+);
+
+Select.displayName = "Select";
+
+export default Select;

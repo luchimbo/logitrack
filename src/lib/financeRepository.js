@@ -34,7 +34,7 @@ const LEAN_FIELDS = ['connectionId', 'shipmentId', 'orderId', 'method', 'partido
   'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'shippingCollectedCents', 'trackingNumber', 'sellerId', 'recipient'];
 const SNAPSHOT_TTL_MS = 5 * 60_000;
 // Bump when the calculation changes, so stored summaries are rebuilt on next read.
-const SNAPSHOT_VERSION = 8;
+const SNAPSHOT_VERSION = 10;
 const rebuilding = new Map();
 // Flex amounts that come straight from the rate table are recomputed on read, so changing a rate never needs a rebuild.
 function leanRecord(r) {
@@ -76,7 +76,7 @@ export function createFinanceRepository(db) {
   async function tiendanubeRecords(workspaceId, connection = db) {
     const result = await readFinancePages(connection, `SELECT id, integration_connection_id, external_store_id, tiendanube_id,
       status, payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatched_at_external,
-      contact_name, shipping_address_json, total, currency, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
+      contact_name, shipping_address_json, subtotal, total, currency, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
       FROM tiendanube_orders WHERE workspace_id = ?`, [workspaceId], 'id');
     return tiendanubeFinanceRecords(result.rows);
   }
@@ -243,7 +243,7 @@ export function createFinanceRepository(db) {
     if (withTargets) {
       const undated = await execute(`SELECT data_json FROM finance_snapshot WHERE workspace_id = ? AND dispatch_day = '' LIMIT 5000`, [workspaceId]);
       // Colecta shipments of the period still without Mercado Libre's cost go first: only the full detail brings it.
-      const syncTargets = [...rows.filter((r) => r.method === 'colecta' && r.source === 'ml' && r.amountCents === null), ...undated.rows.map((row) => JSON.parse(row.data_json)), ...rows.filter((r) => r.stale)]
+      const syncTargets = [...rows.filter((r) => r.salesCents == null || r.salesMissingCount > 0), ...rows.filter((r) => r.method === 'colecta' && r.source === 'ml' && r.amountCents === null), ...undated.rows.map((row) => JSON.parse(row.data_json)), ...rows.filter((r) => r.stale)]
         .filter((r) => r.source !== 'tiendanube' && r.orderId && r.connectionId && !['canceled'].includes(r.state))
         .map((r) => ({ orderId: r.orderId, connectionId: r.connectionId }))
         .filter((r, i, list) => list.findIndex((o) => o.orderId === r.orderId && o.connectionId === r.connectionId) === i).slice(0, 5000);

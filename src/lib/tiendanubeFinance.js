@@ -27,7 +27,10 @@ export function tiendanubeFinanceRecords(rows) {
     const nonnegative = (value) => { const cents = toCents(value); return cents !== null && cents >= 0 ? cents : null; };
     const collected = ars ? nonnegative(row.shipping_cost_customer) : null;
     const total = ars ? nonnegative(row.total) : null;
-    const sales = total !== null && collected !== null && total >= collected ? total - collected : null;
+    // Prefer the total less customer-paid shipping; if the shipping charge is absent,
+    // Tiendanube's subtotal still gives the product amount before shipping.
+    const subtotal = ars ? nonnegative(row.subtotal) : null;
+    const sales = total !== null && collected !== null && total >= collected ? total - collected : subtotal;
     const cost = ars ? nonnegative(row.shipping_cost_owner) : null;
     const partido = resolvePartidoFromGeo(address.city || address.locality || '', address.province || '') || '';
     const zone = zoneForPartido(partido) || '';

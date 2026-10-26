@@ -48,7 +48,9 @@ export function orderSales(row) {
   if (['cancelled', 'canceled', 'invalid'].includes(status)) return { salesCents: 0, feesCents: 0, salesMissing: '', paidOrderCount: 0 };
   if (status !== 'paid') return { salesCents: null, feesCents: null, salesMissing: status ? 'Venta no pagada' : 'Estado de venta no disponible', paidOrderCount: 0 };
   if ((row.currency || raw.currency_id) !== 'ARS') return { salesCents: null, feesCents: null, salesMissing: 'Venta sin moneda ARS', paidOrderCount: 1 };
-  const amount = toCents(raw.total_amount ?? row.total);
+  const rawAmount = toCents(raw.total_amount);
+  const storedAmount = toCents(row.total);
+  const amount = rawAmount !== null && rawAmount >= 0 ? rawAmount : storedAmount;
   return { salesCents: amount !== null && amount >= 0 ? amount : null, feesCents: orderFees(raw),
     salesMissing: amount !== null && amount >= 0 ? '' : 'Importe de venta no disponible', paidOrderCount: 1 };
 }
@@ -148,6 +150,15 @@ export function preserveMercadoLibreDetails(payload, old) {
     if (merged[key] === undefined) merged[key] = parseJson(old[column], fallback);
   }
   return merged;
+}
+
+// A delivered or cancelled package whose full detail was read cannot change anymore, so it is stored as closed and
+// never fetched again. A light refresh only reopens it (state moved on) or leaves the mark as it was.
+export function orderClosure(payload, merged = payload) {
+  const status = String(merged.shipment?.status || '').toLowerCase();
+  if (!status) return 'keep';
+  if (!['delivered', 'cancelled', 'canceled'].includes(status)) return 'clear';
+  return payload.light || payload.syncErrors?.length || payload.history === undefined ? 'keep' : 'set';
 }
 
 export function shipmentFinanceStatement(workspaceId, payload, connectionId, now = new Date().toISOString()) {

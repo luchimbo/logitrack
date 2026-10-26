@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { tiendanubeFinanceRecords, tiendanubeShippingAmounts } from '../src/lib/tiendanubeFinance.js';
 import { FINANCE_SCHEMA } from '../src/lib/financeSchema.js';
 import { createFinanceRepository } from '../src/lib/financeRepository.js';
-import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
+import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, orderClosure, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
 
 test('sales use paid ARS gross totals, keeping zero, unknown and cancellation distinct', () => {
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'0'}).salesCents,0);
@@ -130,6 +130,16 @@ test('light and failed detail refreshes preserve last valid data; successful emp
   assert.equal(preserveMercadoLibreDetails({delays:null,history:[]},old).delays,null);
   assert.equal(preserveMercadoLibreDetails({delays:null,history:[]},old).history.length,0);
 });
+test('only a full, error-free read of a delivered or cancelled package closes the order',()=>{
+  const full={shipment:{status:'delivered'},history:[{status:'delivered'}],syncErrors:[]};
+  assert.equal(orderClosure(full),'set');
+  assert.equal(orderClosure({...full,shipment:{status:'cancelled'}}),'set');
+  assert.equal(orderClosure({...full,light:true}),'keep');
+  assert.equal(orderClosure({...full,syncErrors:['Historial: 500']}),'keep');
+  assert.equal(orderClosure({shipment:{status:'delivered'},syncErrors:[]}),'keep');
+  assert.equal(orderClosure({light:true},{shipment:{status:'shipped'}}),'clear');
+  assert.equal(orderClosure({light:true},{shipment:null}),'keep');
+});
 test('canceled Flex never adds expense while Colecta retains a real seller charge',()=>{
   const flex=financeRecord({...base,shipment_status:'cancelled'},rates);
   assert.equal(flex.amountCents,null);
@@ -162,7 +172,7 @@ async function fixture() {
   await db.execute('ALTER TABLE shipments ADD COLUMN recipient_name TEXT');
   await db.execute(`CREATE TABLE tiendanube_orders(id INTEGER PRIMARY KEY,workspace_id INTEGER,integration_connection_id INTEGER,
     external_store_id TEXT,tiendanube_id BIGINT,status TEXT,payment_status TEXT,shipping_status TEXT,dispatch_status TEXT,
-    dispatch_marked_at TEXT,dispatched_at_external TEXT,contact_name TEXT,shipping_address_json TEXT,total TEXT,currency TEXT,
+    dispatch_marked_at TEXT,dispatched_at_external TEXT,contact_name TEXT,shipping_address_json TEXT,subtotal TEXT,total TEXT,currency TEXT,
     shipping_cost_customer TEXT,shipping_cost_owner TEXT,order_source TEXT,synced_at TEXT)`);
   const repo=createFinanceRepository(db);
   await repo.saveRate(1,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:10000},7);
@@ -524,7 +534,7 @@ test('provisional balance preserves sales with missing shipping or fees and dedu
 test('Tiendanube sync stores checkout shipping and updates cancellations without replacing zero by unknown', async () => {
   const {db,cleanup}=await fixture();
   try {
-    for (const column of ['number','shipping_method','shipping_carrier','is_zipnova','contact_email','contact_phone','products_json','subtotal','created_at_external','updated_at_external'])
+    for (const column of ['number','shipping_method','shipping_carrier','is_zipnova','contact_email','contact_phone','products_json','created_at_external','updated_at_external'])
       await db.execute(`ALTER TABLE tiendanube_orders ADD COLUMN ${column} TEXT`);
     globalThis.__tiendanubeFinanceDb=db;
     let source=readFileSync(new URL('../src/lib/tiendanubeStore.js',import.meta.url),'utf8');
@@ -559,3 +569,24 @@ test('detailed settlement lists each package by delivery day with account names 
   assert.match(lines[3], /^"Total";"";"2 envíos";.*"11350,00"/);
   assert.match(lines[5], /^"Total a pagar";.*"8190,00"/);
 });
+
+
+test('sales retain the stored order total when the API total is empty or invalid', () => {
+  for (const value of ['', 'invalid', -1]) {
+    assert.equal(orderSales({status: 'paid', currency: 'ARS', total: '125.50', raw_order_json: JSON.stringify({total_amount: value})}).salesCents, 12550);
+  }
+  assert.equal(orderSales({status: 'paid', currency: 'ARS', total: '125.50', raw_order_json: JSON.stringify({total_amount: 0})}).salesCents, 0);
+});
+
+
+test('refresh targets include recent Flex orders with missing sale totals even when shipping is priced', async () => {
+  const {db, repo, cleanup} = await fixture();
+  try {
+    await db.execute("UPDATE mercadolibre_orders SET status='paid',currency='ARS',total=NULL,synced_at=CURRENT_TIMESTAMP");
+    const report = await repo.report(1, {}, {compact: true, withTargets: true});
+    assert.equal(report.summary.missingCount, 0);
+    assert.ok(report.summary.salesUnavailableCount > 0);
+    assert.ok(report.syncTargets.some((r) => ['O1', 'O2'].includes(r.orderId) && r.connectionId === 10));
+  } finally { cleanup(); }
+});
+

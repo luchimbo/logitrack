@@ -5,7 +5,7 @@ import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 import { persistShipmentFinance, enqueueMercadoLibreRetry } from '@/lib/financeSync';
-import { preserveMercadoLibreDetails } from '@/lib/logisticsFinance';
+import { preserveMercadoLibreDetails, orderClosure } from '@/lib/logisticsFinance';
 
 function json(value, fallback) {
   try {
@@ -165,6 +165,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
   const prior = await db.execute({ sql: 'SELECT * FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=? AND order_id=? LIMIT 1', args: [workspaceId, Number(connectionId), orderId] });
   const old = prior.rows[0];
   payload = preserveMercadoLibreDetails(payload, old);
+  const closure = orderClosure(originalPayload, payload);
   const normalized = normalizeOrder({ ...payload, siteId });
   if (!normalized.orderId) return;
   const resolvedConnectionId = connectionId ? Number(connectionId) : null;
@@ -214,9 +215,10 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
         status = ?, tags_json = ?, total = ?, currency = ?, buyer_id = ?, buyer_nickname = ?, recipient_name = ?, recipient_phone = ?,
         address_json = ?, products_json = ?, shipment_status = ?, shipment_substatus = ?, logistic_mode = ?, logistic_type = ?, shipping_method = ?,
         tracking_number = ?, lead_time_json = ?, delays_json = ?, carrier_json = ?, history_json = ?, raw_order_json = ?, raw_shipment_json = ?,
-        created_at_external = ?, updated_at_external = ?, synced_at = CURRENT_TIMESTAMP
+        created_at_external = ?, updated_at_external = ?, synced_at = CURRENT_TIMESTAMP,
+        closed_at = CASE ? WHEN 'set' THEN COALESCE(closed_at, CURRENT_TIMESTAMP) WHEN 'clear' THEN NULL ELSE closed_at END
         WHERE id = ?`,
-      args: [...values, Number(existing.rows[0].id)],
+      args: [...values, closure, Number(existing.rows[0].id)],
     });
     await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
     return;
@@ -228,9 +230,10 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
       status, tags_json, total, currency, buyer_id, buyer_nickname, recipient_name, recipient_phone,
       address_json, products_json, shipment_status, shipment_substatus, logistic_mode, logistic_type, shipping_method,
       tracking_number, lead_time_json, delays_json, carrier_json, history_json, raw_order_json, raw_shipment_json,
-      created_at_external, updated_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    args: values,
+      created_at_external, updated_at_external, synced_at, closed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+      CASE ? WHEN 'set' THEN CURRENT_TIMESTAMP END)`,
+    args: [...values, closure],
   });
   await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
 }
@@ -312,8 +315,18 @@ export async function syncMercadoLibreOrdersPage({ workspaceId, client, connecti
   if (!externalStoreId) throw new Error('Seller ID de Mercado Libre no disponible');
   const payload = await client.searchOrders({ sellerId: externalStoreId, offset, limit, dateFrom, dateTo });
   const orders = Array.isArray(payload?.results) ? payload.results : [];
-  let synced = 0, failed = 0;
+  let synced = 0, failed = 0, skipped = 0;
+  // Closed orders (delivered or cancelled, full detail already stored) are not fetched again unless ML says they changed.
+  const closed = new Map();
+  const ids = orders.map((o) => String(o?.id || '')).filter(Boolean);
+  if (ids.length) {
+    const rows = await db.execute({ sql: `SELECT order_id, updated_at_external FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=?
+      AND closed_at IS NOT NULL AND order_id IN (${ids.map(() => '?').join(',')})`, args: [workspaceId, Number(connectionId), ...ids] });
+    for (const row of rows.rows) closed.set(String(row.order_id), String(row.updated_at_external || ''));
+  }
   await mapWithConcurrency(orders, async (orderSummary) => {
+    const updatedAt = String(orderSummary?.last_updated || orderSummary?.date_last_updated || '');
+    if (updatedAt && closed.get(String(orderSummary?.id)) === updatedAt) { skipped++; return; }
     try {
       const full = await fetchFullOrder(client, orderSummary, siteId, { light: true });
       await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
@@ -324,7 +337,7 @@ export async function syncMercadoLibreOrdersPage({ workspaceId, client, connecti
       await enqueueMercadoLibreRetry({ workspaceId, connectionId, orderId: orderSummary?.id, error: error.message });
     }
   }, 6);
-  return { synced, failed, total: Number(payload?.paging?.total) || null, nextOffset: offset + orders.length, done: orders.length < limit };
+  return { synced, skipped, failed, total: Number(payload?.paging?.total) || null, nextOffset: offset + orders.length, done: orders.length < limit };
 }
 
 export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5 } = {}) {

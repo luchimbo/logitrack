@@ -67,7 +67,8 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
         const account = accounts[cursor.account];
         const page = await syncOrdersPage({ workspaceId, client: account.client, connectionId: account.connectionId, externalStoreId: account.externalStoreId,
           siteId: account.config?.siteId || 'MLA', offset: cursor.offset, dateFrom, dateTo });
-        progress.orders += page.synced;
+        progress.orders += page.synced + (page.skipped || 0);
+        progress.ordersSkipped = (progress.ordersSkipped || 0) + (page.skipped || 0);
         progress.ordersTotals ||= {};
         if (page.total !== null) progress.ordersTotals[account.connectionId] = page.total;
         progress.ordersTotal = Object.values(progress.ordersTotals).reduce((n, v) => n + (Number(v) || 0), 0);
@@ -115,13 +116,14 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
       await save();
     }
     if (phase === 'details' && inBudget()) {
-      // The light order sync has no delivery date: delivered packages of this carrier without history get the full detail.
+      // The light order sync has no delivery date: delivered packages of this carrier not yet closed get the full detail,
+      // which closes them so later settlements and syncs skip them.
       const pending = (await execute(`SELECT DISTINCT mo.order_id, mo.integration_connection_id FROM mercadolibre_orders mo
         JOIN shipments s ON s.workspace_id = mo.workspace_id AND (s.id = mo.shipment_row_id OR (s.tracking_number = mo.shipment_id AND mo.shipment_id <> ''))
         LEFT JOIN daily_batches b ON b.id = s.batch_id AND b.workspace_id = s.workspace_id
         WHERE mo.workspace_id=? AND s.shipping_method='flex' AND (s.assigned_carrier = ? OR s.assigned_carrier = ?)
           AND COALESCE(b.date, substr(s.created_at, 1, 10)) BETWEEN ? AND ? AND mo.shipment_status = 'delivered'
-          AND (mo.history_json IS NULL OR mo.history_json IN ('', '[]', 'null'))
+          AND mo.closed_at IS NULL
         ORDER BY mo.order_id`, [workspaceId, String(job.carrier_key || ''), String(job.carrier_id), shift(job.date_from, -10), job.date_to])).rows;
       const skip = new Set(cursor.misses || []);
       const todo = pending.filter((r) => !skip.has(String(r.order_id)));
@@ -133,8 +135,8 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
             if (!account) throw new Error('Cuenta no disponible');
             const full = await syncOrder({ workspaceId, client: account.client, orderId: row.order_id, connectionId: account.connectionId,
               externalStoreId: account.externalStoreId, siteId: account.config?.siteId || 'MLA' });
-            // A detail without history would be listed again: remember it.
-            if (!full?.history) skip.add(String(row.order_id));
+            // A detail that did not close the order would be listed again: remember it.
+            if (!full?.history || full.syncErrors?.length) skip.add(String(row.order_id));
           } catch { skip.add(String(row.order_id)); }
           progress.details++;
         }));
