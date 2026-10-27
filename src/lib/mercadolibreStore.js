@@ -113,7 +113,7 @@ function getAddress(shipment = {}) {
 }
 
 function getShippingMethod(shipment = {}) {
-  const type = String(shipment.logistic?.type || '').toLowerCase();
+  const type = String(shipment?.logistic?.type || '').toLowerCase();
   if (type === 'self_service') return 'flex';
   return 'colecta';
 }
