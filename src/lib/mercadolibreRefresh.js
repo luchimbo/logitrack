@@ -21,7 +21,8 @@ export async function refreshOpenOrders(workspaceId, target, { days = 45, deadli
   await ensureDb();
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const open = (await execute(`SELECT order_id FROM mercadolibre_orders WHERE workspace_id = ? AND integration_connection_id = ? AND closed_at IS NULL
-    AND shipment_id <> '' AND created_at_external >= ? ORDER BY synced_at ASC LIMIT 2000`, [workspaceId, Number(target.connectionId), since])).rows;
+    AND shipment_id <> '' AND created_at_external >= ?
+    ORDER BY (history_json IS NULL OR history_json IN ('', '[]')) DESC, synced_at ASC LIMIT 2000`, [workspaceId, Number(target.connectionId), since])).rows;
   const stats = { open: open.length, refreshed: 0, failed: 0 };
   for (let i = 0; i < open.length && Date.now() < deadline; i += concurrency) {
     await Promise.all(open.slice(i, i + concurrency).map(async (row) => {
