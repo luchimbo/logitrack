@@ -1,0 +1,970 @@
+import { db, hasDbCredentials } from "./db";
+
+let _initialized = false;
+
+function exec(sql, args = []) {
+  return db.execute({ sql, args });
+}
+
+async function backfillOrdersFromShipments() {
+  await exec(`INSERT INTO orders (
+    workspace_id, operation_status, source_provider, external_order_id, order_number,
+    customer_name, shipping_method, shipping_carrier, address, city, province, postal_code,
+    created_at_external
+  )
+    SELECT
+      s.workspace_id,
+      COALESCE(s.operation_status, 'ready_to_pick'),
+      COALESCE(NULLIF(s.external_provider, ''), 'manual_label'),
+      COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, '')),
+      COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, '')),
+      MAX(s.recipient_name),
+      MAX(s.shipping_method),
+      MAX(COALESCE(s.assigned_carrier, s.carrier_name)),
+      MAX(s.address),
+      MAX(s.city),
+      MAX(s.province),
+      MAX(s.postal_code),
+      MIN(s.created_at)
+    FROM shipments s
+    WHERE s.workspace_id IS NOT NULL
+      AND COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, '')) IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM orders o
+        WHERE o.workspace_id = s.workspace_id
+          AND o.source_provider = COALESCE(NULLIF(s.external_provider, ''), 'manual_label')
+          AND o.external_order_id = COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, ''))
+      )
+    GROUP BY
+      s.workspace_id,
+      COALESCE(NULLIF(s.external_provider, ''), 'manual_label'),
+      COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, ''))`);
+
+  await exec(`INSERT INTO order_items (workspace_id, order_id, sku, product_name, quantity, color, voltage)
+    SELECT
+      s.workspace_id,
+      o.id,
+      s.sku,
+      COALESCE(NULLIF(s.product_name, ''), 'Producto sin nombre'),
+      COALESCE(s.quantity, 1),
+      s.color,
+      s.voltage
+    FROM shipments s
+    JOIN orders o
+      ON o.workspace_id = s.workspace_id
+      AND o.source_provider = COALESCE(NULLIF(s.external_provider, ''), 'manual_label')
+      AND o.external_order_id = COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, ''))
+    WHERE s.workspace_id IS NOT NULL
+      AND COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, '')) IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM order_shipments os
+        WHERE os.workspace_id = s.workspace_id AND os.shipment_id = s.id
+      )`);
+
+  await exec(`INSERT OR IGNORE INTO order_shipments (workspace_id, order_id, shipment_id)
+    SELECT
+      s.workspace_id,
+      o.id,
+      s.id
+    FROM shipments s
+    JOIN orders o
+      ON o.workspace_id = s.workspace_id
+      AND o.source_provider = COALESCE(NULLIF(s.external_provider, ''), 'manual_label')
+      AND o.external_order_id = COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, ''))
+    WHERE s.workspace_id IS NOT NULL
+      AND COALESCE(NULLIF(s.sale_id, ''), NULLIF(s.tracking_number, '')) IS NOT NULL`);
+}
+
+export async function initDb() {
+  if (!hasDbCredentials) {
+    _initialized = false;
+    return false;
+  }
+
+  // if (_initialized) return;
+  _initialized = true;
+
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER,
+      sale_type TEXT,
+      sale_id TEXT,
+      tracking_number TEXT,
+      remitente_id TEXT,
+      product_name TEXT NOT NULL,
+      sku TEXT,
+      color TEXT,
+      voltage TEXT,
+      quantity INTEGER DEFAULT 1,
+      recipient_name TEXT,
+      recipient_user TEXT,
+      address TEXT,
+      postal_code TEXT,
+      city TEXT,
+      partido TEXT,
+      province TEXT,
+      reference TEXT,
+      shipping_method TEXT,
+      carrier_code TEXT,
+      carrier_name TEXT,
+      assigned_carrier TEXT,
+      dispatch_date TEXT,
+      delivery_date TEXT,
+      status TEXT DEFAULT 'pendiente',
+      lat FLOAT,
+      lng FLOAT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS app_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clerk_user_id TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL DEFAULT 'user',
+      last_seen_at DATETIME,
+      is_global_admin INTEGER DEFAULT 0,
+      onboarding_completed INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS workspaces (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS workspace_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      app_user_id INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, app_user_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(app_user_id) REFERENCES app_users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS workspace_printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      printer_path TEXT NOT NULL,
+      sync_url TEXT,
+      sync_token TEXT,
+      workspace_key TEXT NOT NULL UNIQUE,
+      is_default INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS workspace_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL UNIQUE,
+      printing_setup_completed INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS zone_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      partido TEXT NOT NULL,
+      carrier_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS carriers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      name TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      color TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS daily_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      created_by_app_user_id INTEGER,
+      date DATE DEFAULT (date('now', '-3 hours')),
+      total_packages INTEGER DEFAULT 0,
+      filenames TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      app_user_id INTEGER,
+      actor_type TEXT NOT NULL,
+      actor_label TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(app_user_id) REFERENCES app_users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      job_id TEXT NOT NULL UNIQUE,
+      created_at_client TEXT,
+      received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      source_files_json TEXT,
+      sku_order_json TEXT,
+      printer_path TEXT,
+      print_file_path TEXT,
+      labels_total INTEGER DEFAULT 0,
+      skus_total INTEGER DEFAULT 0,
+      reprints_total INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS print_job_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      print_job_id INTEGER NOT NULL,
+      item_order INTEGER NOT NULL,
+      sku TEXT,
+      tracking_number TEXT,
+      label_fingerprint TEXT,
+      sale_id TEXT,
+      product_name TEXT,
+      shipping_method TEXT,
+      raw_block TEXT,
+      is_reprint INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(print_job_id) REFERENCES print_jobs(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS zipnova_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      zipnova_id TEXT NOT NULL UNIQUE,
+      account_id INTEGER,
+      external_id TEXT,
+      delivery_id TEXT,
+      created_at_external TEXT,
+      created_date TEXT,
+      delivery_time_json TEXT,
+      status TEXT,
+      status_name TEXT,
+      logistic_type TEXT,
+      service_type TEXT,
+      tracking TEXT,
+      tracking_external TEXT,
+      origin_id INTEGER,
+      origin_name TEXT,
+      origin_address TEXT,
+      origin_city TEXT,
+      origin_province TEXT,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      recipient_phone TEXT,
+      address TEXT,
+      city TEXT,
+      province TEXT,
+      postal_code TEXT,
+      total_packages INTEGER DEFAULT 0,
+      total_weight FLOAT DEFAULT 0,
+      total_volume FLOAT DEFAULT 0,
+      declared_value FLOAT DEFAULT 0,
+      price FLOAT DEFAULT 0,
+      carrier_name TEXT,
+      carrier_logo TEXT,
+      products_json TEXT,
+      packages_json TEXT,
+      collection_window_json TEXT,
+      collection_key TEXT,
+      label_downloaded_at DATETIME,
+      label_downloaded_by TEXT,
+      label_pdf_downloaded_at DATETIME,
+      label_zpl_downloaded_at DATETIME,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS zipnova_collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      collection_key TEXT NOT NULL,
+      zipnova_collection_external_id TEXT,
+      origin_id INTEGER,
+      origin_name TEXT,
+      origin_address TEXT,
+      origin_city TEXT,
+      origin_province TEXT,
+      scheduled_date TEXT,
+      window_open TEXT,
+      window_close TEXT,
+      cutoff_label TEXT,
+      status TEXT,
+      collector_name TEXT,
+      shipments_count INTEGER DEFAULT 0,
+      packages_count INTEGER DEFAULT 0,
+      total_weight FLOAT DEFAULT 0,
+      total_volume FLOAT DEFAULT 0,
+      shipment_ids_json TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, collection_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS correo_argentino_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER,
+      external_reference TEXT,
+      correo_shipping_id TEXT,
+      tracking_number TEXT,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      recipient_phone TEXT,
+      address_json TEXT,
+      package_json TEXT,
+      service_code TEXT,
+      rate_json TEXT,
+      label_url TEXT,
+      label_base64 TEXT,
+      status TEXT,
+      raw_response_json TEXT,
+      tracking_response_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      operation_status TEXT DEFAULT 'ready_to_pick',
+      source_provider TEXT DEFAULT 'manual_label',
+      external_order_id TEXT,
+      order_number TEXT,
+      customer_name TEXT,
+      customer_email TEXT,
+      customer_phone TEXT,
+      shipping_method TEXT,
+      shipping_carrier TEXT,
+      address TEXT,
+      city TEXT,
+      province TEXT,
+      postal_code TEXT,
+      total TEXT,
+      currency TEXT,
+      created_at_external TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      sku TEXT,
+      product_name TEXT NOT NULL,
+      quantity INTEGER DEFAULT 1,
+      color TEXT,
+      voltage TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(order_id) REFERENCES orders(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS order_shipments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      shipment_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(order_id, shipment_id),
+      FOREIGN KEY(order_id) REFERENCES orders(id),
+      FOREIGN KEY(shipment_id) REFERENCES shipments(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS operation_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      order_id INTEGER,
+      app_user_id INTEGER,
+      event_type TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(order_id) REFERENCES orders(id),
+      FOREIGN KEY(app_user_id) REFERENCES app_users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS picking_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      app_user_id INTEGER,
+      status TEXT DEFAULT 'active',
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      finished_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(order_id) REFERENCES orders(id),
+      FOREIGN KEY(app_user_id) REFERENCES app_users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS picking_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      picking_session_id INTEGER NOT NULL,
+      order_item_id INTEGER NOT NULL,
+      expected_quantity INTEGER DEFAULT 1,
+      picked_quantity INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(picking_session_id, order_item_id),
+      FOREIGN KEY(picking_session_id) REFERENCES picking_sessions(id),
+      FOREIGN KEY(order_item_id) REFERENCES order_items(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_workspace_status ON orders(workspace_id, operation_status)`,
+    `CREATE INDEX IF NOT EXISTS idx_orders_workspace_created ON orders(workspace_id, created_at)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_workspace_source_external ON orders(workspace_id, source_provider, external_order_id) WHERE external_order_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_order_shipments_order ON order_shipments(order_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_order_shipments_shipment ON order_shipments(shipment_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_operation_events_order ON operation_events(order_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_picking_sessions_order ON picking_sessions(order_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_picking_items_session ON picking_items(picking_session_id)`,
+    `CREATE TABLE IF NOT EXISTS incidents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      order_item_id INTEGER,
+      type TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'open',
+      assigned_to_app_user_id INTEGER,
+      created_by_app_user_id INTEGER,
+      resolved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(order_id) REFERENCES orders(id),
+      FOREIGN KEY(order_item_id) REFERENCES order_items(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS incident_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      incident_id INTEGER NOT NULL,
+      app_user_id INTEGER,
+      comment TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(incident_id) REFERENCES incidents(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_incidents_workspace ON incidents(workspace_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_incidents_order ON incidents(order_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_incident_comments_incident ON incident_comments(incident_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_app_users_clerk ON app_users(clerk_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(app_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_printers_workspace ON workspace_printers(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_settings_workspace ON workspace_settings(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_workspace_created ON audit_logs(workspace_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(app_user_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_job ON print_job_items(print_job_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_tracking ON print_job_items(tracking_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_fingerprint ON print_job_items(label_fingerprint)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_jobs_received ON print_jobs(received_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_shipments_workspace_created ON shipments(workspace_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_shipments_workspace_batch ON shipments(workspace_id, batch_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_daily_batches_workspace_date ON daily_batches(workspace_id, date)`,
+    `CREATE INDEX IF NOT EXISTS idx_zone_mappings_workspace_partido ON zone_mappings(workspace_id, partido)`,
+    `CREATE INDEX IF NOT EXISTS idx_carriers_workspace_name ON carriers(workspace_id, name)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_jobs_workspace_received ON print_jobs(workspace_id, received_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_print_job_items_workspace_tracking ON print_job_items(workspace_id, tracking_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_created_date ON zipnova_shipments(created_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_external_id ON zipnova_shipments(external_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_downloaded ON zipnova_shipments(label_downloaded_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_shipments_collection ON zipnova_shipments(workspace_id, collection_key)`,
+    `CREATE INDEX IF NOT EXISTS idx_zipnova_collections_workspace_date ON zipnova_collections(workspace_id, scheduled_date)`,
+    `CREATE INDEX IF NOT EXISTS idx_correo_argentino_workspace_created ON correo_argentino_shipments(workspace_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_correo_argentino_tracking ON correo_argentino_shipments(tracking_number)`,
+    `CREATE TABLE IF NOT EXISTS workspace_integrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      connected_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id)`,
+    `CREATE TABLE IF NOT EXISTS workspace_integration_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      external_store_id TEXT NOT NULL,
+      display_name TEXT,
+      config_json TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      connected_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider, external_store_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integration_connections_workspace ON workspace_integration_connections(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_workspace_integration_connections_provider ON workspace_integration_connections(provider, external_store_id)`,
+    `CREATE TABLE IF NOT EXISTS tiendanube_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      tiendanube_id BIGINT NOT NULL,
+      number TEXT,
+      status TEXT,
+      payment_status TEXT,
+      shipping_status TEXT,
+      dispatch_status TEXT DEFAULT 'to_send',
+      dispatch_marked_at DATETIME,
+      dispatch_marked_by TEXT,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      shipping_address_json TEXT,
+      products_json TEXT,
+      subtotal TEXT,
+      total TEXT,
+      currency TEXT,
+      created_at_external TEXT,
+      updated_at_external TEXT,
+      dispatched_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, tiendanube_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace ON tiendanube_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_status ON tiendanube_orders(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_created ON tiendanube_orders(created_at_external)`,
+    `CREATE TABLE IF NOT EXISTS tiendanube_oauth_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      store_id TEXT NOT NULL UNIQUE,
+      access_token TEXT NOT NULL,
+      scope TEXT,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS shopify_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      integration_connection_id INTEGER,
+      external_store_id TEXT,
+      shopify_gid TEXT NOT NULL,
+      shopify_legacy_id TEXT,
+      name TEXT,
+      financial_status TEXT,
+      fulfillment_status TEXT,
+      cancel_reason TEXT,
+      cancelled_at_external TEXT,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      shipping_address_json TEXT,
+      products_json TEXT,
+      shipping_method TEXT,
+      shipping_carrier TEXT,
+      subtotal TEXT,
+      total TEXT,
+      currency TEXT,
+      created_at_external TEXT,
+      updated_at_external TEXT,
+      dispatched_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_shopify_orders_connection_gid ON shopify_orders(integration_connection_id, shopify_gid) WHERE integration_connection_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_shopify_orders_workspace ON shopify_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_shopify_orders_created ON shopify_orders(created_at_external)`,
+    `CREATE TABLE IF NOT EXISTS mercadolibre_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      integration_connection_id INTEGER,
+      external_store_id TEXT,
+      user_id TEXT,
+      site_id TEXT,
+      order_id TEXT NOT NULL,
+      pack_id TEXT,
+      shipment_id TEXT,
+      status TEXT,
+      tags_json TEXT,
+      total TEXT,
+      currency TEXT,
+      buyer_id TEXT,
+      buyer_nickname TEXT,
+      recipient_name TEXT,
+      recipient_phone TEXT,
+      address_json TEXT,
+      products_json TEXT,
+      shipment_status TEXT,
+      shipment_substatus TEXT,
+      logistic_mode TEXT,
+      logistic_type TEXT,
+      shipping_method TEXT,
+      tracking_number TEXT,
+      lead_time_json TEXT,
+      delays_json TEXT,
+      carrier_json TEXT,
+      history_json TEXT,
+      raw_order_json TEXT,
+      raw_shipment_json TEXT,
+      label_imported_at DATETIME,
+      shipment_row_id INTEGER,
+      created_at_external TEXT,
+      updated_at_external TEXT,
+      synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_mercadolibre_orders_connection_order ON mercadolibre_orders(integration_connection_id, order_id) WHERE integration_connection_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace ON mercadolibre_orders(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_shipment ON mercadolibre_orders(shipment_id)`,
+    `CREATE TABLE IF NOT EXISTS mercadolibre_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic TEXT,
+      resource TEXT,
+      user_id TEXT,
+      application_id TEXT,
+      payload_json TEXT,
+      processed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS geocode_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      address_key TEXT NOT NULL,
+      lat FLOAT NOT NULL,
+      lng FLOAT NOT NULL,
+      provider TEXT,
+      place_id TEXT,
+      formatted_address TEXT,
+      score INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, address_key)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_geocode_cache_workspace_key ON geocode_cache(workspace_id, address_key)`
+  ];
+
+  for (const stmt of statements) {
+    try {
+      await exec(stmt);
+    } catch (e) {
+      console.error("DB Init Error:", e.message || e);
+    }
+  }
+
+  // Migration: add lat and lng to shipments
+  try {
+    const tableInfo = await exec("PRAGMA table_info(shipments)");
+    const cols = tableInfo.rows.map(r => r.name);
+    if (!cols.includes('lat')) {
+      await exec("ALTER TABLE shipments ADD COLUMN lat FLOAT");
+      await exec("ALTER TABLE shipments ADD COLUMN lng FLOAT");
+      console.log("Migration: added lat and lng columns to shipments table");
+    }
+  } catch (e) {
+    console.error("Migration error (lat/lng):", e.message || e);
+  }
+
+  // Migration: add raw_block to print_job_items
+  try {
+    await exec("ALTER TABLE print_job_items ADD COLUMN raw_block TEXT");
+  } catch (e) {
+    const msg = String(e?.message || "").toLowerCase();
+    if (!msg.includes("duplicate column") && !msg.includes("already exists")) {
+      console.error("Migration error (print_job_items.raw_block):", e.message || e);
+    }
+  }
+
+  const addColumnIfMissing = async (tableName, columnName, sqlType) => {
+    try {
+      const tableInfo = await exec(`PRAGMA table_info(${tableName})`);
+      const cols = tableInfo.rows.map((r) => r.name);
+      if (!cols.includes(columnName)) {
+        await exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlType}`);
+      }
+    } catch (e) {
+      console.error(`Migration error (${tableName}.${columnName}):`, e.message || e);
+    }
+  };
+
+  await addColumnIfMissing("shipments", "workspace_id", "INTEGER");
+  await addColumnIfMissing("shipments", "raw_zpl", "TEXT");
+  await addColumnIfMissing("daily_batches", "workspace_id", "INTEGER");
+  await addColumnIfMissing("daily_batches", "created_by_app_user_id", "INTEGER");
+  await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
+  await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+  await addColumnIfMissing("print_jobs", "workspace_id", "INTEGER");
+  await addColumnIfMissing("print_job_items", "workspace_id", "INTEGER");
+  await addColumnIfMissing("app_users", "last_seen_at", "DATETIME");
+  await addColumnIfMissing("app_users", "role", "TEXT NOT NULL DEFAULT 'user'");
+  await addColumnIfMissing("app_users", "is_global_admin", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("app_users", "onboarding_completed", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("tiendanube_orders", "shipping_method", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "shipping_carrier", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "is_zipnova", "INTEGER DEFAULT 0");
+  await addColumnIfMissing("tiendanube_orders", "updated_at_external", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "dispatched_at_external", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_status", "TEXT DEFAULT 'to_send'");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_at", "DATETIME");
+  await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
+  await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
+  await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
+  await addColumnIfMissing("shipments", "external_provider", "TEXT");
+  await addColumnIfMissing("shipments", "external_order_id", "TEXT");
+  await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");
+  await addColumnIfMissing("shipments", "integration_connection_id", "INTEGER");
+  await addColumnIfMissing("shipments", "operation_status", "TEXT DEFAULT 'ready_to_pick'");
+  await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_id", "INTEGER");
+  await addColumnIfMissing("zipnova_shipments", "origin_name", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_address", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_city", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "origin_province", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "total_volume", "FLOAT DEFAULT 0");
+  await addColumnIfMissing("zipnova_shipments", "packages_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "collection_window_json", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "collection_key", "TEXT");
+  await addColumnIfMissing("zipnova_shipments", "label_pdf_downloaded_at", "DATETIME");
+  await addColumnIfMissing("zipnova_shipments", "label_zpl_downloaded_at", "DATETIME");
+  await addColumnIfMissing("zipnova_collections", "workspace_id", "INTEGER");
+  await addColumnIfMissing("zipnova_collections", "zipnova_collection_external_id", "TEXT");
+  await addColumnIfMissing("zipnova_collections", "cutoff_label", "TEXT");
+
+  try {
+    await exec(`DELETE FROM workspace_members
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM workspace_members
+        GROUP BY app_user_id
+      )`);
+    await exec("CREATE INDEX IF NOT EXISTS idx_app_users_last_seen ON app_users(last_seen_at)");
+    await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_members_one_active_per_user ON workspace_members(app_user_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_daily_batches_creator ON daily_batches(created_by_app_user_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatched ON tiendanube_orders(dispatched_at_external)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_dispatch_status ON tiendanube_orders(dispatch_status)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_connection ON tiendanube_orders(integration_connection_id)");
+    await exec("CREATE INDEX IF NOT EXISTS idx_shipments_external_provider ON shipments(external_provider, external_shipment_id)");
+  } catch (e) {
+    console.error("Index migration error:", e.message || e);
+  }
+
+  try {
+    await exec("UPDATE tiendanube_orders SET dispatch_status = 'to_send' WHERE dispatch_status IS NULL OR TRIM(dispatch_status) = ''");
+  } catch (e) {
+    console.error("Dispatch status backfill error:", e.message || e);
+  }
+
+  try {
+    await backfillOrdersFromShipments();
+  } catch (e) {
+    console.error("Orders backfill error:", e.message || e);
+  }
+
+  let legacyWorkspaceId = null;
+  try {
+    const legacyWorkspace = await exec(
+      "SELECT id FROM workspaces WHERE slug = ? LIMIT 1",
+      ["legacy"]
+    );
+
+    if (legacyWorkspace.rows.length) {
+      legacyWorkspaceId = Number(legacyWorkspace.rows[0].id);
+    } else {
+      const inserted = await exec("INSERT INTO workspaces (name, slug) VALUES (?, ?)", ["GeoModi", "legacy"]);
+      legacyWorkspaceId = Number(inserted.lastInsertRowid);
+    }
+
+    await exec("UPDATE workspaces SET name = ? WHERE id = ?", ["GeoModi", legacyWorkspaceId]);
+
+    await exec("INSERT OR IGNORE INTO workspace_settings (workspace_id, printing_setup_completed) VALUES (?, 0)", [legacyWorkspaceId]);
+  } catch (e) {
+    console.error("Workspace seed error:", e.message || e);
+  }
+
+  if (legacyWorkspaceId) {
+    try {
+      const globalAdmin = await exec("SELECT id FROM app_users WHERE lower(email) = lower(?) LIMIT 1", ["camilopcmidi@gmail.com"]);
+      if (globalAdmin.rows.length) {
+        const appUserId = Number(globalAdmin.rows[0].id);
+        await exec("UPDATE app_users SET is_global_admin = 1, role = 'admin' WHERE id = ?", [appUserId]);
+        await exec("DELETE FROM workspace_members WHERE app_user_id = ? AND workspace_id <> ?", [appUserId, legacyWorkspaceId]);
+        await exec(
+          `INSERT INTO workspace_members (workspace_id, app_user_id, role)
+           VALUES (?, ?, 'owner')
+           ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
+          [legacyWorkspaceId, appUserId]
+        );
+      }
+
+      const tablesToBackfill = [
+        "shipments",
+        "daily_batches",
+        "zone_mappings",
+        "carriers",
+        "print_jobs",
+        "print_job_items",
+        "zipnova_shipments",
+      ];
+
+      for (const tableName of tablesToBackfill) {
+        await exec(`UPDATE ${tableName} SET workspace_id = ? WHERE workspace_id IS NULL`, [legacyWorkspaceId]);
+      }
+
+      await exec(`UPDATE print_job_items SET workspace_id = (
+          SELECT pj.workspace_id FROM print_jobs pj WHERE pj.id = print_job_items.print_job_id
+        ) WHERE workspace_id IS NULL AND print_job_id IS NOT NULL`);
+    } catch (e) {
+      console.error("Workspace backfill error:", e.message || e);
+    }
+  }
+
+  // Migration: remove UNIQUE constraint on zone_mappings.partido
+  try {
+    // Try inserting a duplicate to test if UNIQUE still exists
+    // If the constraint exists, this will fail and we'll migrate
+    await exec("SELECT COUNT(*) as cnt FROM zone_mappings");
+    // Try the migration by checking table info
+    const tableInfo = await exec("PRAGMA table_info(zone_mappings)");
+    // Check if there's a unique index
+    const indexes = await exec("PRAGMA index_list(zone_mappings)");
+    const hasUnique = indexes.rows.some(r => r.unique === 1);
+
+    if (hasUnique) {
+      await exec("DROP TABLE IF EXISTS zone_mappings_new");
+      await exec(`CREATE TABLE zone_mappings_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id INTEGER,
+        partido TEXT NOT NULL,
+        carrier_name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await exec(`INSERT INTO zone_mappings_new (id, workspace_id, partido, carrier_name, created_at)
+        SELECT id, workspace_id, partido, carrier_name, created_at FROM zone_mappings`);
+      await exec("DROP TABLE zone_mappings");
+      await exec("ALTER TABLE zone_mappings_new RENAME TO zone_mappings");
+      console.log("Zone migration: removed UNIQUE constraint on partido");
+    }
+  } catch (e) {
+    try { await exec("DROP TABLE IF EXISTS zone_mappings_new"); } catch (_) { }
+    // Not critical — may already be migrated
+  }
+
+  // Migration: remove global UNIQUE constraint on carriers.name for workspace isolation
+  try {
+    const indexes = await exec("PRAGMA index_list(carriers)");
+    const hasUnique = indexes.rows.some((r) => r.unique === 1);
+
+    if (hasUnique) {
+      await exec("DROP TABLE IF EXISTS carriers_new");
+      await exec(`CREATE TABLE carriers_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id INTEGER,
+        name TEXT NOT NULL,
+        display_name TEXT,
+        color TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await exec(`INSERT INTO carriers_new (id, workspace_id, name, display_name, color, created_at)
+        SELECT id, workspace_id, name, display_name, color, created_at FROM carriers`);
+      await exec("DROP TABLE carriers");
+      await exec("ALTER TABLE carriers_new RENAME TO carriers");
+      console.log("Carrier migration: removed global UNIQUE constraint on name");
+    }
+  } catch (e) {
+    try { await exec("DROP TABLE IF EXISTS carriers_new"); } catch (_) { }
+  }
+
+  await addColumnIfMissing("zone_mappings", "workspace_id", "INTEGER");
+  await addColumnIfMissing("carriers", "workspace_id", "INTEGER");
+
+  // Migration: Tiendanube orders must allow the same external order id across multiple stores.
+  try {
+    const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
+    const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
+
+    if (hasLegacyUnique) {
+      await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
+      await exec(`CREATE TABLE tiendanube_orders_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id INTEGER NOT NULL,
+        integration_connection_id INTEGER,
+        external_store_id TEXT,
+        tiendanube_id BIGINT NOT NULL,
+        number TEXT,
+        status TEXT,
+        payment_status TEXT,
+        shipping_status TEXT,
+        dispatch_status TEXT DEFAULT 'to_send',
+        dispatch_marked_at DATETIME,
+        dispatch_marked_by TEXT,
+        shipping_method TEXT,
+        shipping_carrier TEXT,
+        is_zipnova INTEGER DEFAULT 0,
+        contact_name TEXT,
+        contact_email TEXT,
+        contact_phone TEXT,
+        shipping_address_json TEXT,
+        products_json TEXT,
+        subtotal TEXT,
+        total TEXT,
+        currency TEXT,
+        created_at_external TEXT,
+        updated_at_external TEXT,
+        dispatched_at_external TEXT,
+        synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await exec(`INSERT INTO tiendanube_orders_new (
+        id, workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status,
+        payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatch_marked_by,
+        shipping_method, shipping_carrier, is_zipnova, contact_name, contact_email, contact_phone,
+        shipping_address_json, products_json, subtotal, total, currency, created_at_external,
+        updated_at_external, dispatched_at_external, synced_at, created_at
+      ) SELECT
+        id, workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status,
+        payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatch_marked_by,
+        shipping_method, shipping_carrier, is_zipnova, contact_name, contact_email, contact_phone,
+        shipping_address_json, products_json, subtotal, total, currency, created_at_external,
+        updated_at_external, dispatched_at_external, synced_at, created_at
+        FROM tiendanube_orders`);
+      await exec("DROP TABLE tiendanube_orders");
+      await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
+      await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
+      await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
+      console.log("Tiendanube migration: enabled multi-store order ids");
+    }
+  } catch (e) {
+    try { await exec("DROP TABLE IF EXISTS tiendanube_orders_new"); } catch (_) { }
+    console.error("Tiendanube multi-store migration error:", e.message || e);
+  }
+
+  // Seed critical sub-zones for La Matanza split
+  try {
+    const requiredMappings = [
+      { partido: "la_matanza_sur", carrier: "EntregoYa" },
+      { partido: "la_matanza_norte", carrier: "Hormiga" },
+    ];
+
+    for (const item of requiredMappings) {
+        const exists = await exec("SELECT id FROM zone_mappings WHERE partido = ? AND carrier_name = ? LIMIT 1", [item.partido, item.carrier]);
+
+      if (!exists.rows.length) {
+          await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", [item.partido, item.carrier]);
+        }
+      }
+
+    const villaRosaExists = await exec("SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1", ["villa_rosa"]);
+
+    if (!villaRosaExists.rows.length) {
+      const pilarCarrier = await exec("SELECT carrier_name FROM zone_mappings WHERE partido = ? ORDER BY id ASC LIMIT 1", ["pilar"]);
+
+      if (pilarCarrier.rows.length && pilarCarrier.rows[0].carrier_name) {
+        await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", ["villa_rosa", pilarCarrier.rows[0].carrier_name]);
+      }
+    }
+
+    const forcedEntregoYa = ["dique_lujan", "ingeniero_maschwitz", "la_plata", "campana", "zarate"];
+    for (const partido of forcedEntregoYa) {
+      await exec("UPDATE zone_mappings SET carrier_name = ? WHERE partido = ?", ["EntregoYa", partido]);
+
+      const exists = await exec("SELECT id FROM zone_mappings WHERE partido = ? LIMIT 1", [partido]);
+
+      if (!exists.rows.length) {
+        await exec("INSERT INTO zone_mappings (partido, carrier_name) VALUES (?, ?)", [partido, "EntregoYa"]);
+      }
+    }
+  } catch (e) {
+    console.error("Zone seed error:", e.message || e);
+  }
+
+}

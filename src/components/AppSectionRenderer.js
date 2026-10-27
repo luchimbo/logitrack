@@ -40,7 +40,7 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
-    case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
+    case "userManagement": return canManageUsers ? <UserManagementSection currentUser={currentUser} /> : <div>No autorizado</div>;
     default: return <div>Página no encontrada</div>;
   }
 }

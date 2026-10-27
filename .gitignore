@@ -68,3 +68,6 @@ ultimo-error-carga.log
 GeoModi-Impresion-V2.zip
 GeoModi-Impresion-V2/**/config.json
 .claude/
+
+# Local diagnostics and downloaded deployment settings
+.vercel-inspect/

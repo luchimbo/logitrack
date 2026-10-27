@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createClient } from '@libsql/client';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { tiendanubeFinanceRecords, tiendanubeShippingAmounts } from '../src/lib/tiendanubeFinance.js';
 import { FINANCE_SCHEMA } from '../src/lib/financeSchema.js';
 import { createFinanceRepository } from '../src/lib/financeRepository.js';
-import { matchZipnovaToOrders, internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv } from '../src/lib/logisticsFinance.js';
+import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, orderClosure, planOrderSearch, mergeCoverage,shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
 
 test('sales use paid ARS gross totals, keeping zero, unknown and cancellation distinct', () => {
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'0'}).salesCents,0);
@@ -17,6 +18,33 @@ test('sales use paid ARS gross totals, keeping zero, unknown and cancellation di
   assert.equal(orderSales({status:'cancelled',currency:'ARS',total:'100'}).salesCents,0);
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'-1'}).salesCents,null);
   assert.equal(orderSales({raw_order_json:JSON.stringify({status:'paid',currency_id:'ARS',total_amount:125.50,paid_amount:150})}).salesCents,12550);
+});
+
+test('Tiendanube checkout shipping preserves zero, unknown and seller/customer amounts separately', () => {
+  assert.deepEqual(tiendanubeShippingAmounts({shipping_cost_customer: '1000', shipping_cost_owner: '850.50'}),
+    {shippingCostCustomer: '1000', shippingCostOwner: '850.5'});
+  assert.deepEqual(tiendanubeShippingAmounts({shipping_cost_customer: 0}),
+    {shippingCostCustomer: '0', shippingCostOwner: null});
+  assert.deepEqual(tiendanubeShippingAmounts({shipping_cost_customer: -1, shipping_cost_owner: ''}),
+    {shippingCostCustomer: null, shippingCostOwner: null});
+  const order = {tiendanube_id: '1', external_store_id: 'store', payment_status: 'paid', status: 'closed',
+    currency: 'ARS', total: '11000', shipping_cost_customer: '1000', shipping_cost_owner: '850.50',
+    shipping_address_json: JSON.stringify({city: 'Palermo', province: 'Capital Federal'})};
+  const [row] = tiendanubeFinanceRecords([order]);
+  assert.equal(row.salesCents, 1000000); // Total already includes customer shipping.
+  assert.equal(row.shippingCollectedCents, 100000);
+  assert.equal(row.amountCents, 85050);
+  assert.equal(row.dispatchDay, ''); // Do not invent dispatch dates from creation/payment.
+  assert.equal(row.feesCents, null); // Mercado Libre fees are not Tiendanube fees.
+  assert.equal(tiendanubeFinanceRecords([{...order, shipping_cost_owner: null}])[0].amountCents, null);
+  assert.equal(tiendanubeFinanceRecords([{...order, shipping_cost_customer: null}])[0].salesCents, null);
+  assert.equal(tiendanubeFinanceRecords([{...order, currency: 'USD'}])[0].shippingCollectedCents, null);
+  assert.equal(tiendanubeFinanceRecords([{...order, payment_status: 'pending'}]).length, 0);
+  assert.equal(tiendanubeFinanceRecords([{...order, status: 'cancelled'}]).length, 0);
+  assert.equal(tiendanubeFinanceRecords([{...order, order_source: 'meli'}]).length, 0);
+  assert.equal(tiendanubeFinanceRecords([{...order, shipping_address_json: '{}'}]).length, 0);
+  assert.equal(tiendanubeFinanceRecords([{...order, synced_at:'2026-10-22', status:'cancelled'}, {...order, synced_at:'2026-10-21'}]).length, 0);
+  assert.equal(tiendanubeFinanceRecords([order, order, {...order, external_store_id:'another-store'}]).length, 2);
 });
 
 test('sales sum separate orders in a package once across duplicate connections', () => {
@@ -102,6 +130,31 @@ test('light and failed detail refreshes preserve last valid data; successful emp
   assert.equal(preserveMercadoLibreDetails({delays:null,history:[]},old).delays,null);
   assert.equal(preserveMercadoLibreDetails({delays:null,history:[]},old).history.length,0);
 });
+test('only a full, error-free read of a delivered or cancelled package closes the order',()=>{
+  const full={shipment:{status:'delivered'},history:[{status:'delivered'}],syncErrors:[]};
+  assert.equal(orderClosure(full),'set');
+  assert.equal(orderClosure({...full,shipment:{status:'cancelled'}}),'set');
+  assert.equal(orderClosure({...full,light:true}),'keep');
+  assert.equal(orderClosure({...full,syncErrors:['Historial: 500']}),'keep');
+  assert.equal(orderClosure({shipment:{status:'delivered'},syncErrors:[]}),'keep');
+  assert.equal(orderClosure({light:true},{shipment:{status:'shipped'}}),'clear');
+  assert.equal(orderClosure({light:true},{shipment:null}),'keep');
+});
+test('a settlement only searches the days not already listed in Mercado Libre',()=>{
+  assert.deepEqual(planOrderSearch(null,'2026-09-21','2026-10-24'),{segments:[['2026-09-21','2026-10-24']],covered:null});
+  const done={from:'2026-09-01',to:'2026-10-25'};
+  assert.deepEqual(planOrderSearch(done,'2026-09-21','2026-10-24'),{segments:[],covered:['2026-09-21','2026-10-24']});
+  assert.deepEqual(planOrderSearch(done,'2026-10-20','2026-10-27'),{segments:[['2026-10-26','2026-10-27']],covered:['2026-10-20','2026-10-25']});
+  assert.deepEqual(planOrderSearch(done,'2026-08-25','2026-09-10'),{segments:[['2026-08-25','2026-08-31']],covered:['2026-09-01','2026-09-10']});
+  assert.deepEqual(planOrderSearch(done,'2026-07-01','2026-07-31'),{segments:[['2026-07-01','2026-07-31']],covered:null});
+});
+test('listed days merge into one range and never include today',()=>{
+  assert.deepEqual(mergeCoverage(null,'2026-10-01','2026-10-24','2026-10-26'),{from:'2026-10-01',to:'2026-10-24'});
+  assert.deepEqual(mergeCoverage(null,'2026-10-20','2026-10-30','2026-10-26'),{from:'2026-10-20',to:'2026-10-25'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-11','2026-10-20','2026-10-26'),{from:'2026-10-01',to:'2026-10-20'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-15','2026-10-20','2026-10-26'),{from:'2026-10-15',to:'2026-10-20'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-26','2026-10-27','2026-10-26'),{from:'2026-10-01',to:'2026-10-10'});
+});
 test('canceled Flex never adds expense while Colecta retains a real seller charge',()=>{
   const flex=financeRecord({...base,shipment_status:'cancelled'},rates);
   assert.equal(flex.amountCents,null);
@@ -132,6 +185,10 @@ async function fixture() {
   await db.execute('CREATE TABLE daily_batches(id INTEGER PRIMARY KEY,workspace_id INTEGER,date TEXT)');
   for (const column of ['tracking_number','dispatch_date','created_at','status','batch_id','province']) await db.execute(`ALTER TABLE shipments ADD COLUMN ${column} TEXT`);
   await db.execute('ALTER TABLE shipments ADD COLUMN recipient_name TEXT');
+  await db.execute(`CREATE TABLE tiendanube_orders(id INTEGER PRIMARY KEY,workspace_id INTEGER,integration_connection_id INTEGER,
+    external_store_id TEXT,tiendanube_id BIGINT,status TEXT,payment_status TEXT,shipping_status TEXT,dispatch_status TEXT,
+    dispatch_marked_at TEXT,dispatched_at_external TEXT,contact_name TEXT,shipping_address_json TEXT,subtotal TEXT,total TEXT,currency TEXT,
+    shipping_cost_customer TEXT,shipping_cost_owner TEXT,order_source TEXT,synced_at TEXT)`);
   const repo=createFinanceRepository(db);
   await repo.saveRate(1,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:10000},7);
   await repo.saveRate(2,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:30000},8);
@@ -244,6 +301,7 @@ test('closure freezes rate, snapshots responsibility and prevents duplicate sett
     const preview=await repo.settlementDetail(1,first,undefined,{fast:true}), full=await repo.settlementDetail(1,first);
     assert.deepEqual(preview.items.map(i=>[i.shipmentId,i.amountCents,i.zone,i.deliveryDay]),full.items.map(i=>[i.shipmentId,i.amountCents,i.zone,i.deliveryDay]));
     assert.equal(preview.totalCents,10000);
+    assert.deepEqual(preview.excluded,{});
     await repo.mutateSettlement(1,first,'close',{},7);
     assert.equal((await repo.settlementDetail(1,first)).totalCents,10000);
     await assert.rejects(repo.mutateSettlement(1,second,'close',{},7),/No hay entregados/);
@@ -318,7 +376,7 @@ test('saving a rate again with the same date corrects it and reprices open shipm
   } finally { cleanup(); }
 });
 
-test('Mercado Libre sale fees give net after fees and after shipping, only when complete',()=>{
+test('Mercado Libre fees are deducted once and aggregate balance keeps all known sales',()=>{
   const raw=(fee)=>JSON.stringify({id:1,status:'paid',currency_id:'ARS',total_amount:1000,order_items:[{quantity:2,sale_fee:fee}]});
   const ok=shipmentSales([{order_id:'1',status:'paid',currency:'ARS',raw_order_json:raw(100)}]);
   assert.equal(ok.feesCents,20000);
@@ -328,8 +386,9 @@ test('Mercado Libre sale fees give net after fees and after shipping, only when 
   assert.equal(missing.feesMissingCount,1);
   const s=summarize([{...ok,amountCents:5000},{...missing,amountCents:1000}]);
   assert.equal(s.feesCents,40000);
-  assert.equal(s.netCents,80000);
-  assert.equal(s.netAfterShippingCents,75000);
+  assert.equal(s.netCents,210000);
+  assert.equal(s.netAfterShippingCents,204000);
+  assert.equal(s.feesUnavailableCount,1);
 });
 
 test('snapshot report matches the full calculation and follows rate changes without rebuilding',async()=>{
@@ -390,16 +449,7 @@ test('the daily batch date is the dispatch day for internal shipments, like the 
   } finally { cleanup(); }
 });
 
-test('Zipnova shipments pair with "a coordinar" sales by recipient, value and date, using each order once',()=>{
-  const zip=[{recipientName:'Juan Pérez',createdDay:'2026-10-05',declaredValue:1000},{recipientName:'Ana Gómez',createdDay:'2026-10-06',declaredValue:500},{recipientName:'Juan Perez',createdDay:'2026-10-07',declaredValue:0}];
-  const orders=[{buyerName:'JUAN PEREZ',orderDay:'2026-10-03',totalCents:100000},{buyerName:'Ana Gomez',orderDay:'2026-09-01',totalCents:50000}];
-  const pairs=matchZipnovaToOrders(zip,orders);
-  assert.equal(pairs.get(0),0);
-  assert.equal(pairs.has(1),false); // outside the 10-day window
-  assert.equal(pairs.has(2),false); // order already used
-});
-
-test('a coordinar sales and Zipnova shipments join Colecta, linked or not',async()=>{
+test('Zipnova is excluded, and a coordinar sales retain their own unknown shipping cost',async()=>{
   const {db,repo,cleanup}=await fixture();
   try {
     await db.execute(`CREATE TABLE zipnova_shipments(id INTEGER PRIMARY KEY,workspace_id INTEGER,zipnova_id TEXT,created_date TEXT,status TEXT,status_name TEXT,province TEXT,city TEXT,recipient_name TEXT,price FLOAT,declared_value FLOAT,carrier_name TEXT)`);
@@ -410,21 +460,48 @@ test('a coordinar sales and Zipnova shipments join Colecta, linked or not',async
     const records=await repo.records(1);
     const sale=records.find((r)=>r.shipmentId==='order:O9');
     assert.equal(sale.method,'colecta');
-    assert.equal(sale.zipnova,true);
-    assert.equal(sale.amountCents,1500000);
+    assert.equal(sale.source,'ml_custom');
+    assert.equal(sale.amountCents,null);
     assert.equal(sale.salesCents,200000);
-    assert.equal(sale.province,'cordoba');
-    assert.equal(sale.dispatchDay,'2026-10-06');
+    assert.equal(sale.province,'');
+    assert.equal(sale.dispatchDay,'2026-10-04');
     const loose=records.find((r)=>r.shipmentId==='zipnova:Z2');
-    assert.equal(loose.orderId,null);
-    assert.equal(loose.province,'santa_fe');
+    assert.equal(loose,undefined);
+    assert.equal(records.some((r)=>r.source==='zipnova'),false);
     const full=await repo.report(1,{method:'colecta',from:'2026-10-01',to:'2026-10-31'});
     const fast=await repo.report(1,{method:'colecta',from:'2026-10-01',to:'2026-10-31'},{compact:true});
-    for (const key of ['count','totalCents','salesCents','zipnovaCents','zipnovaLinkedCount','zipnovaUnlinkedCount']) assert.equal(fast.summary[key],full.summary[key],key);
-    assert.equal(full.summary.zipnovaLinkedCount,1);
-    assert.equal(full.summary.zipnovaUnlinkedCount,1);
-    assert.ok(fast.byProvince.some((g)=>g.name==='cordoba'));
+    for (const key of ['count','totalCents','salesCents','shippingCollectedCents']) assert.equal(fast.summary[key],full.summary[key],key);
+    assert.equal(full.summary.totalCents,0);
+    assert.equal(full.summary.count,1);
   } finally { cleanup(); }
+});
+
+test('Tiendanube totals, snapshot, detail and workspace boundaries reconcile without counting checkout shipping as merchandise', async () => {
+  const {db,repo,cleanup}=await fixture();
+  try {
+    const insert = `INSERT INTO tiendanube_orders(id,workspace_id,integration_connection_id,external_store_id,tiendanube_id,
+      status,payment_status,shipping_status,dispatched_at_external,shipping_address_json,total,currency,shipping_cost_customer,shipping_cost_owner)
+      VALUES(?, ?, 20, 'store', ?, 'closed', 'paid', 'shipped', '2026-10-05T10:00:00-03:00', ?, '11000', 'ARS', '1000', '850')`;
+    const address = JSON.stringify({city:'Córdoba',province:'Córdoba'});
+    await db.execute({sql:insert,args:[1,1,'1',address]});
+    await db.execute({sql:insert,args:[2,2,'2',address]});
+    const filters={from:'2026-10-01',to:'2026-10-31',provinces:'cordoba'};
+    const full=await repo.report(1,filters);
+    const fast=await repo.report(1,filters,{compact:true,withRows:true,withTargets:true});
+    assert.deepEqual(fast.summary,full.summary);
+    assert.equal(full.summary.count,1);
+    assert.equal(full.summary.salesCents,1000000);
+    assert.equal(full.summary.shippingCollectedCents,100000);
+    assert.equal(full.summary.totalCents,85000);
+    assert.equal(fast.rows[0].shippingCollectedCents,100000);
+    assert.equal(fast.syncTargets.length,0); // TN must not be synchronized against ML accounts.
+    assert.equal((await repo.records(1,db,{connectionId:20,shipmentId:'tn:store:1'})).length,1);
+    assert.equal((await repo.records(2,db,{connectionId:20,shipmentId:'tn:store:1'})).length,0);
+    // A fresh but incompatible snapshot must be rebuilt before it can show old Zipnova expenses.
+    await db.execute({sql:"UPDATE finance_snapshot_meta SET options_json=? WHERE workspace_id=1",args:[JSON.stringify({version:7})]});
+    await db.execute("UPDATE finance_snapshot SET data_json=json_set(data_json,'$.amountCents',9999999) WHERE workspace_id=1 AND row_key LIKE '%tn:%'");
+    assert.deepEqual((await repo.report(1,filters,{compact:true})).summary,full.summary);
+  } finally {cleanup();}
 });
 
 test('settlement matrix counts packages per day and zone and reconciles the amount', () => {
@@ -446,3 +523,85 @@ test('settlement matrix counts packages per day and zone and reconciles the amou
   assert.match(text, /"Ajuste: Faltante";"";"";"";"";"";"";"-500,00"/);
   assert.match(text, /"Total a pagar";.*"8500,00"/);
 });
+
+
+test('provisional balance preserves sales with missing shipping or fees and deducts unlinked costs', () => {
+  const rows = [
+    {salesCents:100000, feesCents:20000, netCents:80000, amountCents:5000},
+    {salesCents:200000, feesCents:40000, netCents:160000, amountCents:null},
+    {salesCents:50000, feesCents:null, netCents:null, amountCents:1000},
+    {salesCents:null, feesCents:null, netCents:null, amountCents:2000},
+  ];
+  const s = summarize(rows);
+  assert.equal(s.netCents,290000);
+  assert.equal(s.netAfterShippingCents,282000);
+  assert.equal(s.netCents-s.netAfterShippingCents,s.totalCents);
+  assert.equal(s.netAfterShippingCents,s.salesCents-s.feesCents-s.totalCents);
+  assert.equal(s.netAfterShippingCount,3);
+  assert.equal(s.feesUnavailableCount,1);
+  assert.equal(s.missingCount,1);
+  const completed = summarize(rows.map((r,i)=>i===1?{...r,amountCents:3000}:r));
+  assert.equal(completed.netAfterShippingCents,s.netAfterShippingCents-3000);
+  assert.equal(summarize([{salesCents:null,amountCents:2000}]).netAfterShippingCents,null);
+});
+
+
+test('Tiendanube sync stores checkout shipping and updates cancellations without replacing zero by unknown', async () => {
+  const {db,cleanup}=await fixture();
+  try {
+    for (const column of ['number','shipping_method','shipping_carrier','is_zipnova','contact_email','contact_phone','products_json','created_at_external','updated_at_external'])
+      await db.execute(`ALTER TABLE tiendanube_orders ADD COLUMN ${column} TEXT`);
+    globalThis.__tiendanubeFinanceDb=db;
+    let source=readFileSync(new URL('../src/lib/tiendanubeStore.js',import.meta.url),'utf8');
+    source=source.replace("import { db } from '@/lib/db';",'const db = globalThis.__tiendanubeFinanceDb;')
+      .replace("import { ensureDb } from '@/lib/ensureDb';",'const ensureDb = async () => {};')
+      .replace("import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';",'const recordOnlineOrder = async () => {};')
+      .replace("'./tiendanubeFinance.js'",JSON.stringify(new URL('../src/lib/tiendanubeFinance.js',import.meta.url).href));
+    const {upsertTiendanubeOrder}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const order={id:100,number:100,payment_status:'paid',status:'open',currency:'ARS',total:'11000',
+      shipping_cost_customer:'1000',shipping_cost_owner:'0',source:'store',shipping_address:{city:'Córdoba',province:'Córdoba'}};
+    await upsertTiendanubeOrder(1,order,{connectionId:20,externalStoreId:'store'});
+    let stored=(await db.execute('SELECT * FROM tiendanube_orders WHERE tiendanube_id=100')).rows[0];
+    assert.equal(stored.shipping_cost_customer,'1000');
+    assert.equal(stored.shipping_cost_owner,'0');
+    assert.equal(stored.order_source,'store');
+    await upsertTiendanubeOrder(1,{...order,status:'cancelled',shipping_cost_customer:'1200'},{connectionId:20,externalStoreId:'store'});
+    stored=(await db.execute('SELECT * FROM tiendanube_orders WHERE tiendanube_id=100')).rows[0];
+    assert.equal(stored.status,'cancelled');
+    assert.equal(stored.shipping_cost_customer,'1200');
+    assert.equal((await db.execute('SELECT COUNT(*) n FROM tiendanube_orders')).rows[0].n,1);
+  } finally {delete globalThis.__tiendanubeFinanceDb;cleanup();}
+});
+
+test('detailed settlement lists each package by delivery day with account names and totals', () => {
+  const items = [
+    { shipmentId: '47900000002', orderId: '2002', connectionId: 91, deliveryDay: '2026-09-02', dispatchDay: '2026-09-02', zone: 'GBA 3', partido: 'la_plata', recipient: 'Ana', amountCents: 819000, stateLabel: 'Entregado' },
+    { shipmentId: '47900000001', orderId: '2001', connectionId: 3, deliveryDay: '2026-09-01', dispatchDay: '2026-09-01', zone: 'CABA', partido: 'caba', recipient: 'Beto', amountCents: 316000, stateLabel: 'Entregado' },
+  ];
+  const lines = settlementDetailCsv(items, [{ reason: 'Doble cobro', amount_cents: -316000 }], { 3: 'PCMIDICENTER', 91: 'ARTURIA ARGENTINA' }).split('\r\n');
+  assert.match(lines[1], /^"01\/09\/2026";"01\/09\/2026";"47900000001";"2001";"PCMIDICENTER";"Beto";"caba";"CABA";"3160,00";"Entregado"$/);
+  assert.match(lines[2], /"ARTURIA ARGENTINA";"Ana";"la plata";"GBA 3";"8190,00"/);
+  assert.match(lines[3], /^"Total";"";"2 envíos";.*"11350,00"/);
+  assert.match(lines[5], /^"Total a pagar";.*"8190,00"/);
+});
+
+
+test('sales retain the stored order total when the API total is empty or invalid', () => {
+  for (const value of ['', 'invalid', -1]) {
+    assert.equal(orderSales({status: 'paid', currency: 'ARS', total: '125.50', raw_order_json: JSON.stringify({total_amount: value})}).salesCents, 12550);
+  }
+  assert.equal(orderSales({status: 'paid', currency: 'ARS', total: '125.50', raw_order_json: JSON.stringify({total_amount: 0})}).salesCents, 0);
+});
+
+
+test('refresh targets include recent Flex orders with missing sale totals even when shipping is priced', async () => {
+  const {db, repo, cleanup} = await fixture();
+  try {
+    await db.execute("UPDATE mercadolibre_orders SET status='paid',currency='ARS',total=NULL,synced_at=CURRENT_TIMESTAMP");
+    const report = await repo.report(1, {}, {compact: true, withTargets: true});
+    assert.equal(report.summary.missingCount, 0);
+    assert.ok(report.summary.salesUnavailableCount > 0);
+    assert.ok(report.syncTargets.some((r) => ['O1', 'O2'].includes(r.orderId) && r.connectionId === 10));
+  } finally { cleanup(); }
+});
+

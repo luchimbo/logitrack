@@ -29,7 +29,7 @@ export default function SignUpPage() {
         <div style={{ width: "100%", maxWidth: "460px" }}>
           <div style={{ textAlign: "center", marginBottom: "20px" }}>
           <GeoModiLogo size="lg" centered />
-          <p style={{ color: "var(--text-muted)", fontSize: "15px", marginTop: "10px" }}>Podés registrarte con email o Google. Cada cuenta crea un espacio aislado llamado Mi espacio.</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "15px", marginTop: "10px" }}>Registrate con email o Google. Si te asignaron un espacio, usá el email al que recibiste el acceso.</p>
         </div>
 
         <div className="clerk-auth-shell" style={{ display: "flex", justifyContent: "center" }}>

@@ -1,5 +1,7 @@
+import { tiendanubeShippingAmounts } from './tiendanubeFinance.js';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';
 
 function normalizeDispatchStatus(value) {
   return String(value || '').toLowerCase() === 'dispatched' ? 'dispatched' : 'to_send';
@@ -25,6 +27,8 @@ function mapStoredTiendanubeRow(row) {
     contactPhone: row.contact_phone,
     shippingAddress: JSON.parse(row.shipping_address_json || '{}'),
     products: JSON.parse(row.products_json || '[]'),
+    shippingCostCustomer: row.shipping_cost_customer,
+    shippingCostOwner: row.shipping_cost_owner,
     subtotal: row.subtotal,
     total: row.total,
     currency: row.currency,
@@ -57,6 +61,7 @@ export function normalizeTiendanubeOrder(order) {
   const isZipnova = /zipnova|zippin/.test(shippingFingerprint) ? 1 : 0;
 
   return {
+    ...tiendanubeShippingAmounts(order),
     tiendanubeId: order?.id,
     number: String(order?.number || ''),
     status: order?.status || '',
@@ -150,6 +155,9 @@ export async function upsertTiendanubeOrder(workspaceId, order, { connectionId =
     normalized.createdAtExternal,
     normalized.updatedAtExternal,
     dispatchedAtExternal,
+    normalized.shippingCostCustomer,
+    normalized.shippingCostOwner,
+    order?.source || null,
   ];
 
   if (prev?.id) {
@@ -158,7 +166,7 @@ export async function upsertTiendanubeOrder(workspaceId, order, { connectionId =
         integration_connection_id = ?, external_store_id = ?, number = ?, status = ?, payment_status = ?,
         shipping_status = ?, shipping_method = ?, shipping_carrier = ?, is_zipnova = ?, contact_name = ?,
         contact_email = ?, contact_phone = ?, shipping_address_json = ?, products_json = ?, subtotal = ?,
-        total = ?, currency = ?, created_at_external = ?, updated_at_external = ?, dispatched_at_external = ?,
+        total = ?, currency = ?, created_at_external = ?, updated_at_external = ?, dispatched_at_external = ?, shipping_cost_customer = ?, shipping_cost_owner = ?, order_source = ?,
         synced_at = CURRENT_TIMESTAMP
         WHERE id = ?`,
       args: [...values, Number(prev.id)],
@@ -171,8 +179,8 @@ export async function upsertTiendanubeOrder(workspaceId, order, { connectionId =
       workspace_id, integration_connection_id, external_store_id, tiendanube_id, number, status, payment_status, shipping_status,
       shipping_method, shipping_carrier, is_zipnova,
       contact_name, contact_email, contact_phone, shipping_address_json, products_json,
-      subtotal, total, currency, created_at_external, updated_at_external, dispatched_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      subtotal, total, currency, created_at_external, updated_at_external, dispatched_at_external, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     args: [
       workspaceId,
       resolvedConnectionId,
@@ -201,6 +209,8 @@ export async function syncTiendanubeOrders({ workspaceId, client, status = '', p
     }
     for (const order of items) {
       await upsertTiendanubeOrder(workspaceId, order, { connectionId, externalStoreId });
+      // La logística no depende del informe online; la conciliación recupera lo pendiente.
+      await recordOnlineOrder(String(externalStoreId), order).catch((e) => console.warn('Cross-selling order record failed', e.message));
       totalSynced++;
     }
     hasMore = items.length === perPage;

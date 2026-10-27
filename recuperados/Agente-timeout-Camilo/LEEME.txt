@@ -1,0 +1,9 @@
+En la PC de Camilo, copiar la carpeta "v2" de este zip dentro de GeoModi-Impresion-V2
+y aceptar reemplazar print-and-sync.mjs (NO toca config.json ni la carpeta data).
+
+Cambio: el agente ahora espera hasta 90 segundos la respuesta de GeoModi (antes 8).
+Con la base en el servidor propio, lotes grandes tardaban mas de 8 s y aparecia
+"CARGA SIN CONFIRMAR" aunque la data si llegaba.
+
+El lote job-20261016-15125660-oetbdr (44 etiquetas) YA esta cargado en GeoModi.
+Si queda en la cola local, el proximo reintento lo marca como duplicado y lo limpia.

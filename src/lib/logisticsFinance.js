@@ -48,7 +48,9 @@ export function orderSales(row) {
   if (['cancelled', 'canceled', 'invalid'].includes(status)) return { salesCents: 0, feesCents: 0, salesMissing: '', paidOrderCount: 0 };
   if (status !== 'paid') return { salesCents: null, feesCents: null, salesMissing: status ? 'Venta no pagada' : 'Estado de venta no disponible', paidOrderCount: 0 };
   if ((row.currency || raw.currency_id) !== 'ARS') return { salesCents: null, feesCents: null, salesMissing: 'Venta sin moneda ARS', paidOrderCount: 1 };
-  const amount = toCents(raw.total_amount ?? row.total);
+  const rawAmount = toCents(raw.total_amount);
+  const storedAmount = toCents(row.total);
+  const amount = rawAmount !== null && rawAmount >= 0 ? rawAmount : storedAmount;
   return { salesCents: amount !== null && amount >= 0 ? amount : null, feesCents: orderFees(raw),
     salesMissing: amount !== null && amount >= 0 ? '' : 'Importe de venta no disponible', paidOrderCount: 1 };
 }
@@ -148,6 +150,37 @@ export function preserveMercadoLibreDetails(payload, old) {
     if (merged[key] === undefined) merged[key] = parseJson(old[column], fallback);
   }
   return merged;
+}
+
+// A delivered or cancelled package whose full detail was read cannot change anymore, so it is stored as closed and
+// never fetched again. A light refresh only reopens it (state moved on) or leaves the mark as it was.
+export function orderClosure(payload, merged = payload) {
+  const status = String(merged.shipment?.status || '').toLowerCase();
+  if (!status) return 'keep';
+  if (!['delivered', 'cancelled', 'canceled'].includes(status)) return 'clear';
+  return payload.light || payload.syncErrors?.length || payload.history === undefined ? 'keep' : 'set';
+}
+
+const shiftDay = (day, days) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+
+// The day ranges of Mercado Libre orders still to search, given the range already listed completely, and the range
+// that can be taken from storage instead.
+export function planOrderSearch(coverage, from, to) {
+  if (!coverage) return { segments: [[from, to]], covered: null };
+  const lo = coverage.from > from ? coverage.from : from, hi = coverage.to < to ? coverage.to : to;
+  if (lo > hi) return { segments: [[from, to]], covered: null };
+  const segments = [];
+  if (from < lo) segments.push([from, shiftDay(lo, -1)]);
+  if (to > hi) segments.push([shiftDay(hi, 1), to]);
+  return { segments, covered: [lo, hi] };
+}
+
+// The listed range after a complete listing of [from, to]. Today is excluded because orders keep arriving.
+export function mergeCoverage(coverage, from, to, today) {
+  const end = to < shiftDay(today, -1) ? to : shiftDay(today, -1);
+  if (end < from) return coverage;
+  if (!coverage || from > shiftDay(coverage.to, 1) || end < shiftDay(coverage.from, -1)) return { from, to: end };
+  return { from: from < coverage.from ? from : coverage.from, to: end > coverage.to ? end : coverage.to };
 }
 
 export function shipmentFinanceStatement(workspaceId, payload, connectionId, now = new Date().toISOString()) {
@@ -261,23 +294,28 @@ export function filterRecords(rows, filters = {}) {
   });
 }
 export function summarize(rows) {
-  const known = rows.filter((r) => r.amountCents !== null);
+  const known = rows.filter((r) => r.amountCents !== null && r.amountCents !== undefined);
   const sum = (list) => list.reduce((n, r) => n + r.amountCents, 0);
   const flex = known.filter((r) => r.method === 'flex');
   const colecta = known.filter((r) => r.method === 'colecta');
   const sales = rows.filter((r) => r.salesCents !== null && r.salesCents !== undefined);
   const salesCents = sales.length ? sales.reduce((n, r) => n + r.salesCents, 0) : null;
   // Compare only packages with complete sales and costs; avoid mismatched denominators.
-  const comparable = rows.filter((r) => r.amountCents !== null && r.salesCents > 0 && !r.salesMissingCount);
+  const comparable = known.filter((r) => r.salesCents > 0 && !r.salesMissingCount);
   const comparableSalesCents = comparable.reduce((n, r) => n + r.salesCents, 0);
   const comparableCostCents = sum(comparable);
   const paidKnownOrderCount = rows.reduce((n, r) => n + (r.paidKnownOrderCount || 0), 0);
   const withFees = rows.filter((r) => r.feesCents !== null && r.feesCents !== undefined);
-  const withNet = rows.filter((r) => r.netCents !== null && r.netCents !== undefined);
-  const withNetShipping = withNet.filter((r) => r.amountCents !== null);
-  return { feesCents: withFees.reduce((n, r) => n + r.feesCents, 0), feesCount: withFees.length,
-    netCents: withNet.reduce((n, r) => n + r.netCents, 0), netCount: withNet.length,
-    netAfterShippingCents: withNetShipping.reduce((n, r) => n + r.netCents - r.amountCents, 0), netAfterShippingCount: withNetShipping.length,
+  // Keep the same sales base: missing fees or shipping must not remove a sale.
+  // This is a provisional balance of known amounts, not a final settlement.
+  const feesCents = withFees.reduce((n, r) => n + r.feesCents, 0);
+  const totalCents = sum(known);
+  const shippingCollectedCents = rows.reduce((n, r) => n + (r.shippingCollectedCents || 0), 0);
+  const netCents = salesCents === null ? null : salesCents + shippingCollectedCents - feesCents;
+  return { feesCents, feesCount: withFees.length,
+    feesUnavailableCount: rows.filter((r) => r.source !== 'tiendanube' && r.salesCents > 0 && (r.feesCents == null || r.feesMissingCount > 0)).length,
+    netCents, netCount: sales.length,
+    netAfterShippingCents: netCents === null ? null : netCents - totalCents, netAfterShippingCount: sales.length,
     count: rows.length, knownCount: known.length, missingCount: rows.length - known.length,
     salesCents, paidOrderCount: rows.reduce((n, r) => n + (r.paidOrderCount || 0), 0),
     paidKnownOrderCount, averageSaleCents: paidKnownOrderCount && salesCents !== null ? Math.round(salesCents / paidKnownOrderCount) : null,
@@ -287,8 +325,12 @@ export function summarize(rows) {
     logisticsPercent: comparableSalesCents ? comparableCostCents / comparableSalesCents * 100 : null,
     flexCents: sum(flex), colectaCents: sum(colecta), totalCents: sum(known),
     flexCount: rows.filter((r) => r.method === 'flex').length, colectaCount: rows.filter((r) => r.method === 'colecta').length,
-    zipnovaCents: sum(colecta.filter((r) => r.zipnova)), colectaMlCents: sum(colecta.filter((r) => !r.zipnova)),
-    zipnovaLinkedCount: rows.filter((r) => r.zipnova && r.orderId).length, zipnovaUnlinkedCount: rows.filter((r) => r.zipnova && !r.orderId).length,
+    colectaMlCents: sum(colecta.filter((r) => r.source !== 'tiendanube')),
+    tiendanubeCostCents: sum(colecta.filter((r) => r.source === 'tiendanube')),
+    tiendanubeCostCount: colecta.filter((r) => r.source === 'tiendanube').length,
+    shippingCollectedCents,
+    shippingCollectedCount: rows.filter((r) => r.shippingCollectedCents !== null && r.shippingCollectedCents !== undefined).length,
+    shippingCollectedMissingCount: rows.filter((r) => r.source === 'tiendanube' && r.shippingCollectedCents == null).length,
     customWithoutCostCount: rows.filter((r) => r.source === 'ml_custom' && r.amountCents === null).length,
     averageCents: known.length ? Math.round(sum(known) / known.length) : null,
     estimatedFlexCents: sum(flex.filter((r) => !['delivered', 'canceled', 'problem'].includes(r.state))),
@@ -299,33 +341,6 @@ export function groupRecords(rows, key) {
   const groups = new Map();
   for (const row of rows) { const value = row[key] || 'Sin dato'; if (!groups.has(value)) groups.set(value, []); groups.get(value).push(row); }
   return [...groups].map(([name, records]) => ({ name, ...summarize(records) })).sort((a, b) => b.totalCents - a.totalCents);
-}
-const nameTokens = (text) => new Set(String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  .split(/[^a-z0-9]+/).filter((token) => token.length > 2));
-// Mercado Libre "a coordinar" sales carry no shipment, and Zipnova shipments carry no ML id: pair them by recipient and
-// declared value, inside a window from the sale day to 10 days later. Each order is used once, nearest date first.
-export function matchZipnovaToOrders(zipnova, orders) {
-  const day = (value) => Date.parse(`${String(value || '').slice(0, 10)}T12:00:00Z`);
-  const candidates = [];
-  zipnova.forEach((zip, zi) => {
-    const zipNames = nameTokens(zip.recipientName);
-    orders.forEach((order, oi) => {
-      const gap = (day(zip.createdDay) - day(order.orderDay)) / 86400000;
-      if (!Number.isFinite(gap) || gap < -1 || gap > 10) return;
-      const orderNames = new Set([...nameTokens(order.buyerName), ...nameTokens(order.recipientName)]);
-      const shared = [...zipNames].filter((token) => orderNames.has(token)).length;
-      const value = Number(zip.declaredValue) > 0 && Number(order.totalCents) > 0
-        && Math.abs(Number(zip.declaredValue) * 100 - Number(order.totalCents)) <= Number(order.totalCents) * 0.02;
-      if (shared < 2 && !(shared >= 1 && value)) return;
-      candidates.push({ zi, oi, score: shared * 2 + (value ? 3 : 0) - Math.abs(gap) / 10 });
-    });
-  });
-  const usedZip = new Set(), usedOrder = new Set(), pairs = new Map();
-  for (const c of candidates.sort((a, b) => b.score - a.score)) {
-    if (usedZip.has(c.zi) || usedOrder.has(c.oi)) continue;
-    usedZip.add(c.zi); usedOrder.add(c.oi); pairs.set(c.zi, c.oi);
-  }
-  return pairs;
 }
 export function settlementCandidates(rows, carrierId, from, to) {
   return rows.filter((r) => r.method === 'flex' && r.state === 'delivered' && r.amountCents !== null && !r.missing
@@ -356,6 +371,22 @@ export function settlementMatrixCsv(matrix, adjustments = []) {
   if (adjustments.length) rows.push(['Total a pagar', ...matrix.zones.map(() => ''), '', pesos(matrix.total.totalCents + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0))]);
   const columns = [['Día', 0], ...matrix.zones.map((z, i) => [z, i + 1]), ['Paquetes', matrix.zones.length + 1], ['Total $', matrix.zones.length + 2]];
   return csv(rows, columns);
+}
+// Settlement shipment by shipment, as carriers send it: one row per package, sorted by delivery day.
+export function settlementDetailCsv(items, adjustments = [], accounts = {}) {
+  const pesos = (cents) => (cents / 100).toFixed(2).replace('.', ',');
+  const day = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('/') : value || '';
+  const sorted = [...items].sort((a, b) => String(a.deliveryDay || '').localeCompare(String(b.deliveryDay || '')) || String(a.zone || '').localeCompare(String(b.zone || '')));
+  const total = items.reduce((n, i) => n + (Number(i.amountCents) || 0), 0);
+  const adjusted = total + adjustments.reduce((n, a) => n + Number(a.amount_cents), 0);
+  const rows = [
+    ...sorted.map((i) => [day(i.deliveryDay), day(i.dispatchDay), i.trackingNumber || i.shipmentId, i.orderId || '', accounts[i.connectionId] || (i.sellerId ? `Vendedor ${i.sellerId}` : ''),
+      i.recipient || '', String(i.partido || '').replaceAll('_', ' '), i.zone || 'Sin zona', pesos(Number(i.amountCents) || 0), i.stateLabel || '']),
+    ['Total', '', `${items.length} envíos`, '', '', '', '', '', pesos(total), ''],
+    ...adjustments.map((a) => [`Ajuste: ${a.reason}`, '', '', '', '', '', '', '', pesos(Number(a.amount_cents)), '']),
+    ...(adjustments.length ? [['Total a pagar', '', '', '', '', '', '', '', pesos(adjusted), '']] : []),
+  ];
+  return csv(rows, ['Fecha entrega', 'Despacho', 'Número de envío', 'Venta ML', 'Cuenta', 'Destinatario', 'Partido', 'Zona', 'Precio', 'Estado'].map((name, i) => [name, i]));
 }
 export function csv(rows, columns) {
   const cell = (value) => {

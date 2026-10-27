@@ -170,12 +170,12 @@ const LOCALITY_TO_PARTIDO = {
     "BANFIELD": "lomas_de_zamora",
     "TEMPERLEY": "lomas_de_zamora",
     "TURDERA": "lomas_de_zamora",
-    "ADROGUE": "lomas_de_zamora",
     "LLAVALLOL": "lomas_de_zamora",
     "INGENIERO BUDGE": "lomas_de_zamora",
     "FIORITO": "lomas_de_zamora",
     "SANTA CATALINA": "lomas_de_zamora",
     // Almirante Brown
+    "ADROGUE": "almirante_brown",
     "BURZACO": "almirante_brown",
     "ADROGUE BROWN": "almirante_brown",
     "RAFAEL CALZADA": "almirante_brown",
