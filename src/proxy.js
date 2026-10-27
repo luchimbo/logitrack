@@ -53,6 +53,8 @@ export default function proxy(req, event) {
   // Esta única ruta verifica HMAC por tienda en su handler. No requiere sesión
   // ni consultas a Clerk para la comunicación entre servidores.
   if (req.nextUrl.pathname === "/api/cross-selling/config") return NextResponse.next();
+  // El cron diario de Mercado Libre se autentica con CRON_SECRET en su handler; Vercel Cron no tiene sesión de Clerk.
+  if (req.nextUrl.pathname === "/api/cron/mercadolibre-sync") return NextResponse.next();
   // Mostrador usa HMAC por tienda; estas rutas validan la firma en sus handlers.
   if (req.nextUrl.pathname === "/api/cross-selling/module") return NextResponse.next();
   if (req.nextUrl.pathname === "/api/cross-selling/report") return NextResponse.next();
