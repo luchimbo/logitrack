@@ -324,13 +324,29 @@ function DraftForm({ carriers, busy, onSave }) { return <form className={styles.
 // Built in the browser from the settlement data, as a CSV that Excel opens directly.
 function jobLabel(job) {
   const p = job.progress || {};
-  if (job.phase === 'orders') return `ventas: ${p.orders || 0}${p.ordersTotal ? ` de ${p.ordersTotal}` : ''}`;
+  if (job.phase === 'orders' && !p.ordersTotal) return `ventas ya guardadas · actualizando abiertas: ${p.ordersOpen || 0}`;
+  if (job.phase === 'orders') return `ventas:${p.orders || 0}${p.ordersTotal ? ` de ${p.ordersTotal}` : ''}`;
   if (job.phase === 'labels') return `etiquetas sin venta: ${p.labels || 0}${p.labelsTotal ? ` de ${p.labelsTotal}` : ''}`;
   if (job.phase === 'details') return `fechas de entrega: ${p.details || 0}${p.detailsTotal ? ` de ${p.detailsTotal}` : ''}`;
   return 'recalculando';
 }
+// Share of the current phase already done, or null while its total is still unknown.
+function jobFraction(job) {
+  const p = job.progress || {};
+  const [done, total] = job.phase === 'orders' ? [p.orders, p.ordersTotal] : job.phase === 'labels' ? [p.labels, p.labelsTotal]
+    : job.phase === 'details' ? [p.details, p.detailsTotal] : [0, 0];
+  return total ? Math.min(1, (done || 0) / total) : null;
+}
 function JobStatus({ job, onRetry }) {
-  if (job?.status === 'running') return <small>Buscando envíos · {jobLabel(job)}</small>;
+  if (job?.status === 'running') {
+    const fraction = jobFraction(job);
+    return <>
+      <small>Buscando envíos · {jobLabel(job)}</small>
+      <span className={styles.jobBar} role="progressbar" aria-label="Buscando envíos" aria-valuemin={0} aria-valuemax={100} aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}>
+        <span className={fraction === null ? styles.jobBarWaiting : styles.jobBarFill} style={fraction === null ? undefined : { width: `${Math.max(3, Math.round(fraction * 100))}%` }} />
+      </span>
+    </>;
+  }
   if (job?.status === 'error') return <small>No se pudo buscar: {job.error}{onRetry ? <> <button className={styles.link} onClick={onRetry}>Reintentar</button></> : null}</small>;
   return onRetry ? <small><button className={styles.link} onClick={onRetry}>Buscar envíos de nuevo</button></small> : null;
 }
