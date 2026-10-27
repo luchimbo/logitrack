@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { listAllActiveIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrders } from '@/lib/mercadolibreStore';
-import { closeDeliveredOrders, refreshOpenOrders } from '@/lib/mercadolibreRefresh';
 import { db } from '@/lib/db';
 import { createFinanceRepository } from '@/lib/financeRepository';
 import { reconcileMercadoLibreFinance, recoverMercadoLibreNotifications } from '@/lib/financeReconciliation';
@@ -11,9 +10,6 @@ import { reconcileMercadoLibreFinance, recoverMercadoLibreNotifications } from '
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-// Leaves the end of the 300 s window for the finance snapshot rebuild.
-const REFRESH_BUDGET_MS = 210_000;
-
 export async function GET(request) {
   // Vercel Cron envía Authorization: Bearer ${CRON_SECRET} si la env está definida.
   const secret = process.env.CRON_SECRET;
@@ -21,7 +17,6 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const started = Date.now();
   const results = [];
   let totalSynced = 0;
 
@@ -46,13 +41,7 @@ export async function GET(request) {
         });
         await recoverMercadoLibreNotifications(connection.workspaceId, target);
         const reconciliation = await reconcileMercadoLibreFinance(connection.workspaceId, target);
-        // Closing is best effort: a failure here must not hide the sync that already succeeded.
-        let upkeep = null;
-        try {
-          const closed = await closeDeliveredOrders(target.connectionId);
-          upkeep = { closed, ...(await refreshOpenOrders(connection.workspaceId, target, { deadline: started + REFRESH_BUDGET_MS })) };
-        } catch (error) { console.error('Cron ML upkeep error (connection', connection.id, '):', error.message || error); }
-        return { connectionId: connection.id, ok: true, synced: count, reconciliation, upkeep };
+        return { connectionId: connection.id, ok: true, synced: count, reconciliation };
       } catch (error) {
         console.error('Cron ML sync error (connection', connection.id, '):', error.message || error);
         return { connectionId: connection.id, ok: false, error: error.message || 'error' };
