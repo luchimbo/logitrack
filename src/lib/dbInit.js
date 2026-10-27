@@ -458,6 +458,14 @@ export async function initDb() {
     // Vínculo etiqueta ↔ venta en el cálculo de Ventas y costos: sin estos índices cada lectura tarda decenas de segundos.
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_row ON mercadolibre_orders(workspace_id, shipment_row_id)`,
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_shipment ON mercadolibre_orders(workspace_id, shipment_id)`,
+    // Días de órdenes de cada cuenta que ya se listaron completos en ML: las liquidaciones no los vuelven a buscar.
+    `CREATE TABLE IF NOT EXISTS ml_order_coverage (
+      integration_connection_id INTEGER PRIMARY KEY,
+      workspace_id INTEGER NOT NULL,
+      covered_from TEXT NOT NULL,
+      covered_to TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS mercadolibre_notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       topic TEXT,

@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { tiendanubeFinanceRecords, tiendanubeShippingAmounts } from '../src/lib/tiendanubeFinance.js';
 import { FINANCE_SCHEMA } from '../src/lib/financeSchema.js';
 import { createFinanceRepository } from '../src/lib/financeRepository.js';
-import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, orderClosure, shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
+import { internalDispatchDay, deliveryFacts, financeRecord, sellerCost, summarize, groupRecords, chooseRate, validDate, csv, preserveMercadoLibreDetails, orderClosure, planOrderSearch, mergeCoverage,shipmentFinanceStatement, orderSales, shipmentSales, settlementMatrix, settlementMatrixCsv, settlementDetailCsv } from '../src/lib/logisticsFinance.js';
 
 test('sales use paid ARS gross totals, keeping zero, unknown and cancellation distinct', () => {
   assert.equal(orderSales({status:'paid',currency:'ARS',total:'0'}).salesCents,0);
@@ -139,6 +139,21 @@ test('only a full, error-free read of a delivered or cancelled package closes th
   assert.equal(orderClosure({shipment:{status:'delivered'},syncErrors:[]}),'keep');
   assert.equal(orderClosure({light:true},{shipment:{status:'shipped'}}),'clear');
   assert.equal(orderClosure({light:true},{shipment:null}),'keep');
+});
+test('a settlement only searches the days not already listed in Mercado Libre',()=>{
+  assert.deepEqual(planOrderSearch(null,'2026-09-21','2026-10-24'),{segments:[['2026-09-21','2026-10-24']],covered:null});
+  const done={from:'2026-09-01',to:'2026-10-25'};
+  assert.deepEqual(planOrderSearch(done,'2026-09-21','2026-10-24'),{segments:[],covered:['2026-09-21','2026-10-24']});
+  assert.deepEqual(planOrderSearch(done,'2026-10-20','2026-10-27'),{segments:[['2026-10-26','2026-10-27']],covered:['2026-10-20','2026-10-25']});
+  assert.deepEqual(planOrderSearch(done,'2026-08-25','2026-09-10'),{segments:[['2026-08-25','2026-08-31']],covered:['2026-09-01','2026-09-10']});
+  assert.deepEqual(planOrderSearch(done,'2026-07-01','2026-07-31'),{segments:[['2026-07-01','2026-07-31']],covered:null});
+});
+test('listed days merge into one range and never include today',()=>{
+  assert.deepEqual(mergeCoverage(null,'2026-10-01','2026-10-24','2026-10-26'),{from:'2026-10-01',to:'2026-10-24'});
+  assert.deepEqual(mergeCoverage(null,'2026-10-20','2026-10-30','2026-10-26'),{from:'2026-10-20',to:'2026-10-25'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-11','2026-10-20','2026-10-26'),{from:'2026-10-01',to:'2026-10-20'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-15','2026-10-20','2026-10-26'),{from:'2026-10-15',to:'2026-10-20'});
+  assert.deepEqual(mergeCoverage({from:'2026-10-01',to:'2026-10-10'},'2026-10-26','2026-10-27','2026-10-26'),{from:'2026-10-01',to:'2026-10-10'});
 });
 test('canceled Flex never adds expense while Colecta retains a real seller charge',()=>{
   const flex=financeRecord({...base,shipment_status:'cancelled'},rates);

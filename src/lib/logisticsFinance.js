@@ -161,6 +161,28 @@ export function orderClosure(payload, merged = payload) {
   return payload.light || payload.syncErrors?.length || payload.history === undefined ? 'keep' : 'set';
 }
 
+const shiftDay = (day, days) => { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+
+// The day ranges of Mercado Libre orders still to search, given the range already listed completely, and the range
+// that can be taken from storage instead.
+export function planOrderSearch(coverage, from, to) {
+  if (!coverage) return { segments: [[from, to]], covered: null };
+  const lo = coverage.from > from ? coverage.from : from, hi = coverage.to < to ? coverage.to : to;
+  if (lo > hi) return { segments: [[from, to]], covered: null };
+  const segments = [];
+  if (from < lo) segments.push([from, shiftDay(lo, -1)]);
+  if (to > hi) segments.push([shiftDay(hi, 1), to]);
+  return { segments, covered: [lo, hi] };
+}
+
+// The listed range after a complete listing of [from, to]. Today is excluded because orders keep arriving.
+export function mergeCoverage(coverage, from, to, today) {
+  const end = to < shiftDay(today, -1) ? to : shiftDay(today, -1);
+  if (end < from) return coverage;
+  if (!coverage || from > shiftDay(coverage.to, 1) || end < shiftDay(coverage.from, -1)) return { from, to: end };
+  return { from: from < coverage.from ? from : coverage.from, to: end > coverage.to ? end : coverage.to };
+}
+
 export function shipmentFinanceStatement(workspaceId, payload, connectionId, now = new Date().toISOString()) {
   const shipmentId = String(payload.shipment?.id || payload.order?.shipping?.id || '');
   if (!shipmentId || !connectionId) return null;

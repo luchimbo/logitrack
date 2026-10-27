@@ -3,6 +3,8 @@
 import { db } from '@/lib/db';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncMercadoLibreOrdersPage, syncSingleMercadoLibreOrder } from '@/lib/mercadolibreStore';
+import { closeDeliveredOrders } from '@/lib/mercadolibreRefresh';
+import { planOrderSearch, readCoverage, saveCoverage } from '@/lib/mlOrderCoverage';
 
 const STEP_BUDGET_MS = 200_000;
 const LEASE_MS = 270_000;
@@ -45,6 +47,7 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
   const listTargets = deps.listTargets || listMercadoLibreClientTargets;
   const syncOrdersPage = deps.syncOrdersPage || syncMercadoLibreOrdersPage;
   const syncOrder = deps.syncOrder || syncSingleMercadoLibreOrder;
+  const closeDelivered = deps.closeDelivered || closeDeliveredOrders;
   const started = Date.now();
   const job = (await execute(`SELECT j.*, l.carrier_id, l.date_from, l.date_to, c.name AS carrier_key, c.display_name AS carrier_name
     FROM settlement_fetch_jobs j JOIN carrier_settlements l ON l.id = j.settlement_id LEFT JOIN carriers c ON c.id = l.carrier_id
@@ -60,20 +63,51 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
     const accounts = (await listTargets(workspaceId)).filter((t) => t.client);
     if (!accounts.length) throw new Error('No hay cuentas de Mercado Libre conectadas o su acceso venció.');
     // Flex packages are sold up to ~10 days before delivery and delivered within a day of dispatch.
-    const dateFrom = `${shift(job.date_from, -10)}T00:00:00.000-03:00`, dateTo = `${shift(job.date_to, 1)}T23:59:59.999-03:00`;
+    const windowFrom = shift(job.date_from, -10), windowTo = shift(job.date_to, 1);
     if (phase === 'orders') {
-      cursor.account ??= 0; cursor.offset ??= 0; progress.orders ??= 0;
+      cursor.account ??= 0; cursor.offset ??= 0; cursor.plans ??= {}; progress.orders ??= 0;
+      // Orders stored before closing existed already show their delivery: close them now so this search skips them.
+      for (const account of accounts) progress.closed = (progress.closed || 0) + await closeDelivered(account.connectionId).catch(() => 0);
       while (cursor.account < accounts.length && inBudget()) {
         const account = accounts[cursor.account];
-        const page = await syncOrdersPage({ workspaceId, client: account.client, connectionId: account.connectionId, externalStoreId: account.externalStoreId,
-          siteId: account.config?.siteId || 'MLA', offset: cursor.offset, dateFrom, dateTo });
-        progress.orders += page.synced + (page.skipped || 0);
-        progress.ordersSkipped = (progress.ordersSkipped || 0) + (page.skipped || 0);
+        // Days already listed completely are not searched again: only the missing days go to ML.
+        const plan = cursor.plans[cursor.account] ??= { ...planOrderSearch(await readCoverage(account.connectionId), windowFrom, windowTo), segment: 0, afterId: 0, failed: 0, capped: false };
         progress.ordersTotals ||= {};
-        if (page.total !== null) progress.ordersTotals[account.connectionId] = page.total;
-        progress.ordersTotal = Object.values(progress.ordersTotals).reduce((n, v) => n + (Number(v) || 0), 0);
-        cursor.offset = page.nextOffset;
-        if (page.done || (page.total !== null && cursor.offset >= page.total) || cursor.offset >= 10000) { cursor.account++; cursor.offset = 0; }
+        if (plan.segment < plan.segments.length) {
+          const [from, to] = plan.segments[plan.segment];
+          const page = await syncOrdersPage({ workspaceId, client: account.client, connectionId: account.connectionId, externalStoreId: account.externalStoreId,
+            siteId: account.config?.siteId || 'MLA', offset: cursor.offset, dateFrom: `${from}T00:00:00.000-03:00`, dateTo: `${to}T23:59:59.999-03:00` });
+          progress.orders += page.synced + (page.skipped || 0);
+          progress.ordersSkipped = (progress.ordersSkipped || 0) + (page.skipped || 0);
+          plan.failed += page.failed || 0;
+          if (page.total !== null) progress.ordersTotals[`${account.connectionId}:${plan.segment}`] = page.total;
+          progress.ordersTotal = Object.values(progress.ordersTotals).reduce((n, v) => n + (Number(v) || 0), 0);
+          cursor.offset = page.nextOffset;
+          if (page.done || (page.total !== null && cursor.offset >= page.total) || cursor.offset >= 10000) {
+            if (!page.done && cursor.offset >= 10000) plan.capped = true;
+            plan.segment++; cursor.offset = 0;
+          }
+        } else if (plan.covered && !plan.openDone) {
+          // Inside the covered days the stored orders are trusted; only those still open can have changed.
+          const open = (await execute(`SELECT id, order_id FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=? AND closed_at IS NULL
+            AND shipment_id <> '' AND created_at_external >= ? AND created_at_external < ? AND id > ? ORDER BY id LIMIT 25`,
+          [workspaceId, Number(account.connectionId), `${plan.covered[0]}T00:00:00`, `${shift(plan.covered[1], 1)}T00:00:00`, plan.afterId])).rows;
+          for (let i = 0; i < open.length && inBudget(); i += 5) {
+            const batch = open.slice(i, i + 5);
+            await Promise.all(batch.map(async (row) => {
+              try {
+                await syncOrder({ workspaceId, client: account.client, orderId: row.order_id, connectionId: account.connectionId,
+                  externalStoreId: account.externalStoreId, siteId: account.config?.siteId || 'MLA' });
+              } catch { /* The next daily refresh retries it. */ }
+              progress.ordersOpen = (progress.ordersOpen || 0) + 1;
+            }));
+            plan.afterId = Number(batch[batch.length - 1].id);
+          }
+          if (open.length < 25) plan.openDone = true;
+        } else {
+          if (!plan.capped && !plan.failed) await saveCoverage(workspaceId, account.connectionId, windowFrom, windowTo);
+          cursor.account++; cursor.offset = 0;
+        }
         await save();
       }
       if (cursor.account >= accounts.length) { phase = 'labels'; cursor.index = 0; await save(); }
