@@ -62,3 +62,13 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Agregado diagnóstico interno; desplegado dpl_CT2Vu3mE6f4KCHycWETUDqaKc4gt con controles aprobados. 143 pruebas aprobadas.
 - Tras publicar, cuatro consultas firmadas consecutivas del rango semanal respondieron correctamente: 21 pedidos, total 10275124.97. No se confirmó la causa original; no se cambió el cálculo del informe.
 
+
+## Revisión de producción del 28/10/2026
+
+- Producción apunta a dpl_AnyxVni2kzUSTcQaTpXTZ4eDvUB2, creado el 27/10 a las 16:45 de Argentina.
+- La consulta de logs de producción sin filtro de rama, solicitando siete días, devolvió dos solicitudes a /api/cross-selling/report con HTTP 200 y ninguna respuesta 5xx. No expone los rangos consultados; esto no demuestra que el rango semanal haya sido probado ni permite determinar la causa del 502 del 23/10.
+- No fue posible repetir una consulta HMAC: las claves de publicación no están disponibles en el entorno local y la descarga del entorno de producción entrega ese valor vacío. No se cambiaron claves.
+- La configuración efectiva del proyecto confirma cron habilitado y dos definiciones: mercadolibre-sync a las 11:00 UTC (08:00 Argentina) y mercadolibre-upkeep a las 11:20 UTC (08:20 Argentina). CRON_SECRET figura configurado en Production.
+- Las búsquedas por ambas rutas y por nombre no devolvieron ejecuciones en el historial accesible. La ausencia de registros no prueba ausencia de ejecución ni éxito. Queda pendiente obtener el historial del programador y resultados por cuenta.
+- La metadata del despliegue indica commit 3964fe2 y gitDirty=1; HEAD local es 49cea81. El despliegue ya incluye las dos definiciones de cron, pero la metadata no permite asegurar qué cambios locales de la separación de procesos contiene.
+- Ambos diagnósticos permanecen abiertos. No se publicó ni se ejecutó manualmente una sincronización; una ejecución manual tampoco demostraría que el programador funcionó.
