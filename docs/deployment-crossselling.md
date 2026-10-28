@@ -79,3 +79,11 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - El panel de Cron Jobs confirma ambos procesos habilitados. Muestra que el plan Hobby usa una ventana flexible de una hora: 08:00–09:00 y 08:20–09:20 de Argentina, respectivamente, en lugar de garantizar el minuto exacto.
 - View Logs lleva al historial de solicitudes/runtime; el selector ofrece Last 30 minutes y Last hour. Last 12 hours y Last day requieren Pro; períodos mayores requieren Observability Plus. Por tanto, las búsquedas CLI solicitando siete días no prueban cobertura de siete días. Durante esta revisión (aproximadamente 10:46–10:50 Argentina), las ejecuciones matutinas quedaron fuera de la ventana consultable.
 - No se pudo recuperar el resultado programado de Mercado Libre ni afirmar su éxito. No se ejecutó manualmente el cron, ya que eso no reconstruiría el historial programado.
+
+### Ejecución manual autorizada · 28/10/2026, 10:57 Argentina
+
+- Se ejecutaron una vez ambos procesos con Run en Cron Jobs del proyecto logitrack, sobre dpl_AnyxVni2kzUSTcQaTpXTZ4eDvUB2.
+- mercadolibre-upkeep: request pr2mc-1793195857667-283363910f08, inicio 10:57:37; HTTP 200, respuesta finalizada en 38,1 s (función 37,79 s), sin errores registrados. La traza muestra consultas reales a pedidos, envíos y base de datos. El panel no conserva el cuerpo JSON con resultados por cuenta: no se confirman cantidades ni éxito individual sólo con HTTP 200.
+- mercadolibre-sync: request qm5pv-1793195850786-f3f73364068a, inicio 10:57:30; HTTP 504. Vercel registra: Task timed out after 300 seconds. La separación del mantenimiento de abiertas no elimina el agotamiento del tiempo en la sincronización principal. No se puede afirmar que todas las cuentas, conciliación o reconstrucción del resumen hayan terminado. Puede haber escrituras parciales previas al corte.
+- Pendiente de corrección: localizar la fase que consume el presupuesto en syncMercadoLibreOrders, recoverMercadoLibreNotifications, reconcileMercadoLibreFinance y rebuildSnapshot; agregar tiempos y resultados por cuenta sin secretos, y dividir o hacer reanudable el trabajo antes de repetir la verificación. No ampliar simplemente la afirmación de éxito ni repetir ejecuciones sin diagnóstico.
+- Esta prueba fue manual; la revisión programada de mañana conserva su propósito de comprobar el disparo automático.
