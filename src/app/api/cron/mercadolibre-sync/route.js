@@ -23,12 +23,19 @@ export async function GET(request) {
   try {
     const connections = await listAllActiveIntegrationConnections({ provider: 'mercadolibre' });
     const syncConnection = async (connection) => {
+      const started = Date.now();
+      let phase = 'resolve';
+      const mark = (next, detail = {}) => {
+        console.info('Cron ML sync progress', { connectionId: connection.id, phase, elapsedMs: Date.now() - started, ...detail });
+        phase = next;
+      };
       try {
         const targets = await listMercadoLibreClientTargets(connection.workspaceId, { connectionId: connection.id });
         const target = targets[0];
         if (!target?.client) {
           return { connectionId: connection.id, ok: false, error: 'cliente no disponible' };
         }
+        mark('orders');
         const count = await syncMercadoLibreOrders({
           workspaceId: connection.workspaceId,
           client: target.client,
@@ -38,28 +45,37 @@ export async function GET(request) {
           q: '',
           light: true,
           maxPages: 5,
+          concurrency: 4,
         });
+        mark('notifications', { synced: count });
         await recoverMercadoLibreNotifications(connection.workspaceId, target);
+        mark('reconciliation');
         const reconciliation = await reconcileMercadoLibreFinance(connection.workspaceId, target);
-        return { connectionId: connection.id, ok: true, synced: count, reconciliation };
+        const ok = reconciliation.every((result) => result.ok);
+        const result = { connectionId: connection.id, ok, synced: count, reconciliation, elapsedMs: Date.now() - started };
+        mark('done', { result });
+        return result;
       } catch (error) {
-        console.error('Cron ML sync error (connection', connection.id, '):', error.message || error);
+        console.error('Cron ML sync error', { connectionId: connection.id, phase, elapsedMs: Date.now() - started, error: error.message || String(error) });
         return { connectionId: connection.id, ok: false, error: error.message || 'error' };
       }
     };
     const connectionResults = await Promise.all(connections.map(syncConnection));
     for (const result of connectionResults) {
       results.push(result);
-      if (result.ok) totalSynced += result.synced;
+      totalSynced += result.synced || 0;
     }
 
     // Refresh the precomputed finance map once the day's data is in.
     const repository = createFinanceRepository(db);
     for (const workspaceId of new Set(connections.map((connection) => connection.workspaceId))) {
-      try { await repository.rebuildSnapshot(workspaceId); } catch (error) { console.error('Cron finance snapshot error (workspace', workspaceId, '):', error.message || error); }
+      console.info('Cron ML snapshot start', { workspaceId });
+      try { await repository.rebuildSnapshot(workspaceId); console.info('Cron ML snapshot done', { workspaceId }); } catch (error) { console.error('Cron finance snapshot error (workspace', workspaceId, '):', error.message || error); }
     }
 
-    return NextResponse.json({ ok: true, connections: connections.length, totalSynced, results });
+    const summary = { ok: results.every((result) => result.ok), connections: connections.length, totalSynced, results };
+    console.info('Cron ML sync complete', summary);
+    return NextResponse.json(summary);
   } catch (error) {
     console.error('Cron ML sync fatal error:', error);
     return NextResponse.json({ error: error.message || 'Cron sync failed' }, { status: 500 });

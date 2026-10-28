@@ -340,7 +340,7 @@ export async function syncMercadoLibreOrdersPage({ workspaceId, client, connecti
   return { synced, skipped, failed, total: Number(payload?.paging?.total) || null, nextOffset: offset + orders.length, done: orders.length < limit };
 }
 
-export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5 } = {}) {
+export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5, concurrency = 1 } = {}) {
   await ensureDb();
   const sellerId = externalStoreId;
   if (!sellerId) throw new Error('Seller ID de Mercado Libre no disponible');
@@ -368,10 +368,11 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   while (pages < maxPages) {
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
-    for (const orderSummary of orders) {
+    // Limit parallel work to avoid serial network latency without flooding ML.
+    await mapWithConcurrency(orders, async (orderSummary) => {
       const ok = await processOne(orderSummary);
       if (!ok) failed.push(orderSummary);
-    }
+    }, Math.max(1, Math.min(4, Math.floor(Number(concurrency)) || 1)));
     if (orders.length < limit) break;
     offset += limit;
     pages++;
