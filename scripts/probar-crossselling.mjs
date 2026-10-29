@@ -1,15 +1,14 @@
 // Sólo lectura. No crea promociones, no registra callbacks y no modifica la base.
 // node --env-file=.env.local scripts/probar-crossselling.mjs --store=7570182 --production [--inspect-pending]
 import { createClient } from '@libsql/client';
+import { databaseConfig } from '../src/lib/databaseConfig.js';
+import { loadDatabaseEnv } from './database-env.mjs';
 import { decrypt } from '../src/lib/cryptoUtils.js';
 import { createTiendanubeClient } from '../src/lib/tiendanubeClient.js';
 
 const storeId = process.argv.find((a) => a.startsWith('--store='))?.split('=')[1] || '7570182';
 if (!/^\d+$/.test(storeId)) throw new Error('ID de tienda inválido');
-const suffix = process.argv.includes('--production') ? '_PROD' : '';
-const url = process.env[`TURSO_DATABASE_URL${suffix}`], authToken = process.env[`TURSO_AUTH_TOKEN${suffix}`];
-if (!url || !authToken) throw new Error('Faltan credenciales de base de datos en el entorno');
-const db = createClient({ url, authToken });
+const db = createClient(databaseConfig(loadDatabaseEnv(), { production: process.argv.includes('--production'), readOnly: true }));
 try {
   let found;
   for (const table of ['workspace_integration_connections', 'workspace_integrations']) {

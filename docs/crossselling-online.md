@@ -14,7 +14,7 @@ Diagnóstico de sólo lectura, sin imprimir credenciales:
 node --env-file=.env.local scripts/probar-crossselling.mjs --store=7570182 --production --inspect-pending
 ```
 
-`--production` usa `TURSO_DATABASE_URL_PROD` y `TURSO_AUTH_TOKEN_PROD`. Esas credenciales locales conservan datos antiguos y no permiten diagnosticar la autorización actual del servidor. El diagnóstico no vincula sesiones vencidas.
+`--production` consulta el servicio HTTPS de libSQL en PC MIDI con `DATABASE_READONLY_AUTH_TOKEN`. Las antiguas variables `TURSO_*_PROD` correspondían a un snapshot obsoleto y ya no se utilizan. El diagnóstico no vincula sesiones vencidas.
 
 Validación local: `npm test` y `npm run build`. La especificación, la configuración completa y la lista de trabajo pendiente están en `D:\Mostrador\docs\crossselling-online.md`.
 Pendientes: callback HTTP seguro y probado, identidad de carrito, persistencia de aceptaciones, módulo visual en tienda, refresco de catálogo y métricas de pedidos. No se debe activar el servicio con sólo el evaluador puro.

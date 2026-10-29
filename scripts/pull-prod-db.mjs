@@ -1,3 +1,4 @@
+import { productionDatabaseConfig } from './database-env.mjs';
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -171,21 +172,18 @@ async function main() {
   loadEnvFile(path.join(ROOT_DIR, ".env.local"));
 
   if (!process.argv.includes("--yes")) {
-    console.error("Este script borra y reemplaza la base local. Ejecutalo con: npm run db:pull-prod:yes");
+    console.error("Este script borra y reemplaza la base local. Ejecutalo con: node scripts/pull-prod-db.mjs --yes");
     process.exit(1);
   }
 
-  const prodUrl = requiredEnv("TURSO_DATABASE_URL_PROD");
-  const prodToken = requiredEnv("TURSO_AUTH_TOKEN_PROD");
-  const localUrl = requiredEnv("TURSO_DATABASE_URL");
-  const localToken = requiredEnv("TURSO_AUTH_TOKEN");
-
-  if (prodUrl === localUrl) {
-    throw new Error("TURSO_DATABASE_URL_PROD y TURSO_DATABASE_URL son iguales. No se puede continuar.");
+  const sourceConfig = productionDatabaseConfig({ readOnly: true });
+  const localUrl = requiredEnv("DATABASE_COPY_URL");
+  // Solo se puede borrar una copia SQLite local, nunca el servidor operativo.
+  if (!localUrl.startsWith('file:') || localUrl === 'file:') {
+    throw new Error('DATABASE_COPY_URL debe ser file:ruta/a/copia.db. No se permite borrar bases remotas.');
   }
-
-  const sourceDb = createClient({ url: prodUrl, authToken: prodToken });
-  const destinationDb = createClient({ url: localUrl, authToken: localToken });
+  const sourceDb = createClient(sourceConfig);
+  const destinationDb = createClient({ url: localUrl });
 
   console.log("Copiando base de produccion a local...");
   console.log("Borrando schema local...");
