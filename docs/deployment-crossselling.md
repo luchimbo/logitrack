@@ -101,3 +101,9 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Consulta de producción sin filtro de rama: mercadolibre-upkeep ejecutado a las 08:43:46, request 77srk-1793274226329-af29d85b4b78, HTTP 200 y sin errores en el registro accesible, sobre dpl_6PvPaxEhGPgeRkHECSS4vr1iRGxc. No se dispararon procesos manuales durante esta revisión. El registro no incluye resultados por cuenta; HTTP 200 no confirma esas cantidades.
 - No aparecen solicitudes de mercadolibre-sync en la última hora. Pedir tres horas tampoco devolvió registros; el límite de retención impide inferir si se ejecutó antes de las 08:19. No se confirma fallo ni éxito del proceso principal con esta evidencia.
 - La configuración efectiva de Vercel sigue habilitada y conserva ambas definiciones en el despliegue corregido. Se mantiene el seguimiento para capturar la ejecución principal dentro de su ventana de retención.
+
+### Seguimiento automático · 30/10/2026, 09:12 Argentina
+
+- Consultadas ambas rutas en los logs de producción de la última hora, sin filtro de rama. mercadolibre-upkeep figura a las 08:43:46 Argentina, request pdttd-1793360626130-8264db910f3e, HTTP 200, sobre dpl_CtszbRCqf5sheVuWbPAxDzPyNNEF. El registro accesible no contiene mensajes de error ni resultados por cuenta; no permite confirmar éxito individual, cantidades o duración.
+- mercadolibre-sync no aparece en la ventana consultable. Una ejecución anterior a las 08:10 puede haber quedado fuera de la retención; no se infiere fallo ni éxito por ausencia de registros.
+- La configuración efectiva del proyecto logitrack confirma ambos cron habilitados, con horarios 11:00 y 11:20 UTC, asociados al despliegue citado. Se consultó esta configuración por API; no se pudo inspeccionar el panel gráfico en esta revisión. No se dispararon procesos manuales. Se mantiene el seguimiento sin afirmar éxito completo.
