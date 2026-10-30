@@ -1,4 +1,4 @@
-import { tiendanubeShippingAmounts } from './tiendanubeFinance.js';
+import { TIENDANUBE_PICKUP_WORDS, tiendanubeShippingAmounts } from './tiendanubeFinance.js';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';
@@ -229,11 +229,9 @@ export async function listStoredTiendanubeOrders({ workspaceId, status = '', pay
   // Excluye explícitamente retiro en local/sucursal y envíos digitales.
   conditions.push(`COALESCE(TRIM(shipping_address_json), '') NOT IN ('', '{}', 'null')`);
 
-  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%retiro%'`);
-  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%local%'`);
-  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%sucursal%'`);
-  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%pickup%'`);
-  conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%digital%'`);
+  for (const word of [...TIENDANUBE_PICKUP_WORDS, 'digital']) {
+    conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%${word}%'`);
+  }
 
   conditions.push(`LOWER(COALESCE(status, '')) != 'cancelled'`);
   conditions.push(`LOWER(COALESCE(payment_status, '')) NOT IN ('voided', 'abandoned')`);

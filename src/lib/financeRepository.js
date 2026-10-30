@@ -31,10 +31,10 @@ async function readFinancePages(connection, sql, args, idColumn) {
 
 const LEAN_FIELDS = ['connectionId', 'shipmentId', 'orderId', 'method', 'partido', 'zone', 'carrierId', 'carrierName', 'dispatchDay', 'deliveryDay',
   'estimatedDay', 'state', 'stateLabel', 'delayed', 'overdue', 'incident', 'amountCents', 'missing', 'settlementId', 'salesCents', 'salesMissingCount',
-  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'shippingCollectedCents', 'trackingNumber', 'sellerId', 'recipient'];
+  'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'shippingCollectedCents', 'trackingNumber', 'sellerId', 'recipient', 'buyerPays', 'pickup'];
 const SNAPSHOT_TTL_MS = 5 * 60_000;
 // Bump when the calculation changes, so stored summaries are rebuilt on next read.
-const SNAPSHOT_VERSION = 10;
+const SNAPSHOT_VERSION = 11;
 const rebuilding = new Map();
 // Flex amounts that come straight from the rate table are recomputed on read, so changing a rate never needs a rebuild.
 function leanRecord(r) {
@@ -76,7 +76,7 @@ export function createFinanceRepository(db) {
   async function tiendanubeRecords(workspaceId, connection = db) {
     const result = await readFinancePages(connection, `SELECT id, integration_connection_id, external_store_id, tiendanube_id,
       status, payment_status, shipping_status, dispatch_status, dispatch_marked_at, dispatched_at_external,
-      contact_name, shipping_address_json, subtotal, total, currency, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
+      contact_name, shipping_address_json, shipping_method, shipping_carrier, subtotal, total, currency, shipping_cost_customer, shipping_cost_owner, order_source, synced_at
       FROM tiendanube_orders WHERE workspace_id = ?`, [workspaceId], 'id');
     return tiendanubeFinanceRecords(result.rows);
   }

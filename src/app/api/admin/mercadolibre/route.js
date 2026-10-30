@@ -32,7 +32,7 @@ export async function GET(request) {
           client: target.client,
           externalStoreId: target.externalStoreId,
           maxPages: 5,
-        })));
+        }).then((orders) => orders.map((order) => ({ ...order, account: target.displayName || target.externalStoreId })))));
         liveOrders = perAccount.flat();
         didSync = true;
         syncedCount = liveOrders.length;

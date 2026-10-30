@@ -246,6 +246,7 @@ export function financeRecord(row, rates, now) {
   const rate = method === 'flex' ? chooseRate(rates, { carrierId, zone, dispatchDay }) : null;
   let missing = '';
   let amountCents = null;
+  let buyerPays = false;
   if (method === 'flex') {
     if (!carrierId) missing = 'Sin transportista';
     else if (!zone) missing = 'Sin zona';
@@ -253,7 +254,10 @@ export function financeRecord(row, rates, now) {
     else if (!rate && !pricing) missing = 'Sin tarifa';
     else amountCents = Number(pricing?.amountCents ?? rate.amount_cents);
   } else if (method === 'colecta') {
-    amountCents = sellerCost(parseJson(row.costs_json, null), row.user_id || row.external_store_id);
+    const costs = parseJson(row.costs_json, null);
+    amountCents = sellerCost(costs, row.user_id || row.external_store_id);
+    // The buyer paid the whole shipping: a zero seller cost is not a cheap shipment.
+    buyerPays = amountCents === 0 && (toCents(costs?.receiver?.cost) || 0) > 0;
     if (amountCents === null) missing = 'Costo no disponible';
     if (row.currency && row.currency !== 'ARS') { amountCents = null; missing = 'Moneda no compatible: se requiere ARS'; }
   }
@@ -269,7 +273,7 @@ export function financeRecord(row, rates, now) {
     carrierId: method === 'colecta' ? null : locked?.carrierId || carrierId,
     carrierName: method === 'colecta' ? parseJson(row.carrier_json, {})?.name || 'Mercado Libre · Colecta' : locked?.carrierName || carrierName,
     dispatchDay: locked?.dispatchDay || dispatchDay, rateId: locked?.rateId || pricing?.rateId || rate?.id || null,
-    amountCents, missing: locked ? '' : missing, settlementId: row.settlement_id || null,
+    amountCents, missing: locked ? '' : missing, settlementId: row.settlement_id || null, buyerPays,
     internalPrintedAt: row.label_printed_at || '', internalImportedAt: row.label_imported_at || '',
     costsSyncedAt: row.costs_synced_at || '', responsibility: saved, pricing };
 }
@@ -289,6 +293,8 @@ export function filterRecords(rows, filters = {}) {
     }
     if (filters.alert === 'delayed' && !r.delayed && !r.overdue) return false;
     if (filters.alert === 'incident' && !r.incident) return false;
+    if (filters.alert === 'buyerPays' && !r.buyerPays) return false;
+    if (filters.alert === 'pickup' && !r.pickup) return false;
     if (filters.alert === 'today' && r.estimatedDay !== localDay(new Date().toISOString())) return false;
     return true;
   });
@@ -301,9 +307,15 @@ export function summarize(rows) {
   const sales = rows.filter((r) => r.salesCents !== null && r.salesCents !== undefined);
   const salesCents = sales.length ? sales.reduce((n, r) => n + r.salesCents, 0) : null;
   // Compare only packages with complete sales and costs; avoid mismatched denominators.
-  const comparable = known.filter((r) => r.salesCents > 0 && !r.salesMissingCount);
+  // Sales whose shipping the buyer paid, or picked up by the buyer, have no seller cost to compare.
+  const comparable = known.filter((r) => r.salesCents > 0 && !r.salesMissingCount && !r.buyerPays && !r.pickup);
   const comparableSalesCents = comparable.reduce((n, r) => n + r.salesCents, 0);
   const comparableCostCents = sum(comparable);
+  const byMethod = (method) => comparable.filter((r) => r.method === method);
+  const comparableSales = (list) => list.reduce((n, r) => n + r.salesCents, 0);
+  const salesOf = (list) => list.reduce((n, r) => n + (r.salesCents || 0), 0);
+  const buyerPays = rows.filter((r) => r.buyerPays);
+  const pickups = rows.filter((r) => r.pickup);
   const paidKnownOrderCount = rows.reduce((n, r) => n + (r.paidKnownOrderCount || 0), 0);
   const withFees = rows.filter((r) => r.feesCents !== null && r.feesCents !== undefined);
   // Keep the same sales base: missing fees or shipping must not remove a sale.
@@ -323,6 +335,11 @@ export function summarize(rows) {
     salesUnavailableCount: rows.filter((r) => r.salesCents === null || r.salesCents === undefined).length,
     comparableCount: comparable.length, comparableSalesCents, comparableCostCents,
     logisticsPercent: comparableSalesCents ? comparableCostCents / comparableSalesCents * 100 : null,
+    flexComparableCount: byMethod('flex').length, flexComparableSalesCents: comparableSales(byMethod('flex')), flexComparableCostCents: sum(byMethod('flex')),
+    colectaComparableCount: byMethod('colecta').length, colectaComparableSalesCents: comparableSales(byMethod('colecta')), colectaComparableCostCents: sum(byMethod('colecta')),
+    flexPercent: comparableSales(byMethod('flex')) ? sum(byMethod('flex')) / comparableSales(byMethod('flex')) * 100 : null,
+    colectaPercent: comparableSales(byMethod('colecta')) ? sum(byMethod('colecta')) / comparableSales(byMethod('colecta')) * 100 : null,
+    buyerPaysCount: buyerPays.length, buyerPaysSalesCents: salesOf(buyerPays), pickupCount: pickups.length, pickupSalesCents: salesOf(pickups),
     flexCents: sum(flex), colectaCents: sum(colecta), totalCents: sum(known),
     flexCount: rows.filter((r) => r.method === 'flex').length, colectaCount: rows.filter((r) => r.method === 'colecta').length,
     colectaMlCents: sum(colecta.filter((r) => r.source !== 'tiendanube')),

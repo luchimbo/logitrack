@@ -12,6 +12,15 @@ export function tiendanubeShippingAmounts(order) {
   return { shippingCostCustomer: amount(order?.shipping_cost_customer), shippingCostOwner: amount(order?.shipping_cost_owner) };
 }
 
+// Retiro en local/sucursal: el cliente se lleva el pedido y no hay costo de envío para el vendedor.
+export const TIENDANUBE_PICKUP_WORDS = ['retiro', 'local', 'sucursal', 'pickup'];
+const shippingText = (row) => `${row.shipping_method || ''} ${row.shipping_carrier || ''}`.toLowerCase();
+export function isTiendanubeDigital(row) { return shippingText(row).includes('digital'); }
+export function isTiendanubePickup(row, address = parseJson(row.shipping_address_json)) {
+  if (isTiendanubeDigital(row)) return false;
+  return !address || !Object.keys(address).length || TIENDANUBE_PICKUP_WORDS.some((word) => shippingText(row).includes(word));
+}
+
 export function tiendanubeFinanceRecords(rows) {
   const seen = new Set();
   const result = [];
@@ -21,8 +30,10 @@ export function tiendanubeFinanceRecords(rows) {
     seen.add(key); // Input is newest first, including copies across connections of one store.
     // Imported Mercado Libre orders are already counted from their original channel.
     if (row.order_source === 'meli' || row.payment_status !== 'paid' || ['cancelled', 'canceled', 'voided'].includes(row.status)) continue;
-    const address = parseJson(row.shipping_address_json);
-    if (!address || !Object.keys(address).length) continue;
+    const address = parseJson(row.shipping_address_json) || {};
+    if (isTiendanubeDigital(row)) continue;
+    // Pickups keep their sale but stay out of the shipping cost % (see summarize).
+    const pickup = isTiendanubePickup(row, address);
     const ars = row.currency === 'ARS';
     const nonnegative = (value) => { const cents = toCents(value); return cents !== null && cents >= 0 ? cents : null; };
     const collected = ars ? nonnegative(row.shipping_cost_customer) : null;
@@ -31,7 +42,7 @@ export function tiendanubeFinanceRecords(rows) {
     // Tiendanube's subtotal still gives the product amount before shipping.
     const subtotal = ars ? nonnegative(row.subtotal) : null;
     const sales = total !== null && collected !== null && total >= collected ? total - collected : subtotal;
-    const cost = ars ? nonnegative(row.shipping_cost_owner) : null;
+    const cost = ars && !pickup ? nonnegative(row.shipping_cost_owner) : null;
     const partido = resolvePartidoFromGeo(address.city || address.locality || '', address.province || '') || '';
     const zone = zoneForPartido(partido) || '';
     const state = row.shipping_status === 'delivered' ? 'delivered' : row.shipping_status === 'shipped' || row.dispatch_status === 'dispatched' ? 'in_transit' : 'pending';
@@ -41,9 +52,9 @@ export function tiendanubeFinanceRecords(rows) {
       orderId: String(row.tiendanube_id), sellerId: row.external_store_id || '', source: 'tiendanube',
       recipient: row.contact_name || address.name || '', method: 'colecta', carrierId: null, carrierName: 'Tiendanube',
       province: zone === 'CABA' ? 'caba' : zone ? 'buenos_aires' : provinceKey(address.province || ''), partido, zone,
-      state, stateLabel: state === 'delivered' ? 'Entregado' : state === 'in_transit' ? 'Despachado · Tiendanube' : 'Pendiente de despacho',
+      state, stateLabel: pickup ? 'Retiro del cliente' : state === 'delivered' ? 'Entregado' : state === 'in_transit' ? 'Despachado · Tiendanube' : 'Pendiente de despacho',
       dispatchDay: localDay(dispatch || ''), deliveryDay: '', estimatedDay: '', history: [], delayed: false, overdue: false, incident: false,
-      amountCents: cost, missing: cost === null ? 'Costo de envío no informado por Tiendanube' : '', settlementId: null, stale: false,
+      amountCents: cost, missing: pickup ? 'Retiro: sin envío' : cost === null ? 'Costo de envío no informado por Tiendanube' : '', settlementId: null, stale: false, pickup,
       salesCents: sales, shippingCollectedCents: collected, paidOrderCount: 1, paidKnownOrderCount: sales === null ? 0 : 1,
       salesMissingCount: sales === null ? 1 : 0, feesCents: null, feesMissingCount: 0, netCents: null });
   }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
-import { getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
+import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
 
 const CACHE_TTL_MS = 60_000;
 const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
@@ -69,21 +69,60 @@ export default function OperationToday({ onNavigate }) {
     };
   }, [load]);
 
+  const mlData = sources.mercadolibre;
+  const mlUnavailable = !mlData || mlData.error || mlData.ok === false || !Array.isArray(mlData.liveOrders);
+  const mlOrders = mlUnavailable ? [] : mlData.liveOrders;
+  const metrics = getMercadoLibrePackingMetrics(mlOrders);
+  const breakdown = getMercadoLibrePackingBreakdown(mlOrders);
+  const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Sin datos de Mercado Libre." : "";
+
   return <div className="section operation-today">
-    <div style={{display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16}}><button className="btn btn-ghost" onClick={() => onNavigate('deliveryControl')}>Control de entregas</button><button className="btn btn-ghost" onClick={() => onNavigate('logisticsFinance')}>Ventas y costos</button></div>
-    <div className="operation-header"><div><p className="operation-kicker">Etiquetas a preparar</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre y el Excel de etiquetas se actualizan automáticamente.</p>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button></div>
+    <div className="operation-toolbar">
+      <div>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div>
+      <div className="operation-toolbar-links">
+        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
+        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button>
+      </div>
+    </div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
-    <section className="operation-sources" aria-label="Etiquetas por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Por origen</h2><p>Las etiquetas de Mercado Libre y del Excel se mantienen separadas para preparar sin mezclas.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Etiquetas listas para imprimir" tone="ml" data={sources.mercadolibre} loading={loading || manualUpdating} requireLiveData onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.liveOrders} />} /><SourceCard title="Etiquetas a preparar" subtitle="Pendientes recibidos desde Excel" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
+    <section className="operation-method-grid" aria-label="Paquetes listos para imprimir">
+      <MethodCard title="Logística Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
+      <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
+    </section>
+    <SheetLine data={sources.sheet} onOpen={() => onNavigate("sheetSync")} />
   </div>;
 }
 
-function SourceCard({ title, subtitle, tone, data, loading = false, requireLiveData = false, onOpen, renderMetrics }) {
-  const unavailable = !data || data.error || data.ok === false || (requireLiveData && !Array.isArray(data.liveOrders));
-  return <article className={`operation-source-card ${tone}`}><div className="operation-source-head"><div><p>{title}</p><span>{subtitle}</span></div><button className="btn btn-ghost btn-sm" onClick={onOpen}>Ver sector</button></div>{unavailable ? <div className="operation-source-empty">{loading && !data?.error ? "Consultando Mercado Libre…" : title === "Envíos a coordinar" ? "La planilla no está disponible para este espacio." : "Sin datos sincronizados o integración no conectada."}</div> : renderMetrics(data)}</article>;
+// Vista mínima: un número por tipo. Doble click (o Enter) abre el detalle por cuenta.
+function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((value) => !value);
+  return <article
+    className={`operation-method-card ${tone} ${open ? "open" : ""}`}
+    tabIndex={0}
+    role="button"
+    aria-expanded={open}
+    title="Doble click para ver el detalle"
+    onDoubleClick={toggle}
+    onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
+  >
+    <p className="operation-method-title">{title}</p>
+    {pending ? <div className="operation-source-empty">{pending}</div> : <div className="operation-source-total"><strong>{total}</strong><span>paquetes listos</span></div>}
+    {open ? <div className="operation-method-detail" onDoubleClick={(event) => event.stopPropagation()}>
+      <div className="operation-source-rows">
+        {accounts.length ? accounts.map((row) => <div key={row.account}><span>{row.account}</span><strong>{row.count}</strong></div>) : <div><span>Sin paquetes listos</span></div>}
+      </div>
+      <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Ir al sector</button>
+    </div> : null}
+  </article>;
 }
-function MercadoLibreMetrics({ orders = [] }) {
-  const metrics = getMercadoLibrePackingMetrics(orders);
-  return <SourceMetrics total={metrics.total} rows={[{ label: "Flex", value: metrics.flex }, { label: "Colecta", value: metrics.colecta }]} />;
+
+function SheetLine({ data, onOpen }) {
+  if (!data || data.error || data.ok === false || !Array.isArray(data.shipments)) return null;
+  const packed = data.shipments.filter((shipment) => Boolean(shipment.packed)).length;
+  const pending = Math.max(0, data.shipments.length - packed);
+  return <button type="button" className="operation-sheet-line" onClick={onOpen}>
+    Excel: <strong>{pending}</strong> pendientes · <strong>{packed}</strong> empaquetados
+  </button>;
 }
-function SheetMetrics({ shipments = [] }) { const packed = shipments.filter((shipment) => Boolean(shipment.packed)).length; return <SourceMetrics total={shipments.length} rows={[{ label: "Empaquetados", value: packed }, { label: "Pendientes", value: Math.max(0, shipments.length - packed) }]} />; }
-function SourceMetrics({ total, rows }) { return <><div className="operation-source-total"><strong>{total}</strong><span>paquetes</span></div><div className="operation-source-rows">{rows.map((row) => <div key={row.label}><span>{row.label}</span><strong>{row.value}</strong></div>)}</div></>; }

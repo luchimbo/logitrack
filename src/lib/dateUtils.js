@@ -54,21 +54,24 @@ export function getDateRange(period, specificDate, fromDate, toDate) {
             }
             return { from: fmt(now), to: fmt(now) };
 
+        // Los inicios de semana, mes y año salen del día de hoy en Argentina, no del reloj
+        // del servidor (UTC en Vercel), para no arrancar un día antes.
         case 'week': {
-            const day = now.getDay(); // 0=Sun
-            const monday = new Date(now);
-            monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-            return { from: fmt(monday), to: fmt(now) };
+            const today = fmt(now);
+            const noon = new Date(`${today}T12:00:00Z`);
+            const day = noon.getUTCDay(); // 0=Sun
+            noon.setUTCDate(noon.getUTCDate() - (day === 0 ? 6 : day - 1));
+            return { from: noon.toISOString().slice(0, 10), to: today };
         }
 
         case 'month': {
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-            return { from: fmt(firstDay), to: fmt(now) };
+            const today = fmt(now);
+            return { from: `${today.slice(0, 7)}-01`, to: today };
         }
 
         case 'year': {
-            const jan1 = new Date(now.getFullYear(), 0, 1);
-            return { from: fmt(jan1), to: fmt(now) };
+            const today = fmt(now);
+            return { from: `${today.slice(0, 4)}-01-01`, to: today };
         }
 
         case 'all':

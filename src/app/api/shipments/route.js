@@ -33,6 +33,11 @@ export async function GET(request) {
         const shipping_method = searchParams.get('shipping_method');
         const carrier = searchParams.get('carrier');
         const connection_id = searchParams.get('connection_id');
+        // view=dashboard: columnas livianas (sin raw_zpl) y paginado, para que
+        // "Año" o "Todo" no traigan el historial completo en una sola respuesta.
+        const dashboardView = searchParams.get('view') === 'dashboard';
+        const limit = Math.min(Math.max(Number.parseInt(searchParams.get('limit') || '', 10) || 0, 0), 1000);
+        const offset = Math.max(Number.parseInt(searchParams.get('offset') || '', 10) || 0, 0);
 
         let sql, args = [];
         let orderBy = "id";
@@ -44,14 +49,19 @@ export async function GET(request) {
             mo.logistic_type AS ml_logistic_type, mo.shipping_method AS ml_shipping_method, mo.lead_time_json AS ml_lead_time_json,
             mo.delays_json AS ml_delays_json, mo.carrier_json AS ml_carrier_json, mo.history_json AS ml_history_json,
             mo.label_imported_at AS ml_label_imported_at, mo.shipment_row_id AS ml_shipment_row_id`;
+        const selectCols = dashboardView
+            ? `s.id, s.product_name, s.recipient_name, s.city, s.province, s.shipping_method, s.status,
+               s.external_provider, s.external_shipment_id, s.dispatch_date,
+               (s.raw_zpl IS NOT NULL AND s.raw_zpl != '') AS has_label`
+            : 's.*';
 
         if (batch_id) {
-            sql = `SELECT s.*${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ? AND s.batch_id = ?`;
+            sql = `SELECT ${selectCols}${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ? AND s.batch_id = ?`;
             args.push(workspaceId, batch_id);
             columnPrefix = "s.";
         } else if (period) {
             const range = getDateRange(period, specificDate, fromDate, toDate);
-            sql = `SELECT s.*${mlCols} FROM shipments s
+            sql = `SELECT ${selectCols}${mlCols} FROM shipments s
              ${mlJoin}
              JOIN daily_batches b ON s.batch_id = b.id
              WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
@@ -59,7 +69,7 @@ export async function GET(request) {
             orderBy = "s.id";
             columnPrefix = "s.";
         } else {
-            sql = `SELECT s.*${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ?`;
+            sql = `SELECT ${selectCols}${mlCols} FROM shipments s ${mlJoin} WHERE s.workspace_id = ?`;
             args.push(workspaceId);
             columnPrefix = "s.";
         }
@@ -82,6 +92,10 @@ export async function GET(request) {
         }
 
         sql += ` ORDER BY ${orderBy} DESC`;
+        if (limit) {
+            sql += ' LIMIT ? OFFSET ?';
+            args.push(limit, offset);
+        }
 
         const result = await db.execute({ sql, args });
         const rows = (result.rows || []).map((row) => {

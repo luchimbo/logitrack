@@ -6,7 +6,7 @@ import {
   deriveCutoffDetail,
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
-import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
 import { isDispatchDateValue, isLabelScheduleValue, isNonProductLabelValue } from '../src/lib/dispatchDate.js';
 
@@ -172,6 +172,19 @@ test('operation card ignores the local label import state', () => {
   ]);
 
   assert.deepEqual(metrics, { total: 2, flex: 1, colecta: 1 });
+});
+
+test('operation card counts drop-off shipments as Colecta and splits them by account', () => {
+  const orders = [
+    { shipmentId: 's-1', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'xd_drop_off', account: 'PCMIDI' },
+    { shipmentId: 's-2', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', account: 'PCMIDI' },
+    { shipmentId: 's-3', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', account: 'OTRA' },
+  ];
+  assert.deepEqual(getMercadoLibrePackingMetrics(orders), { total: 3, flex: 1, colecta: 2 });
+  assert.deepEqual(getMercadoLibrePackingBreakdown(orders), {
+    flex: [{ account: 'OTRA', count: 1 }],
+    colecta: [{ account: 'PCMIDI', count: 2 }],
+  });
 });
 
 test('ready_to_ship + ready_to_print is printable', () => {

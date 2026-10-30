@@ -32,14 +32,14 @@ export async function listMercadoLibreClientTargets(workspaceId, { connectionId 
   if (connectionId) {
     const connection = await getIntegrationConnection({ workspaceId, provider: 'mercadolibre', id: connectionId, includeConfig: true });
     const client = await clientFromConnection(connection);
-    return client ? [{ connectionId: connection.id, externalStoreId: connection.externalStoreId, config: connection.config, client }] : [];
+    return client ? [{ connectionId: connection.id, externalStoreId: connection.externalStoreId, displayName: connection.displayName, config: connection.config, client }] : [];
   }
 
   const connections = await listIntegrationConnections({ workspaceId, provider: 'mercadolibre', includeConfig: true });
   const targets = [];
   for (const connection of connections) {
     const client = await clientFromConnection(connection);
-    if (client) targets.push({ connectionId: connection.id, externalStoreId: connection.externalStoreId, config: connection.config, client });
+    if (client) targets.push({ connectionId: connection.id, externalStoreId: connection.externalStoreId, displayName: connection.displayName, config: connection.config, client });
   }
   return targets;
 }

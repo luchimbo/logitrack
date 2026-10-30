@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import GeoModiLogo from "@/components/GeoModiLogo";
 import AppIcon from "@/components/AppIcon";
@@ -15,7 +15,9 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-function NavigationItem({ active, badge, item, onNavigate, variant = "sidebar" }) {
+const COLLAPSED_STORAGE_KEY = "geomodi.sidebarCollapsed";
+
+function NavigationItem({ active, badge, item, onNavigate, variant = "sidebar", compact = false }) {
   const className = variant === "mobile" ? "mobile-bottom-nav-item" : "nav-link";
 
   return (
@@ -24,6 +26,8 @@ function NavigationItem({ active, badge, item, onNavigate, variant = "sidebar" }
       className={`${className} ${active ? "active" : ""}`}
       onClick={() => onNavigate(item.id)}
       aria-current={active ? "page" : undefined}
+      title={compact ? item.label : undefined}
+      aria-label={compact ? item.label : undefined}
     >
       <span className={variant === "mobile" ? "mobile-bottom-nav-icon" : "nav-icon"}>
         <AppIcon name={item.icon} size={variant === "mobile" ? 21 : 18} />
@@ -49,10 +53,28 @@ export default function AppShell({
   sidebarOpen,
 }) {
   const sheetRef = useRef(null);
+  const [collapsed, setCollapsed] = useState(false);
   const moreIsActive = isMobileMoreActive({ activeTab, primaryItems: mobileNavigation.primaryItems });
   const moreBadgeCount = mobileNavigation.moreGroups
     .flatMap((group) => group.items)
     .reduce((total, item) => total + Number(navBadges[item.badgeKey] || 0), 0);
+
+  useEffect(() => {
+    try { setCollapsed(window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1"); } catch {}
+  }, []);
+
+  useEffect(() => {
+    // The sidebar width is a root variable: collapsing it also moves the main content.
+    document.documentElement.classList.toggle("sidebar-collapsed", collapsed);
+    return () => document.documentElement.classList.remove("sidebar-collapsed");
+  }, [collapsed]);
+
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      try { window.localStorage.setItem(COLLAPSED_STORAGE_KEY, value ? "0" : "1"); } catch {}
+      return !value;
+    });
+  };
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -101,7 +123,19 @@ export default function AppShell({
       <a className="skip-link" href="#app-content">Saltar al contenido</a>
 
       <nav className="sidebar" aria-label="Navegación principal">
-        <div className="sidebar-header"><GeoModiLogo size="sm" /></div>
+        <div className="sidebar-header">
+          {collapsed ? null : <GeoModiLogo size="sm" />}
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expandir menú" : "Compactar menú"}
+            title={collapsed ? "Expandir menú" : "Compactar menú"}
+            aria-expanded={!collapsed}
+          >
+            <AppIcon name={collapsed ? "expand" : "collapse"} size={18} />
+          </button>
+        </div>
         <div className="nav-links">
           {navGroups.map((group) => (
             <div key={group.title} className="nav-group">
@@ -114,6 +148,7 @@ export default function AppShell({
                       badge={navBadges[item.badgeKey]}
                       item={item}
                       onNavigate={onNavigate}
+                      compact={collapsed}
                     />
                   </li>
                 ))}
@@ -130,7 +165,9 @@ export default function AppShell({
                 <span>{currentUser.role}</span>
               </div>
             </div>
-            <button onClick={onLogout} className="btn btn-ghost btn-block">Cerrar sesión</button>
+            <button onClick={onLogout} className="btn btn-ghost btn-block" title={collapsed ? "Cerrar sesión" : undefined} aria-label="Cerrar sesión">
+              {collapsed ? <AppIcon name="logout" size={18} /> : "Cerrar sesión"}
+            </button>
           </div>
         ) : null}
       </nav>

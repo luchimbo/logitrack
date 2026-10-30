@@ -42,7 +42,13 @@ test('Tiendanube checkout shipping preserves zero, unknown and seller/customer a
   assert.equal(tiendanubeFinanceRecords([{...order, payment_status: 'pending'}]).length, 0);
   assert.equal(tiendanubeFinanceRecords([{...order, status: 'cancelled'}]).length, 0);
   assert.equal(tiendanubeFinanceRecords([{...order, order_source: 'meli'}]).length, 0);
-  assert.equal(tiendanubeFinanceRecords([{...order, shipping_address_json: '{}'}]).length, 0);
+  // Pickups keep their sale, without shipping cost; digital orders have no shipment at all.
+  const [pickup] = tiendanubeFinanceRecords([{...order, shipping_address_json: '{}'}]);
+  assert.equal(pickup.pickup, true);
+  assert.equal(pickup.amountCents, null);
+  assert.equal(pickup.salesCents, 1000000);
+  assert.equal(tiendanubeFinanceRecords([{...order, shipping_method: 'Retiro en local'}])[0].pickup, true);
+  assert.equal(tiendanubeFinanceRecords([{...order, shipping_address_json: '{}', shipping_method: 'Producto digital'}]).length, 0);
   assert.equal(tiendanubeFinanceRecords([{...order, synced_at:'2026-10-22', status:'cancelled'}, {...order, synced_at:'2026-10-21'}]).length, 0);
   assert.equal(tiendanubeFinanceRecords([order, order, {...order, external_store_id:'another-store'}]).length, 2);
 });
@@ -92,6 +98,23 @@ test('Flex uses dispatch-day rate even when delivered after increase', () => {
   assert.equal(chooseRate(rates,{carrierId:1,zone:'CABA',dispatchDay:'2026-09-30'}),null);
   assert.equal(financeRecord({...base,raw_shipment_json:'{}'}, rates).amountCents,null);
 });
+test('logistics % is split by method and leaves out buyer-paid shipping and pickups', () => {
+  const base = {salesMissingCount:0,state:'delivered'};
+  const summary = summarize([
+    {...base,method:'flex',amountCents:1000,salesCents:10000},
+    {...base,method:'colecta',amountCents:500,salesCents:10000},
+    {...base,method:'colecta',amountCents:0,salesCents:20000,buyerPays:true},
+    {...base,method:'colecta',source:'tiendanube',amountCents:null,salesCents:5000,pickup:true},
+  ]);
+  assert.equal(summary.flexPercent,10);
+  assert.equal(summary.colectaPercent,5);
+  assert.equal(summary.logisticsPercent,7.5);
+  assert.equal(summary.buyerPaysCount,1);
+  assert.equal(summary.buyerPaysSalesCents,20000);
+  assert.equal(summary.pickupCount,1);
+  assert.equal(summary.pickupSalesCents,5000);
+});
+
 test('Colecta distinguishes seller zero cost from missing data and ignores receiver', () => {
   assert.equal(sellerCost({receiver:{cost:400},senders:[{user_id:555,cost:0}]},555),0);
   assert.equal(sellerCost({receiver:{cost:400},senders:[{user_id:999,cost:100}]},555),null);
@@ -187,7 +210,7 @@ async function fixture() {
   await db.execute('ALTER TABLE shipments ADD COLUMN recipient_name TEXT');
   await db.execute(`CREATE TABLE tiendanube_orders(id INTEGER PRIMARY KEY,workspace_id INTEGER,integration_connection_id INTEGER,
     external_store_id TEXT,tiendanube_id BIGINT,status TEXT,payment_status TEXT,shipping_status TEXT,dispatch_status TEXT,
-    dispatch_marked_at TEXT,dispatched_at_external TEXT,contact_name TEXT,shipping_address_json TEXT,subtotal TEXT,total TEXT,currency TEXT,
+    dispatch_marked_at TEXT,dispatched_at_external TEXT,contact_name TEXT,shipping_address_json TEXT,shipping_method TEXT,shipping_carrier TEXT,subtotal TEXT,total TEXT,currency TEXT,
     shipping_cost_customer TEXT,shipping_cost_owner TEXT,order_source TEXT,synced_at TEXT)`);
   const repo=createFinanceRepository(db);
   await repo.saveRate(1,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:10000},7);
@@ -549,7 +572,7 @@ test('provisional balance preserves sales with missing shipping or fees and dedu
 test('Tiendanube sync stores checkout shipping and updates cancellations without replacing zero by unknown', async () => {
   const {db,cleanup}=await fixture();
   try {
-    for (const column of ['number','shipping_method','shipping_carrier','is_zipnova','contact_email','contact_phone','products_json','created_at_external','updated_at_external'])
+    for (const column of ['number','is_zipnova','contact_email','contact_phone','products_json','created_at_external','updated_at_external'])
       await db.execute(`ALTER TABLE tiendanube_orders ADD COLUMN ${column} TEXT`);
     globalThis.__tiendanubeFinanceDb=db;
     let source=readFileSync(new URL('../src/lib/tiendanubeStore.js',import.meta.url),'utf8');
