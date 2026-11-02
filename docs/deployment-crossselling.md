@@ -107,3 +107,8 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Consultadas ambas rutas en los logs de producción de la última hora, sin filtro de rama. mercadolibre-upkeep figura a las 08:43:46 Argentina, request pdttd-1793360626130-8264db910f3e, HTTP 200, sobre dpl_CtszbRCqf5sheVuWbPAxDzPyNNEF. El registro accesible no contiene mensajes de error ni resultados por cuenta; no permite confirmar éxito individual, cantidades o duración.
 - mercadolibre-sync no aparece en la ventana consultable. Una ejecución anterior a las 08:10 puede haber quedado fuera de la retención; no se infiere fallo ni éxito por ausencia de registros.
 - La configuración efectiva del proyecto logitrack confirma ambos cron habilitados, con horarios 11:00 y 11:20 UTC, asociados al despliegue citado. Se consultó esta configuración por API; no se pudo inspeccionar el panel gráfico en esta revisión. No se dispararon procesos manuales. Se mantiene el seguimiento sin afirmar éxito completo.
+
+### Seguimiento automático · 02/11/2026, 09:19 Argentina
+
+- Logs de producción de la última hora, sin filtro de rama: mercadolibre-upkeep a las 08:43:46 Argentina, request 8rpwb-1793619826140-1b830cff5ab1, HTTP 200, despliegue dpl_2sN61nCygqwHVL5fRZZD2EUpjBY6. Sin mensajes de runtime ni resultados por cuenta en el registro disponible; no se confirma éxito individual ni duración.
+- mercadolibre-sync no aparece en esta ventana; la ausencia no prueba fallo ni éxito, dado el límite de retención. La API del proyecto confirma ambos cron habilitados a las 11:00 y 11:20 UTC. No se inspeccionó el panel gráfico ni se dispararon sincronizaciones manuales. Continúa pendiente la conclusión de ambos procesos.
