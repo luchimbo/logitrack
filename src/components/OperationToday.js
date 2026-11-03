@@ -7,9 +7,11 @@ import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from "
 
 const CACHE_TTL_MS = 60_000;
 const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
-let operationCache = null;
+const operationCaches = new Map();
 
-export default function OperationToday({ onNavigate }) {
+export default function OperationToday({ currentUser, onNavigate }) {
+  const cacheKey = currentUser?.workspaceId;
+  const operationCache = operationCaches.get(cacheKey);
   const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null, sheet: null });
   const [loading, setLoading] = useState(() => !operationCache);
   const [manualUpdating, setManualUpdating] = useState(false);
@@ -21,6 +23,7 @@ export default function OperationToday({ onNavigate }) {
   }, []);
 
   const load = useCallback(async (options = {}) => {
+    const operationCache = operationCaches.get(cacheKey);
     const manualRefresh = Boolean(options?.currentTarget);
     const force = options?.force === true || manualRefresh;
     const syncSources = options?.syncSources === true || manualRefresh;
@@ -35,7 +38,7 @@ export default function OperationToday({ onNavigate }) {
     setError("");
     try {
       const mlPromise = api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message }));
-      const sheetPromise = api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message }));
+      const sheetPromise = currentUser?.workspaceSlug === "legacy" ? api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })) : Promise.resolve(null);
       // La consulta en vivo a Mercado Libre puede tardar; la planilla se muestra apenas llega.
       sheetPromise.then((sheetResult) => setSources((prev) => ({ ...prev, sheet: sheetResult })));
       const [mlResult, sheetResult] = await Promise.all([mlPromise, sheetPromise]);
@@ -48,14 +51,14 @@ export default function OperationToday({ onNavigate }) {
         },
         updatedAt: new Date(), cachedAt: Date.now(),
       };
-      operationCache = snapshot;
+      operationCaches.set(cacheKey, snapshot);
       hydrate(snapshot);
     } catch (err) { setError(err.message || "No se pudo cargar la operación de hoy."); }
     finally {
       setLoading(false);
       if (manualRefresh) setManualUpdating(false);
     }
-  }, [hydrate]);
+  }, [hydrate, cacheKey, currentUser?.workspaceSlug]);
   // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
   // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
   // las ventas contra las APIs externas en cada actualización.

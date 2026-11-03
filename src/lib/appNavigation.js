@@ -1,7 +1,7 @@
 export function buildAppNavigation({ currentUser, canManageUsers, connectedProviders }) {
   const hasOperationsPreview = currentUser?.workspaceSlug === "legacy";
   const operacionItems = [
-    ...(hasOperationsPreview ? [{ id: "operationToday", icon: "operation", label: "Operación de hoy" }] : []),
+    { id: "operationToday", icon: "operation", label: "Operación de hoy" },
     { id: "pickingList", icon: "picking", label: "Lista de Picking" },
     { id: "flex", icon: "flex", label: "Logística Flex" },
     { id: "colecta", icon: "colecta", label: "Colecta" },
@@ -18,7 +18,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
 
   const navGroups = [
     { title: "Operación", items: operacionItems },
-    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }] },
+    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }, ...(canManageUsers ? [{ id: "workspaceSetup", icon: "settings", label: "Impresión" }] : [])] },
     { title: "Integraciones", items: [{ id: "integrations", icon: "integrations", label: "Conectar" }] },
   ];
 
@@ -40,7 +40,7 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
 }
 
 export function getDefaultAppTab({ currentUser, navGroups = [] }) {
-  const preferred = currentUser?.workspaceSlug === "legacy" ? "operationToday" : "upload";
+  const preferred = "operationToday";
   const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
 
   if (availableIds.has(preferred)) return preferred;
@@ -58,9 +58,7 @@ export function resolveAppTab({ requestedTab, currentUser, navGroups = [] }) {
 }
 
 export function buildMobileNavigation({ currentUser, navGroups = [] }) {
-  const preferredIds = currentUser?.workspaceSlug === "legacy"
-    ? ["operationToday", "pickingList", "flex", "colecta"]
-    : ["upload", "pickingList", "flex", "colecta"];
+  const preferredIds = ["operationToday", "pickingList", "flex", "colecta"];
   const shortLabels = {
     operationToday: "Hoy",
     upload: "Cargar",
