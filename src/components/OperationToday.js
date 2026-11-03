@@ -100,15 +100,12 @@ function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
   const toggle = () => setOpen((value) => !value);
   return <article
     className={`operation-method-card ${tone} ${open ? "open" : ""}`}
-    tabIndex={0}
-    role="button"
-    aria-expanded={open}
     title="Doble click para ver el detalle"
     onDoubleClick={toggle}
-    onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
   >
     <p className="operation-method-title">{title}</p>
     {pending ? <div className="operation-source-empty">{pending}</div> : <div className="operation-source-total"><strong>{total}</strong><span>paquetes listos</span></div>}
+    <button type="button" className="operation-detail-toggle" aria-expanded={open} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggle(); }}>{open ? "Ocultar detalle" : "Ver detalle"}</button>
     {open ? <div className="operation-method-detail" onDoubleClick={(event) => event.stopPropagation()}>
       <div className="operation-source-rows">
         {accounts.length ? accounts.map((row) => <div key={row.account}><span>{row.account}</span><strong>{row.count}</strong></div>) : <div><span>Sin paquetes listos</span></div>}

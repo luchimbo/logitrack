@@ -124,7 +124,7 @@ export default function AppShell({
 
       <nav className="sidebar" aria-label="Navegación principal">
         <div className="sidebar-header">
-          {collapsed ? null : <GeoModiLogo size="sm" />}
+          {collapsed ? null : <button type="button" className="sidebar-home" onClick={() => onNavigate("operationToday")} aria-label="Ir al inicio"><GeoModiLogo size="sm" /></button>}
           <button
             type="button"
             className="sidebar-collapse-btn"

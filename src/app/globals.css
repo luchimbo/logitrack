@@ -687,3 +687,7 @@ body.sidebar-open{overflow:hidden}
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
+
+.sidebar-home{border:0;background:none;padding:0;cursor:pointer;text-align:left}
+.operation-detail-toggle{border:0;background:none;color:var(--text-muted);font-size:12px;font-weight:600;padding:8px 0;cursor:pointer}
+.operation-detail-toggle:hover,.operation-detail-toggle:focus-visible{color:var(--accent)}
