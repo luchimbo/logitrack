@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { createTiendanubeClient } from '@/lib/tiendanubeClient';
-import { mapOnlineCatalog, PROMOTION_COMBINATION } from './engine/online-crossselling.js';
+import { mapOnlineCatalog, PROMOTION_COMBINATION, PROMOTION_COMBINATION_FLAGS } from './engine/online-crossselling.js';
 import { createCrossSellingRepository } from './repository.js';
 import { lookupCrossSellingConnection } from './runtime.js';
 import { DEMO_STORE_ID } from './demo-probe-commands.js';
@@ -155,7 +155,8 @@ export async function changeOffer(workspaceId, input, storeId = DEMO_STORE_ID) {
     state = { ...state, enabled: true };
     await saveState(storeId, state);
     await client.setDiscountCallback(callbackUrl(storeId, state));
-    await client.updatePromotion(state.promotionId, { active: true });
+    // También corrige las opciones de combinación de una promoción creada antes con valores más restrictivos.
+    await client.updatePromotion(state.promotionId, { active: true, ...PROMOTION_COMBINATION_FLAGS });
   } else if (input.action === 'disable') {
     if (state) {
       state = { ...state, enabled: false, acceptances: [] };

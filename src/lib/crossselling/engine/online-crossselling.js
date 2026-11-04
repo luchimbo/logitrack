@@ -141,7 +141,11 @@ export function discountCommands({ snapshot, revision, catalog, cart, acceptance
 }
 
 export const PROMOTION_COMBINATION = Object.freeze({
-  allocation_type: "line_item", active: false, combines_with_quantity_discounts: false, combines_with_free_shipping: true,
+  allocation_type: "line_item", active: false, combines_with_quantity_discounts: true, combines_with_free_shipping: true,
   // TN agrupa cupones y medios de pago. El callback excluye carritos con cupones.
-  combines_with_cart_amount_discounts: true, combines_with_app_discounts: false, combines_with_price_discounts: true,
+  // Todo en true: esta promoción no debe desplazar los descuentos que la tienda ya ofrece.
+  combines_with_cart_amount_discounts: true, combines_with_app_discounts: true, combines_with_price_discounts: true,
 });
+
+// Opciones de combinación sin "active" ni "allocation_type": sirven para corregir una promoción ya creada.
+export const { active: _active, allocation_type: _allocation, ...PROMOTION_COMBINATION_FLAGS } = PROMOTION_COMBINATION;
