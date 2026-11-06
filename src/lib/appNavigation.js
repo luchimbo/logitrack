@@ -2,8 +2,8 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
   const hasOperationsPreview = currentUser?.workspaceSlug === "legacy";
   const operacionItems = [
     { id: "operationToday", icon: "operation", label: "Operación de hoy" },
-    { id: "pickingList", icon: "picking", label: "Lista de Picking" },
-    { id: "flex", icon: "flex", label: "Logística Flex" },
+    { id: "pickingList", icon: "picking", label: "Picking" },
+    { id: "flex", icon: "flex", label: "Flex" },
     { id: "colecta", icon: "colecta", label: "Colecta" },
     ...(hasOperationsPreview ? [{ id: "printJobs", icon: "colecta", label: "Historial de paquetes" }] : []),
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },

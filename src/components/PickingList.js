@@ -41,7 +41,7 @@ export default function PickingList() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
+                    <SectionTitle icon="picking">Picking</SectionTitle>
                 </div>
                 <div className="spinner"></div>
             </div>
@@ -51,7 +51,7 @@ export default function PickingList() {
     if (error) {
         return (
             <div className="section active">
-                <div className="section-header"><SectionTitle icon="picking">Lista de picking</SectionTitle></div>
+                <div className="section-header"><SectionTitle icon="picking">Picking</SectionTitle></div>
                 <p style={{ color: "var(--danger)" }}>Error: {error}</p>
             </div>
         );
@@ -61,7 +61,7 @@ export default function PickingList() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
+                    <SectionTitle icon="picking">Picking</SectionTitle>
                     <p className="section-subtitle">Productos a buscar — divididos por método de envío</p>
                 </div>
                 <div className="empty-state">
@@ -171,7 +171,7 @@ export default function PickingList() {
             pdf.setFont("helvetica", "bold");
             pdf.setFontSize(12);
             pdf.setTextColor(20, 24, 35);
-            pdf.text("Lista de Picking", margin, y);
+            pdf.text("Picking", margin, y);
             y += 4;
 
             pdf.setFont("helvetica", "normal");
@@ -236,18 +236,18 @@ export default function PickingList() {
         if (!items.length) return null;
 
         return (
-            <section className={`picking-group picking-group-${type}`}>
-                <div className="picking-group-header">
+            <details className={`picking-group picking-group-${type} info-disclosure`}>
+                <summary className="picking-group-header info-disclosure-summary">
                     <div>
                         <h2>{title}</h2>
                         <p>{items.length} productos · {units} unidades</p>
                     </div>
-                    <span className={`badge badge-${type}`}>{items.length}</span>
-                </div>
+                    <span className="info-disclosure-indicator" aria-hidden="true" />
+                </summary>
                 <div className="picking-items">
                     {items.map((item, i) => renderItem(item, type === 'colecta' ? i : colectaItems.length + i))}
                 </div>
-            </section>
+            </details>
         );
     };
 
@@ -256,7 +256,7 @@ export default function PickingList() {
             <div className="picking-hero">
                 <div>
                     <p className="picking-kicker">Operación diaria</p>
-                    <SectionTitle icon="picking">Lista de picking</SectionTitle>
+                    <SectionTitle icon="picking">Picking</SectionTitle>
                     <p className="section-subtitle">Productos a preparar, priorizados por unidades pendientes.</p>
                 </div>
                 <LoadingButton isLoading={isExportingPdf} spinnerSize="md" className="btn btn-primary" onClick={handleExportPdf}>

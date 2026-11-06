@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import SectionTitle from "./SectionTitle";
@@ -166,7 +168,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
   const stats = useMemo(() => {
     let pending = 0;
     let packed = 0;
-    
+
     shipments.forEach(s => {
       if (!s.dispatched) {
         pending++;
@@ -229,7 +231,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
               🔍
             </button>
           </div>
-          
+
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <select
               className="form-control"
@@ -278,7 +280,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
           <button className="btn btn-ghost" style={{ marginTop: '12px' }} onClick={() => setStatusFilter('history')}>Ver historial completo</button>
         </div>
       ) : (
-        <div>
+        <InfoDisclosure title="Envíos de la planilla" description={`${shipments.length} envíos · listado y acciones`} className="card">
           {/* Desktop Table View */}
           <div className="table-container desktop-only">
             <table className="table">
@@ -344,7 +346,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
                             >
                               {s.packed ? "↩ Deshacer Pack" : "📦 Empaquetar"}
                             </LoadingButton>
-                            
+
                             <LoadingButton
                               isLoading={actionLoadingId === s.id}
                               onClick={() => handleMarkDispatched(s.id)}
@@ -413,7 +415,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
                       >
                         {s.packed ? "↩ Pendiente" : "📦 Empacar"}
                       </LoadingButton>
-                      
+
                       <LoadingButton
                         isLoading={actionLoadingId === s.id}
                         onClick={() => handleMarkDispatched(s.id)}
@@ -433,7 +435,7 @@ export default function GoogleSheetsSection({ currentUser, onBadgeUpdate }) {
               </div>
             ))}
           </div>
-        </div>
+        </InfoDisclosure>
       )}
     </div>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
@@ -30,12 +32,12 @@ function OrderCard({ order }) {
         </div>
         <span style={{ borderRadius: '999px', padding: '5px 9px', color: operational.color, background: `${operational.color}14`, border: `1px solid ${operational.color}33`, fontSize: '12px', fontWeight: 800 }}>{operational.label}</span>
       </div>
-      <div style={{ display: 'grid', gap: '8px', marginTop: '14px', color: 'var(--text-muted)', fontSize: '13px' }}>
+      <InfoDisclosure title="Detalle del pedido" description="Importe, fecha, dirección y productos"><div style={{ display: 'grid', gap: '8px', marginTop: '14px', color: 'var(--text-muted)', fontSize: '13px' }}>
         <div><strong style={{ color: 'var(--text)' }}>Total:</strong> {formatOrderTotal(order.total, order.currency)}</div>
         <div><strong style={{ color: 'var(--text)' }}>Fecha:</strong> {order.createdAt ? formatArgentinaDate(order.createdAt) : '-'}</div>
         <div><strong style={{ color: 'var(--text)' }}>Envío:</strong> {address || 'Sin dirección'}</div>
         <div><strong style={{ color: 'var(--text)' }}>Productos:</strong> {products.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)} unid.</div>
-      </div>
+      </div></InfoDisclosure>
     </div>
   );
 }
@@ -157,7 +159,7 @@ export default function ShopifySection({ currentUser }) {
       {error ? <div className="card" style={{ marginBottom: '10px', color: 'var(--danger)' }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: '10px', color: 'var(--warning, #c2410c)' }}>{warning}</div> : null}
 
-      <div className="card" style={{ marginBottom: '16px' }}>
+      <InfoDisclosure title={connected ? "Conectar otra tienda" : "Conectar Shopify"} defaultOpen={!connected} className="card" style={{ marginBottom: '16px' }}>
         <form onSubmit={handleConnect} className="form-row" style={{ alignItems: 'end' }}>
           <div className="form-group" style={{ minWidth: '280px' }}>
             <label className="form-label">Nueva tienda Shopify</label>
@@ -165,11 +167,11 @@ export default function ShopifySection({ currentUser }) {
           </div>
           {canManageIntegration ? <button type="submit" className="btn btn-primary" disabled={connecting || !shop}>{connecting ? 'Conectando...' : 'Conectar Shopify'}</button> : null}
         </form>
-      </div>
+      </InfoDisclosure>
 
       {connected ? (
         <>
-          <div className="card" style={{ marginBottom: '16px', padding: '14px' }}>
+          <InfoDisclosure title="Búsqueda y sincronización" description="Elegí una tienda, buscá pedidos o actualizá los datos" className="card" style={{ marginBottom: '16px', padding: '14px' }}>
             <div className="form-row">
               <div className="form-group" style={{ minWidth: '240px' }}>
                 <label className="form-label">Tienda</label>
@@ -189,7 +191,7 @@ export default function ShopifySection({ currentUser }) {
             <div style={{ marginTop: '10px', color: 'var(--text-muted)', fontSize: '12px' }}>
               {lastSyncedAt ? `Última actualización ${formatArgentinaDateTime(lastSyncedAt)}` : 'Sin pedidos sincronizados todavía'}
             </div>
-          </div>
+          </InfoDisclosure>
 
           {loading ? <div className="spinner"></div> : (
             <div style={{ display: 'grid', gap: '12px' }}>

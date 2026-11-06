@@ -82,7 +82,7 @@ const faqs = [
 
 const demoScreenshots = [
   ["Dashboard operativo", "/demo-tiendanube-dashboard.svg"],
-  ["Lista de picking", "/demo-tiendanube-picking.svg"],
+  ["Picking", "/demo-tiendanube-picking.svg"],
   ["Gestión de despachos", "/demo-tiendanube-despachos.svg"],
 ];
 
@@ -112,7 +112,7 @@ const audience = [
 const included = [
   "Integración con Tiendanube mediante OAuth y webhooks.",
   "Carga de etiquetas ZPL/TXT para operaciones existentes.",
-  "Lista de picking por producto, SKU, cantidad y método de envío.",
+  "Picking por producto, SKU, cantidad y método de envío.",
   "Separación de Flex, Colecta y operadores logísticos.",
   "Mapa de entregas y distribución territorial.",
   "Dashboard diario, semanal, mensual y por rango.",
@@ -188,8 +188,8 @@ function HeroMockup() {
         <div className={styles.previewLogo}>GEOMODI</div>
         <small>OPERACIÓN</small>
         <span>📦 Subir Etiquetas</span>
-        <span className={styles.previewNavActive}>📋 Lista de Picking</span>
-        <span>🚀 Logística Flex</span>
+        <span className={styles.previewNavActive}>📋 Picking</span>
+        <span>🚀 Flex</span>
         <span>📦 Colecta</span>
         <span>📍 Mapa</span>
         <span>📊 Dashboard</span>
@@ -201,14 +201,14 @@ function HeroMockup() {
       <div className={styles.previewApp}>
         <div className={styles.mockupTopbar}>
           <div>
-            <strong>Lista de Picking</strong>
+            <strong>Picking</strong>
           </div>
         </div>
 
         <section className={styles.previewContentHeader}>
           <div>
             <span className={styles.mockupEyebrow}>Operación diaria</span>
-            <h3>Lista de Picking</h3>
+            <h3>Picking</h3>
             <p>Productos a preparar, priorizados por unidades pendientes.</p>
           </div>
           <button>Exportar PDF</button>

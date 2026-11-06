@@ -90,7 +90,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
     </div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
     <section className="operation-method-grid" aria-label="Paquetes listos para imprimir">
-      <MethodCard title="Logística Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
+      <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
       <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
     </section>
     <SheetLine data={sources.sheet} onOpen={() => onNavigate("sheetSync")} />

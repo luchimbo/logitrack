@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import styles from "./PackageHistorySection.module.css";
+import InfoDisclosure from "./InfoDisclosure";
 
 const EMPTY_DETAIL = { loading: false, item: null, error: null };
 
@@ -21,7 +22,7 @@ function Fact({ label, children, wide = false }) {
 }
 
 function DetailGroup({ title, children }) {
-  return <section className={styles.group}><h3>{title}</h3><dl className={styles.facts}>{children}</dl></section>;
+  return <InfoDisclosure className={styles.group} title={title}><dl className={styles.facts}>{children}</dl></InfoDisclosure>;
 }
 
 function PackageDetail({ detail }) {

@@ -22,7 +22,7 @@ const STEPS = [
   },
   {
     title: '3. Prepará Picking y operación',
-    body: 'La Lista de Picking te resume productos y cantidades. Flex y Colecta separan la operación diaria para despacho.',
+    body: 'Picking te resume productos y cantidades. Flex y Colecta separan la operación diaria para despacho.',
     tab: 'pickingList',
     recommended: 'Preparar el picking',
   },

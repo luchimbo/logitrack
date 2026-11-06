@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -281,8 +283,8 @@ export default function ZoneConfig() {
                 <p className="section-subtitle">Asigná transportistas a cada partido del AMBA</p>
             </div>
 
-            <div className="card mb-lg">
-                <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700 }}>🚛 Transportistas Flex Activos</h3>
+            <InfoDisclosure title="Transportistas Flex activos" description={`${carriers.length} transportistas · alta y configuración`} className="card mb-lg">
+
                 <div className="form-row mb-md">
                     <div className="form-group">
                         <label className="form-label">Identificador / Usuario</label>
@@ -332,7 +334,7 @@ export default function ZoneConfig() {
                         ))
                     )}
                 </div>
-            </div>
+            </InfoDisclosure>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
                 <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>📍 Asignación de Partidos</h3>
@@ -353,21 +355,15 @@ export default function ZoneConfig() {
                     const groupPartidos = PARTIDOS.filter(p => p.zone === group.id);
 
                     return (
-                        <div key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}`, padding: 0 }}>
-                            <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", background: "var(--surface-hover)" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                                    <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: groupColor }}>{group.label}</h4>
-                                    <span className="badge" style={{ background: `${groupColor}20`, color: groupColor }}>{groupPartidos.length} zonas</span>
-                                </div>
-
-                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <InfoDisclosure title={group.label} description={`${groupPartidos.length} zonas · asignación de transportistas`} key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}` }}>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                     <select className="form-select" id={`group-select-${group.id}`} style={{ fontSize: "12px", flex: 1 }}>
                                         <option value="">— Asignar a todos —</option>
                                         {carriers.map(c => <option key={c.name} value={c.name}>{c.display_name || c.name}</option>)}
                                     </select>
                                     <button className="btn btn-primary btn-sm" disabled={savingGroup === group.id} onClick={() => handleAssignGroup(group.id)} style={{ padding: "6px 12px", fontSize: "12px" }}>{savingGroup === group.id ? 'Aplicando...' : 'Aplicar'}</button>
                                 </div>
-                            </div>
+
 
                             <div style={{ padding: "16px" }}>
                                 {groupPartidos.map(p => {
@@ -404,7 +400,7 @@ export default function ZoneConfig() {
                                     );
                                 })}
                             </div>
-                        </div>
+                        </InfoDisclosure>
                     );
                 })}
             </div>

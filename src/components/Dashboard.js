@@ -11,6 +11,7 @@ import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 import MobileSelectionBar from "./MobileSelectionBar";
 import SectionTitle from "./SectionTitle";
+import InfoDisclosure from "./InfoDisclosure";
 
 const SHIPMENTS_PAGE_SIZE = 200;
 
@@ -434,8 +435,7 @@ export default function Dashboard() {
 
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px" }}>
                 {/* By Method */}
-                <div className="card">
-                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📦 Por Método</h3>
+                <InfoDisclosure className="card" title="Envíos por método" description={`${methodEntries.length} métodos de envío`}>
                     <div className="chart-bar-container">
                         {methodEntries.map(([method, count]) => (
                                 <div key={method} className="chart-bar-row">
@@ -448,11 +448,10 @@ export default function Dashboard() {
                                 </div>
                         ))}
                     </div>
-                </div>
+                </InfoDisclosure>
 
                 {/* By Carrier */}
-                <div className="card">
-                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🚛 Por Transportista (Solo Flex)</h3>
+                <InfoDisclosure className="card" title="Transportistas Flex" description={`${carrierEntries.length} transportistas y asignaciones`}>
                     {carrierEntries.length > 0 ? (
                         <div className="chart-bar-container">
                             {carrierEntries.map(([carrier, count]) => {
@@ -472,12 +471,11 @@ export default function Dashboard() {
                     ) : (
                         <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No hay envíos Flex en este período.</p>
                     )}
-                </div>
+                </InfoDisclosure>
 
                 {/* By Province */}
                 {provinceEntries.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📍 Top Provincias</h3>
+                    <InfoDisclosure className="card" title="Provincias" description={`${provinceEntries.length} destinos en el período`}>
                         <div className="chart-bar-container">
                             {provinceEntries.map(([prov, count]) => (
                                 <div key={prov} className="chart-bar-row">
@@ -490,12 +488,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {comparison && ['today', 'week', 'month'].includes(period) && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📈 Comparativa</h3>
+                    <InfoDisclosure className="card" title="Comparativa" description="Evolución frente al período anterior">
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {[
                                 { label: 'Envíos', current: data.total_packages, previous: comparison.previous.total_packages, delta: comparison.delta.total_packages },
@@ -514,12 +511,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {period === 'range' && topDays.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🔥 Días con más envíos</h3>
+                    <InfoDisclosure className="card" title="Días con más envíos" description={`${topDays.length} días destacados`}>
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {topDays.map((day) => (
                                 <div key={`top-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -533,12 +529,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {period === 'range' && lowDays.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🧊 Días con menos envíos</h3>
+                    <InfoDisclosure className="card" title="Días con menos envíos" description={`${lowDays.length} días destacados`}>
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {lowDays.map((day) => (
                                 <div key={`low-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -552,7 +547,7 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
             </div>

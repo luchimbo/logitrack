@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useEffect, useMemo, useState } from "react";
 
 function formatDate(value) {
@@ -238,8 +240,8 @@ export default function AdminOverviewSection() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-                <div className="card">
-                  <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Resumen operativo de hoy</h4>
+                <InfoDisclosure title="Resumen operativo de hoy" className="card">
+
                   <div style={{ display: "grid", gap: 8 }}>
                     <div className="mobile-card" style={{ display: "block", marginBottom: 0 }}>
                       <div className="mobile-card-row"><span className="mobile-card-label">Total hoy</span><span className="mobile-card-value">{selectedUserDetail.today.total}</span></div>
@@ -247,10 +249,10 @@ export default function AdminOverviewSection() {
                       <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{selectedUserDetail.today.flex}</span></div>
                     </div>
                   </div>
-                </div>
+                </InfoDisclosure>
 
-                <div className="card">
-                  <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Horarios de uso</h4>
+                <InfoDisclosure title="Horarios de uso" className="card">
+
                   <div style={{ display: "grid", gap: 8 }}>
                     {(selectedUserDetail.activityByHour || []).map((slot) => (
                       <div key={slot.hour} className="mobile-card" style={{ display: "block", marginBottom: 0 }}>
@@ -260,7 +262,7 @@ export default function AdminOverviewSection() {
                     ))}
                     {(!selectedUserDetail.activityByHour || selectedUserDetail.activityByHour.length === 0) && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Sin actividad registrada todavía.</p>}
                   </div>
-                </div>
+                </InfoDisclosure>
               </div>
             </div>
           ) : activeView === "workspaces" && selectedWorkspaceDetail ? (
@@ -276,8 +278,8 @@ export default function AdminOverviewSection() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-                <div className="card">
-                  <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Miembros</h4>
+                <InfoDisclosure title="Miembros" className="card">
+
                   <div style={{ display: "grid", gap: 8 }}>
                     {(selectedWorkspaceDetail.members || []).map((member, idx) => (
                       <div key={`${member.email}-${idx}`} className="mobile-card" style={{ display: "block", marginBottom: 0 }}>
@@ -287,10 +289,10 @@ export default function AdminOverviewSection() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </InfoDisclosure>
 
-                <div className="card">
-                  <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Resumen operativo de hoy</h4>
+                <InfoDisclosure title="Resumen operativo de hoy" className="card">
+
                   <div style={{ display: "grid", gap: 8 }}>
                     <div className="mobile-card" style={{ display: "block", marginBottom: 0 }}>
                       <div className="mobile-card-row"><span className="mobile-card-label">Total hoy</span><span className="mobile-card-value">{selectedWorkspaceDetail.today.total}</span></div>
@@ -298,7 +300,7 @@ export default function AdminOverviewSection() {
                       <div className="mobile-card-row"><span className="mobile-card-label">Flex</span><span className="mobile-card-value">{selectedWorkspaceDetail.today.flex}</span></div>
                     </div>
                   </div>
-                </div>
+                </InfoDisclosure>
               </div>
             </div>
           ) : (

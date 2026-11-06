@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
 
@@ -85,7 +87,7 @@ export default function UserManagementSection({ currentUser }) {
         </select> : <h3 id="members-workspace">{workspace?.name || "Cargando espacio…"}</h3>}
         <p>Los accesos se asignan a este espacio. Las cuentas existentes conservan su forma de iniciar sesión.</p>
       </div>
-      <div className="card assignment"><h3>Asignar acceso</h3><p className="muted">Ingresá el email que la persona usa o usará para entrar a GeoModi.</p>
+      <div className="card assignment"><InfoDisclosure title="Asignar acceso" description="Agregar una persona a este espacio"><p className="muted">Ingresá el email que la persona usa o usará para entrar a GeoModi.</p>
         <form onSubmit={assign}><div className="assignment-fields">
           <label>Email<input className="form-input" type="email" required autoComplete="off" placeholder="persona@empresa.com" value={email} disabled={Boolean(busy) || loading} onChange={event => { setEmail(event.target.value); setReassignment(null); }} /></label>
           <label>Rol<select className="form-select" value={role} disabled={Boolean(busy) || loading} onChange={event => { setRole(event.target.value); setReassignment(null); }}><option value="user">Usuario</option><option value="admin">Administrador</option></select></label>
@@ -94,13 +96,13 @@ export default function UserManagementSection({ currentUser }) {
           <p className="muted">Si ya tiene cuenta, podrá iniciar sesión. Si todavía no tiene cuenta, podrá registrarse con ese email y entrar al espacio asignado.</p>
           <button className="btn" type="submit" disabled={Boolean(busy) || loading || !workspace}>{busy === "assign" ? "Asignando acceso…" : sendEmail ? "Asignar y enviar acceso" : "Asignar acceso"}</button>
         </form>
-      </div>
+      </InfoDisclosure></div>
       {reassignment && <div className="card confirmation" role="alert"><h3>Esta persona ya pertenece a otro espacio</h3><p><strong>{reassignment.email}</strong> pasará a <strong>{workspace?.name}</strong> y perderá acceso a sus espacios anteriores. Sus datos se conservarán.</p>
         <div className="actions"><button className="btn" disabled={Boolean(busy)} onClick={event => assign(event, reassignment)}>{reassignment.sendEmail ? "Reasignar y enviar acceso" : "Reasignar acceso"}</button><button className="btn btn-ghost" disabled={Boolean(busy)} onClick={() => setReassignment(null)}>Cancelar</button></div>
       </div>}
       {error && <div className="card message error" role="alert">{error}</div>}
       {notice && <div className={`card message ${notice.warning ? "warning" : "success"}`} role="status">{notice.text}</div>}
-      <div className="card members"><div className="flex-between"><h3>Miembros de {workspace?.name || "este espacio"}</h3><button className="btn btn-sm btn-ghost" disabled={loading || Boolean(busy)} onClick={() => { setError(""); loadUsers(); }}>{loading ? "Cargando…" : "Actualizar"}</button></div>
+      <div className="card members"><InfoDisclosure title={`Miembros de ${workspace?.name || "este espacio"}`} description={`${users.length} personas · roles y acceso`}><div className="flex-between"><button className="btn btn-sm btn-ghost" disabled={loading || Boolean(busy)} onClick={() => { setError(""); loadUsers(); }}>{loading ? "Cargando…" : "Actualizar"}</button></div>
         {loading ? <p className="muted">Cargando miembros…</p> : users.length === 0 ? <p className="muted">Todavía no hay miembros. Asigná el primer acceso desde el formulario.</p> : <ul className="member-list">{users.map(user => <li className="member" key={user.id}>
           <div className="member-identity"><strong>{user.email}</strong><span className={`account-state ${user.is_pending ? "pending" : "active"}`}>{user.is_pending ? "Pendiente de ingreso" : "Cuenta vinculada"}</span>
             <span className="muted">{user.email_status === "sent" ? `Correo enviado ${formatArgentinaDateTime(user.email_sent_at)}` : user.email_status === "failed" ? "No se pudo enviar el correo. El acceso sigue asignado." : user.email_status === "sending" ? "Envío en curso…" : "Sin correo de acceso enviado"}</span>
@@ -109,7 +111,7 @@ export default function UserManagementSection({ currentUser }) {
             {user.role === "owner" && <option value="owner">Propietario</option>}<option value="admin">Administrador</option><option value="user">Usuario</option>
           </select><button className="btn btn-sm btn-ghost" disabled={Boolean(busy)} onClick={() => resend(user)}>{busy === `email:${user.id}` ? "Enviando…" : user.email_sent_at ? "Reenviar acceso" : "Enviar acceso"}</button></div>
         </li>)}</ul>}
-      </div>
+      </InfoDisclosure></div>
       <style jsx>{`
         .workspace-users{max-width:1080px}.workspace-users h3{font-size:16px;font-weight:700;margin:0}.destination,.assignment,.members,.confirmation{margin-bottom:18px}
         .destination{border-left:3px solid var(--accent);display:grid;gap:10px}.destination .form-select{max-width:650px}.eyebrow{text-transform:uppercase;font-size:11px;letter-spacing:.1em;font-weight:700;color:var(--text-muted)}
