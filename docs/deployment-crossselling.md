@@ -127,3 +127,8 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 
 - Logs de producción de la última hora sin filtro de rama: upkeep a las 08:43:46 Argentina, request ghnn9-1793879026141-897b0aeb4661, HTTP 200 en dpl_DcpByfxwDMsiTxZGmj7nY6EDNwzq, sin mensajes de runtime ni resultados por cuenta. No permite afirmar éxito individual ni duración.
 - Sync no aparece en la ventana retenida: no se puede confirmar su resultado ni la resolución del fallo parcial del 04/11. La API del proyecto confirma ambos cron habilitados a las 11:00 y 11:20 UTC en el despliegue citado. Panel gráfico no inspeccionado. No se dispararon procesos manuales. Continúa el seguimiento.
+
+### Seguimiento automático · 06/11/2026, 09:11 Argentina
+
+- Logs de producción de la última hora sin filtro de rama: upkeep a las 08:43:46 Argentina, request 576rz-1793965426164-1f94b8a89602, HTTP 200 en dpl_DcpByfxwDMsiTxZGmj7nY6EDNwzq, sin mensajes de runtime ni resultados por cuenta. No se confirma éxito individual ni duración.
+- Sync no aparece en la ventana retenida; no se confirma su resultado ni la resolución del fallo parcial del 04/11. La API confirma ambos cron habilitados a las 11:00 y 11:20 UTC. Panel gráfico no inspeccionado; sin ejecuciones manuales. Continúa el seguimiento.
