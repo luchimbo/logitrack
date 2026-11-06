@@ -56,7 +56,7 @@ export default function AppShell({
   if (providerLabels[activeTab] && !allItems.some((item) => item.id === activeTab)) allItems.push({ id: activeTab, label: providerLabels[activeTab], icon: "integrations" });
   const findItems = (ids) => ids.map((id) => allItems.find((item) => item.id === id)).filter(Boolean);
   const sections = [
-    { title: "Operación de hoy", icon: "operation", items: findItems(["operationToday", "pickingList", "flex", "colecta", "sheetSync", "upload"]) },
+    { title: "Operación de hoy", icon: "operation", items: findItems(["operationToday", "pickingList", "flex", "colecta", "upload"]) },
     { title: "Seguimiento", icon: "colecta", items: findItems(["deliveryControl", "printJobs"]) },
     { title: "Resultados", icon: "dashboard", items: findItems(["dashboard", "logisticsFinance"]) },
     { title: "Canales", icon: "integrations", items: findItems(["mercadolibre", "tiendanube", "shopify", "zipnova", "integrations"]) },

@@ -12,7 +12,7 @@ const operationCaches = new Map();
 export default function OperationToday({ currentUser, onNavigate }) {
   const cacheKey = currentUser?.workspaceId;
   const operationCache = operationCaches.get(cacheKey);
-  const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null, sheet: null });
+  const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null });
   const [loading, setLoading] = useState(() => !operationCache);
   const [manualUpdating, setManualUpdating] = useState(false);
   const [error, setError] = useState("");
@@ -37,17 +37,12 @@ export default function OperationToday({ currentUser, onNavigate }) {
     if (manualRefresh) setManualUpdating(true);
     setError("");
     try {
-      const mlPromise = api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message }));
-      const sheetPromise = currentUser?.workspaceSlug === "legacy" ? api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message })) : Promise.resolve(null);
-      // La consulta en vivo a Mercado Libre puede tardar; la planilla se muestra apenas llega.
-      sheetPromise.then((sheetResult) => setSources((prev) => ({ ...prev, sheet: sheetResult })));
-      const [mlResult, sheetResult] = await Promise.all([mlPromise, sheetPromise]);
+      const mlResult = await api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message }));
       const snapshot = {
         sources: {
           mercadolibre: syncSources
             ? mlResult
             : { ...mlResult, liveOrders: operationCache?.sources?.mercadolibre?.liveOrders ?? null },
-          sheet: sheetResult,
         },
         updatedAt: new Date(), cachedAt: Date.now(),
       };
@@ -58,7 +53,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
       setLoading(false);
       if (manualRefresh) setManualUpdating(false);
     }
-  }, [hydrate, cacheKey, currentUser?.workspaceSlug]);
+  }, [hydrate, cacheKey]);
   // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
   // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
   // las ventas contra las APIs externas en cada actualización.
@@ -81,7 +76,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
 
   return <div className="section operation-today">
     <div className="operation-toolbar">
-      <div>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div>
+      <div>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div>
       <div className="operation-toolbar-links">
         <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
         <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
@@ -93,7 +88,6 @@ export default function OperationToday({ currentUser, onNavigate }) {
       <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
       <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
     </section>
-    <SheetLine data={sources.sheet} onOpen={() => onNavigate("sheetSync")} />
   </div>;
 }
 
@@ -116,13 +110,4 @@ function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
       <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Ir al sector</button>
     </div> : null}
   </article>;
-}
-
-function SheetLine({ data, onOpen }) {
-  if (!data || data.error || data.ok === false || !Array.isArray(data.shipments)) return null;
-  const packed = data.shipments.filter((shipment) => Boolean(shipment.packed)).length;
-  const pending = Math.max(0, data.shipments.length - packed);
-  return <button type="button" className="operation-sheet-line" onClick={onOpen}>
-    Excel: <strong>{pending}</strong> pendientes · <strong>{packed}</strong> empaquetados
-  </button>;
 }

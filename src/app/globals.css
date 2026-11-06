@@ -486,9 +486,6 @@ body.sidebar-open{overflow:hidden}
 .operation-method-card .operation-source-total strong{font-size:56px}
 .operation-method-detail{display:grid;gap:12px;cursor:default}
 .operation-method-detail .btn{justify-self:start}
-.operation-sheet-line{margin-top:14px;border:0;background:transparent;color:var(--text-muted);font:inherit;font-size:13px;cursor:pointer;padding:4px 0}
-.operation-sheet-line:hover{color:var(--text)}
-.operation-sheet-line strong{color:var(--text-secondary);font-variant-numeric:tabular-nums}
 @media(max-width:768px){.operation-method-grid{grid-template-columns:1fr}.operation-method-card .operation-source-total strong{font-size:44px}}
 
 /* ========================

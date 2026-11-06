@@ -12,10 +12,6 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
   ];
 
-  if (hasOperationsPreview) {
-    operacionItems.push({ id: "sheetSync", icon: "dashboard", label: "Envíos Planilla", badgeKey: "sheetSync" });
-  }
-
   const navGroups = [
     { title: "Operación", items: operacionItems },
     { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }, ...(canManageUsers ? [{ id: "workspaceSetup", icon: "settings", label: "Impresión" }] : [])] },
