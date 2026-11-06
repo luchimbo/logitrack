@@ -1,0 +1,52 @@
+"use client";
+
+import { forwardRef } from "react";
+
+const variants = {
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  ghost: "btn-ghost",
+  danger: "btn-danger",
+  success: "btn-success",
+};
+
+const sizes = {
+  sm: "btn-sm",
+  md: "",
+  lg: "btn-lg",
+};
+
+const Button = forwardRef(
+  (
+    {
+      children,
+      variant = "primary",
+      size = "md",
+      loading = false,
+      disabled = false,
+      icon,
+      className = "",
+      ...props
+    },
+    ref
+  ) => {
+    const isDisabled = disabled || loading;
+
+    return (
+      <button
+        ref={ref}
+        className={`btn ${variants[variant]} ${sizes[size]} ${loading ? "btn-loading" : ""} ${className}`}
+        disabled={isDisabled}
+        {...props}
+      >
+        {loading && <span className="spinner-sm" />}
+        {icon && !loading && <span className="btn-icon">{icon}</span>}
+        {children}
+      </button>
+    );
+  }
+);
+
+Button.displayName = "Button";
+
+export default Button;

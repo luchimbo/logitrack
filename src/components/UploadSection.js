@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useState, useRef, useEffect, useCallback } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
@@ -348,7 +350,7 @@ export default function UploadSection() {
 
                     {/* Today's batches */}
                     {todayBatches.length > 0 && (
-                        <div style={{ marginBottom: '16px' }}>
+                        <InfoDisclosure title="Lotes cargados hoy" description={`${todayBatches.length} lotes · archivos y administración`}><div style={{ marginBottom: '16px' }}>
                             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lotes cargados hoy</span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                                 {todayBatches.map(b => (
@@ -360,7 +362,7 @@ export default function UploadSection() {
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </div></InfoDisclosure>
                     )}
 
                     {/* Individual shipments */}

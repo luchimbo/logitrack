@@ -29,16 +29,11 @@ export async function GET(request) {
       }),
       db.execute({
         sql: `SELECT w.id, w.name, w.slug,
-                     COUNT(DISTINCT wm.app_user_id) AS members,
-                     COUNT(DISTINCT s.id) AS shipments,
-                     COUNT(DISTINCT b.id) AS batches
+                     (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id=w.id) AS members,
+                     (SELECT COUNT(*) FROM shipments s WHERE s.workspace_id=w.id) AS shipments,
+                     (SELECT COUNT(*) FROM daily_batches b WHERE b.workspace_id=w.id) AS batches
               FROM workspaces w
-              LEFT JOIN workspace_members wm ON wm.workspace_id = w.id
-              LEFT JOIN shipments s ON s.workspace_id = w.id
-              LEFT JOIN daily_batches b ON b.workspace_id = w.id
-              GROUP BY w.id, w.name, w.slug
-              ORDER BY shipments DESC, batches DESC, w.id DESC
-              LIMIT 8`,
+              ORDER BY shipments DESC, batches DESC, w.id DESC LIMIT 8`,
         args: [],
       }),
       db.execute({

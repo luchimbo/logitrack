@@ -37,6 +37,12 @@
 .progressTrack{margin-top:10px;height:10px;border-radius:999px;background:rgba(128,128,128,.25);overflow:hidden}
 .progressTrack span{display:block;height:100%;border-radius:999px;background:#6ee7b7;transition:width .4s ease}
 
+.jobBar{display:block;position:relative;width:100%;max-width:220px;height:6px;margin-top:6px;border-radius:999px;background:rgba(128,128,128,.25);overflow:hidden}
+.jobBarFill{display:block;height:100%;border-radius:999px;background:#6ee7b7;transition:width .4s ease}
+.jobBarWaiting{position:absolute;top:0;left:0;width:35%;height:100%;border-radius:999px;background:#6ee7b7;animation:jobBarSlide 1.2s ease-in-out infinite}
+@keyframes jobBarSlide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+@media (prefers-reduced-motion:reduce){.jobBarWaiting{animation:none;width:100%;opacity:.5}}
+
 .tab_flex[aria-pressed="true"]{border-color:#fbbf74 !important;color:#fbbf74 !important;background:rgba(251,191,116,.1) !important}
 .tab_colecta[aria-pressed="true"]{border-color:#60a5fa !important;color:#60a5fa !important;background:rgba(96,165,250,.1) !important}
 .tab_all[aria-pressed="true"]{border-color:#6ee7b7 !important;color:#6ee7b7 !important;background:rgba(110,231,183,.1) !important}

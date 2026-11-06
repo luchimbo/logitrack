@@ -4,3 +4,6 @@ node_modules
 *.db
 .env*
 !.env.example
+
+# Local diagnostics and downloaded deployment settings
+.vercel-inspect/

@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useEffect, useState } from "react";
 import { toast } from "@/lib/api";
 import TiendanubeOrderCard from "@/components/tiendanube/TiendanubeOrderCard";
@@ -247,7 +249,7 @@ export default function TiendanubeSection({ currentUser }) {
         )
       ) : (
         <>
-          <div className="card" style={{ marginBottom: '12px' }}>
+          <InfoDisclosure title="Conexiones de Tiendanube" description={`${connections.length} tiendas conectadas`} className="card" style={{ marginBottom: '12px' }}>
             <div className="flex-between" style={{ flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                 Integración activa {connectedAt ? `· Conectado el ${formatDateTime(connectedAt)}` : ''}
@@ -259,14 +261,14 @@ export default function TiendanubeSection({ currentUser }) {
                 </button>
               ) : null}
             </div>
-          </div>
+          </InfoDisclosure>
           <div className="stats-grid" style={{ marginBottom: '16px' }}>
             <div className="stat-card card warning"><div className="stat-value">{toDispatchCount}</div><div className="stat-label">Por enviar</div></div>
             <div className="stat-card card success"><div className="stat-value">{dispatchedTodayCount}</div><div className="stat-label">Despachados hoy</div></div>
             <div className="stat-card card"><div className="stat-value" style={{ color: 'var(--text-secondary)' }}>{totalActiveCount}</div><div className="stat-label">Total activos</div></div>
           </div>
 
-          <div className="card" style={{ marginBottom: '18px', padding: '14px' }}>
+          <InfoDisclosure title="Búsqueda y filtros" description="Tienda, pedidos y estado de preparación" className="card" style={{ marginBottom: '18px', padding: '14px' }}>
             <div className="form-row">
               {connections.length > 1 ? (
                 <div className="form-group" style={{ minWidth: '240px' }}>
@@ -357,10 +359,10 @@ export default function TiendanubeSection({ currentUser }) {
                 </button>
               </div>
             </div>
-          </div>
+          </InfoDisclosure>
 
           {orderedOrders.length > 0 ? (
-            <div className="card" style={{ marginBottom: '18px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
+            <InfoDisclosure title="Acciones sobre pedidos" description="Selección e impresión de etiquetas" className="card" style={{ marginBottom: '18px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
               <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
                   {selectedOrderIds.length > 0
@@ -391,7 +393,7 @@ export default function TiendanubeSection({ currentUser }) {
                   </button>
                 </div>
               </div>
-            </div>
+            </InfoDisclosure>
           ) : null}
 
           <MobileSelectionBar

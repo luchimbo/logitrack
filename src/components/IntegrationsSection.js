@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
@@ -70,7 +72,7 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
         </div>
 
         {connections.length ? (
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <InfoDisclosure title="Cuentas conectadas" description={`Conexiones: ${connections.length}`}><div style={{ display: 'grid', gap: '8px' }}>
             {connections.slice(0, 4).map((connection) => (
               <div key={`${connection.provider}-${connection.id}`} className="integration-connection-row">
                 <strong style={{ color: 'var(--text)' }}>{connection.displayName || connection.externalStoreId}</strong>
@@ -78,7 +80,7 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
               </div>
             ))}
             {connections.length > 4 ? <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>+{connections.length - 4} conexiones más</div> : null}
-          </div>
+          </div></InfoDisclosure>
         ) : null}
 
         <button

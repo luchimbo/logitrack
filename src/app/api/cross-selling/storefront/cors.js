@@ -15,5 +15,7 @@ export function preflight(request) {
 }
 export function storefrontError(error, headers) {
   const status = [400, 404, 409].includes(error.status) ? error.status : 503;
-  return Response.json({ error: status === 503 ? 'No se pudo procesar la oferta' : error.message }, { status, headers });
+  if (status === 503) return Response.json({ error: 'No se pudo procesar la oferta' }, { status, headers });
+  // El código le indica al script que puede forzar el recálculo del carrito y reintentar.
+  return Response.json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, { status, headers });
 }

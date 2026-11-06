@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 
@@ -305,7 +307,7 @@ export default function CorreoArgentinoSection({ currentUser }) {
       {error ? <div className="card" style={{ marginBottom: '12px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: '12px', background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)' }}>{warning}</div> : null}
 
-      <div className="card" style={{ marginBottom: '18px' }}>
+      <InfoDisclosure title="Configuración de la conexión" description="Datos de acceso a Correo Argentino" className="card" style={{ marginBottom: '18px' }}>
         <div className="flex-between" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '4px' }}>Conexión local</h3>
@@ -349,13 +351,13 @@ export default function CorreoArgentinoSection({ currentUser }) {
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Contactá a un administrador del workspace para conectar la integración.</p>
         )}
-      </div>
+      </InfoDisclosure>
 
       {connected ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '18px', alignItems: 'start', marginBottom: '18px' }}>
-            <div className="card">
-              <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '12px' }}>Agencias</h3>
+            <InfoDisclosure title="Agencias" description="Buscar puntos de atención" className="card">
+
               <div className="form-row" style={{ alignItems: 'end' }}>
                 <div className="form-group">
                   <label className="form-label">Provincia opcional</label>
@@ -366,10 +368,10 @@ export default function CorreoArgentinoSection({ currentUser }) {
                 </div>
               </div>
               <ResponseBox title="Respuesta agencias" value={agencyResponse} />
-            </div>
+            </InfoDisclosure>
 
-            <div className="card">
-              <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '12px' }}>Tracking</h3>
+            <InfoDisclosure title="Tracking" description="Consultar el seguimiento de un envío" className="card">
+
               <div className="form-row" style={{ alignItems: 'end' }}>
                 <div className="form-group">
                   <label className="form-label">Número de tracking</label>
@@ -382,20 +384,20 @@ export default function CorreoArgentinoSection({ currentUser }) {
               </div>
               <ResponseBox title="Respuesta tracking" value={trackingResponse} />
               <ResponseBox title="Respuesta rótulo" value={labelResponse} />
-            </div>
+            </InfoDisclosure>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '18px', alignItems: 'start', marginBottom: '18px' }}>
-            <div className="card">
-              <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '8px' }}>Crear orden</h3>
+            <InfoDisclosure title="Crear orden" description="Datos del envío" className="card">
+
               <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '10px' }}>Payload manual para `POST /orders`. Usá códigos de provincia PAQ.AR: B Buenos Aires, C CABA, X Córdoba, etc.</p>
               <textarea className="form-input" value={shipmentPayload} onChange={(e) => setShipmentPayload(e.target.value)} rows={20} style={{ fontFamily: 'monospace' }} />
               <button type="button" className="btn btn-primary" onClick={handleShipment} disabled={working} style={{ marginTop: '10px' }}>Crear orden</button>
               <ResponseBox title="Respuesta creación" value={shipmentResponse} />
-            </div>
+            </InfoDisclosure>
           </div>
 
-          <div className="card">
+          <InfoDisclosure title="Envíos locales creados" description="Listado y actualización de envíos" className="card">
             <div className="flex-between" style={{ flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 800 }}>Envíos locales creados</h3>
               <button type="button" className="btn btn-ghost btn-sm" onClick={loadShipments} disabled={working}>Actualizar lista</button>
@@ -442,7 +444,7 @@ export default function CorreoArgentinoSection({ currentUser }) {
                 </tbody>
               </table>
             </div>
-          </div>
+          </InfoDisclosure>
         </>
       ) : null}
     </section>

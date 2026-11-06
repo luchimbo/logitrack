@@ -1,0 +1,48 @@
+import { forwardRef } from "react";
+
+const Input = forwardRef(
+  (
+    {
+      label,
+      error,
+      helperText,
+      className = "",
+      containerClassName = "",
+      ...props
+    },
+    ref
+  ) => {
+    const id = props.id || props.name;
+
+    return (
+      <div className={`form-group ${containerClassName}`}>
+        {label && (
+          <label htmlFor={id} className="form-label">
+            {label}
+          </label>
+        )}
+        <input
+          ref={ref}
+          className={`form-input ${error ? "form-input-error" : ""} ${className}`}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : helperText ? `${id}-helper` : undefined}
+          {...props}
+        />
+        {helperText && !error && (
+          <p id={`${id}-helper`} className="form-helper">
+            {helperText}
+          </p>
+        )}
+        {error && (
+          <p id={`${id}-error`} className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+);
+
+Input.displayName = "Input";
+
+export default Input;

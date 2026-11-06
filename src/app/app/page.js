@@ -9,6 +9,7 @@ import { buildAppNavigation, buildMobileNavigation, resolveAppTab } from "@/lib/
 import AppSectionRenderer from "@/components/AppSectionRenderer";
 import AppShell from "@/components/AppShell";
 import OnboardingTour from "@/components/OnboardingTour";
+import { useSettlementJobs } from "@/hooks/useSettlementJobs";
 
 export default function AppHome() {
   const { signOut } = useClerk();
@@ -27,39 +28,8 @@ export default function AppHome() {
   }, []);
   const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
-  const workspaceSlug = currentUser?.workspaceSlug;
-
-  // Auto-polling for Google Sheets shipments (GeoModi only)
-  // Syncs every 5 minutes and updates the sidebar badge automatically
-  useEffect(() => {
-    if (workspaceSlug !== 'legacy') return;
-
-    const syncAndUpdateBadge = async () => {
-      try {
-        // First sync from Google Sheets to get latest entries
-        await fetch('/api/cron/sheets-sync', { method: 'GET' });
-        // Then fetch badge count
-        const res = await fetch('/api/shipments/sheet?status=pending');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.pendingCount !== undefined) {
-            handleBadgeUpdate('sheetSync', data.pendingCount);
-          }
-        }
-      } catch (e) {
-        // Silent fail - don't disrupt the user
-      }
-    };
-
-    // Run immediately on load
-    syncAndUpdateBadge();
-
-    // Then every 5 minutes
-    const interval = setInterval(syncAndUpdateBadge, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [workspaceSlug, handleBadgeUpdate]);
-
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
+  useSettlementJobs(Boolean(currentUser?.workspaceId) && canManageWorkspace);
   const canManageUsers = canManageWorkspace;
 
   const handleLogout = async () => {

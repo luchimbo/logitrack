@@ -5,10 +5,12 @@ import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { createFinanceRepository } from '@/lib/financeRepository';
 import { csv, validDate } from '@/lib/logisticsFinance';
+import { startSettlementFetch } from '@/lib/settlementFetch';
+import { listIntegrationConnections } from '@/lib/integrationService';
 
 export const dynamic = 'force-dynamic';
 const repository = createFinanceRepository(db);
-const columns = [['Envío','shipmentId'],['Cuenta','sellerId'],['Modalidad','method'],['Transportista','carrierName'],['Provincia','province'],['Zona','zone'],['Partido','partido'],['Despacho','dispatchDay'],['Entrega','deliveryDay'],['Estado','stateLabel'],['Importe ARS', (r) => r.amountCents === null ? '' : (r.amountCents / 100).toFixed(2)],['Ventas brutas ARS', (r) => r.salesCents == null ? '' : (r.salesCents / 100).toFixed(2)],['Cargos ML ARS', (r) => r.feesCents == null ? '' : (r.feesCents / 100).toFixed(2)],['Pedidos pagados','paidOrderCount'],['Ventas no computables','salesMissingCount'],['Observación','missing']];
+const columns = [['Envío','shipmentId'],['Cuenta','sellerId'],['Modalidad','method'],['Transportista','carrierName'],['Provincia','province'],['Zona','zone'],['Partido','partido'],['Despacho','dispatchDay'],['Entrega','deliveryDay'],['Estado','stateLabel'],['Importe ARS', (r) => r.amountCents === null ? '' : (r.amountCents / 100).toFixed(2)],['Ventas brutas ARS', (r) => r.salesCents == null ? '' : (r.salesCents / 100).toFixed(2)],['Envío cobrado TN ARS', (r) => r.shippingCollectedCents == null ? '' : (r.shippingCollectedCents / 100).toFixed(2)],['Cargos ML ARS', (r) => r.feesCents == null ? '' : (r.feesCents / 100).toFixed(2)],['Pedidos pagados','paidOrderCount'],['Ventas no computables','salesMissingCount'],['Observación','missing']];
 function csvResponse(rows, selectedColumns, name) {
   return new Response(csv(rows, selectedColumns), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}.csv"`, 'Cache-Control': 'no-store' } });
 }
@@ -26,7 +28,9 @@ export async function GET(request) {
         if (p.get('format') === 'csv') return csvResponse([...detail.items,
           ...detail.adjustments.map((a) => ({ shipmentId: 'AJUSTE', amountCents: Number(a.amount_cents), missing: a.reason })),
         ], columns, `liquidacion-${p.get('id')}`);
-        return NextResponse.json(detail);
+        // Account names for the detailed download (PCMIDICENTER, ARTURIA ARGENTINA…).
+        const accounts = Object.fromEntries((await listIntegrationConnections({ workspaceId, provider: 'mercadolibre' }).catch(() => [])).map((c) => [c.id, c.displayName]));
+        return NextResponse.json({ ...detail, accounts });
       }
       return NextResponse.json({ settlements: await repository.listSettlements(workspaceId) });
     }
@@ -64,6 +68,8 @@ export async function POST(request) {
     }
     if (input.action === 'draft') {
       const id = await repository.createSettlement(workspaceId, input, actorId);
+      // The period may predate the data already synced: search it in Mercado Libre in the background.
+      await startSettlementFetch(workspaceId, id);
       await logAudit({ workspaceId, appUserId: actorId, actorType: 'user', action: 'settlement.draft', entityType: 'carrier_settlement', entityId: id, metadata: input });
       return NextResponse.json({ ok: true, id });
     }

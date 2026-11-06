@@ -95,8 +95,9 @@ export async function POST(request) {
       connectionId: connection?.id || null,
       externalStoreId: storeId,
     });
-    // Informe de cross-selling online: no debe hacer fallar la logística.
-    await recordOnlineOrder(storeId, order).catch((e) => console.warn('Cross-selling order record failed', e.name));
+    // No confirmar recepción si quedó pendiente el informe. Ambos guardados son
+    // idempotentes; los reintentos y la conciliación pueden repetir el pedido.
+    await recordOnlineOrder(storeId, order);
 
     return NextResponse.json({ received: true, updated: true });
   } catch (error) {

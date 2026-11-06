@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
@@ -224,7 +226,7 @@ export default function ColectaSection() {
                 </div>
             </div>
 
-            <div className="card">
+            <InfoDisclosure title="Envíos de Colecta" description={`${shipments.length} envíos · abrí el listado para seleccionar etiquetas`} className="card">
                 {/* Desktop Table */}
                 <div className="table-container">
                     <table>
@@ -339,7 +341,7 @@ export default function ColectaSection() {
                         </div>
                     ))}
                 </div>
-            </div>
+            </InfoDisclosure>
 
             <MobileSelectionBar count={selectedVisibleCount} label="envíos seleccionados" onClear={clearSelection}>
                 <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>

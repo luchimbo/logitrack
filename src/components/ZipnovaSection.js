@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import LoadingButton from "./LoadingButton";
@@ -151,11 +153,12 @@ function CollectionRow({ collection, kind, onDetail, onDownload, downloadingKey 
 
 function CollectionsPanel({ title, children, warning }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '28px' }}>
-      <div style={{ padding: '16px 20px', fontSize: '16px', fontWeight: 800 }}>{title} <span style={{ color: 'var(--accent)' }}>?</span></div>
-      {warning ? <div style={{ background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)', padding: '14px 20px', fontSize: '14px' }}>{warning}</div> : null}
-      {children}
-    </div>
+    <>
+      {warning ? <div role="alert" style={{ background: 'var(--warning-bg, #fff7ed)', color: 'var(--warning, #c2410c)', padding: '14px 20px', fontSize: '14px' }}>{warning}</div> : null}
+      <InfoDisclosure title={title} description="Recolecciones y envíos asociados" className="card" style={{ overflow: 'hidden', marginBottom: '28px' }}>
+        {children}
+      </InfoDisclosure>
+    </>
   );
 }
 
@@ -451,7 +454,7 @@ export default function ZipnovaSection({ currentUser }) {
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: '18px' }}>
+          <InfoDisclosure title="Cuenta y sincronización" description="Elegí una cuenta o actualizá los envíos" className="card" style={{ marginBottom: '18px' }}>
             <div className="form-row" style={{ alignItems: 'end' }}>
               <div className="form-group">
                 <label className="form-label">Buscar por External ID</label>
@@ -471,7 +474,7 @@ export default function ZipnovaSection({ currentUser }) {
                 Última sincronización:<br />{lastSyncedAt ? formatArgentinaDateTime(lastSyncedAt) : 'sin datos todavía'}
               </div>
             </div>
-          </div>
+          </InfoDisclosure>
 
           <div className="flex-between" style={{ margin: '10px 0 18px', gap: '12px', flexWrap: 'wrap' }}>
             <div>

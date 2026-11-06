@@ -1,9 +1,9 @@
 export function buildAppNavigation({ currentUser, canManageUsers, connectedProviders }) {
   const hasOperationsPreview = currentUser?.workspaceSlug === "legacy";
   const operacionItems = [
-    ...(hasOperationsPreview ? [{ id: "operationToday", icon: "operation", label: "Operación de hoy" }] : []),
-    { id: "pickingList", icon: "picking", label: "Lista de Picking" },
-    { id: "flex", icon: "flex", label: "Logística Flex" },
+    { id: "operationToday", icon: "operation", label: "Operación de hoy" },
+    { id: "pickingList", icon: "picking", label: "Picking" },
+    { id: "flex", icon: "flex", label: "Flex" },
     { id: "colecta", icon: "colecta", label: "Colecta" },
     ...(hasOperationsPreview ? [{ id: "printJobs", icon: "colecta", label: "Historial de paquetes" }] : []),
     { id: "dashboard", icon: "dashboard", label: "Dashboard" },
@@ -12,13 +12,9 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
     { id: "upload", icon: "upload", label: "Subir Etiquetas" },
   ];
 
-  if (hasOperationsPreview) {
-    operacionItems.push({ id: "sheetSync", icon: "dashboard", label: "Envíos Planilla", badgeKey: "sheetSync" });
-  }
-
   const navGroups = [
     { title: "Operación", items: operacionItems },
-    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }] },
+    { title: "Configuración", items: [{ id: "zoneConfig", icon: "zones", label: "Config. Zonas" }, ...(canManageUsers ? [{ id: "workspaceSetup", icon: "settings", label: "Impresión" }] : [])] },
     { title: "Integraciones", items: [{ id: "integrations", icon: "integrations", label: "Conectar" }] },
   ];
 
@@ -33,14 +29,14 @@ export function buildAppNavigation({ currentUser, canManageUsers, connectedProvi
   if (currentUser?.isGlobalAdmin || canManageUsers) {
     const adminItems = [];
     if (currentUser?.isGlobalAdmin) adminItems.push({ id: "adminOverview", icon: "settings", label: "Admin Maestro" });
-    if (canManageUsers) adminItems.push({ id: "userManagement", icon: "users", label: "Usuarios" });
+    if (canManageUsers) adminItems.push({ id: "userManagement", icon: "users", label: "Espacio y miembros" });
     navGroups.push({ title: "Administración", items: adminItems });
   }
   return navGroups;
 }
 
 export function getDefaultAppTab({ currentUser, navGroups = [] }) {
-  const preferred = currentUser?.workspaceSlug === "legacy" ? "operationToday" : "upload";
+  const preferred = "operationToday";
   const availableIds = new Set(navGroups.flatMap((group) => group.items.map((item) => item.id)));
 
   if (availableIds.has(preferred)) return preferred;
@@ -58,9 +54,7 @@ export function resolveAppTab({ requestedTab, currentUser, navGroups = [] }) {
 }
 
 export function buildMobileNavigation({ currentUser, navGroups = [] }) {
-  const preferredIds = currentUser?.workspaceSlug === "legacy"
-    ? ["operationToday", "pickingList", "flex", "colecta"]
-    : ["upload", "pickingList", "flex", "colecta"];
+  const preferredIds = ["operationToday", "pickingList", "flex", "colecta"];
   const shortLabels = {
     operationToday: "Hoy",
     upload: "Cargar",

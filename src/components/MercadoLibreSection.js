@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
@@ -211,13 +213,13 @@ function OrderCard({
         )}
       </div>
 
-      <div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
+      <InfoDisclosure title="Detalle de la venta" description="Importe, productos y datos de envío"><div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
         <div><strong style={{ color: "var(--text)" }}>Total:</strong> {formatMoney(order.total, order.currency)}</div>
         <div><strong style={{ color: "var(--text)" }}>Fecha:</strong> {order.createdAt ? formatArgentinaDate(order.createdAt) : "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Tracking:</strong> {order.trackingNumber || "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Dirección:</strong> {addressLabel(order.address) || "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Productos:</strong> {totalUnits || 0} unid. {productNames ? `· ${productNames}` : ""}</div>
-      </div>
+      </div></InfoDisclosure>
 
       <div className="mobile-card-actions">
         <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)}>
@@ -751,7 +753,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       {error ? <div className="card" style={{ marginBottom: "10px", color: "var(--danger)" }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: "10px", color: "var(--warning, #c2410c)" }}>{warning}</div> : null}
 
-      <div className="card" style={{ marginBottom: "16px" }}>
+      <InfoDisclosure title="Cuentas de Mercado Libre" description="Administrar conexiones" defaultOpen={!connected} className="card" style={{ marginBottom: "16px" }}>
         <div className="form-row" style={{ alignItems: "end", flexWrap: "wrap", gap: "10px" }}>
           {canManageIntegration ? <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>{connecting ? "Conectando..." : "Conectar cuenta Mercado Libre"}</button> : null}
           {canManageIntegration ? <button type="button" className="btn btn-ghost" onClick={handleGenerateInvite} disabled={generatingInvite}>{generatingInvite ? "Generando..." : "Generar link de invitación"}</button> : null}
@@ -764,7 +766,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Válido 72hs</span>
           </div>
         ) : null}
-      </div>
+      </InfoDisclosure>
 
       {connected ? (
         <>
@@ -790,7 +792,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             </div>
           )}
 
-          <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
+          <InfoDisclosure title="Búsqueda y filtros" description="Cuenta, vista y búsqueda de ventas" className="card" style={{ marginBottom: "16px", padding: "14px" }}>
             <div className="form-row">
               <div className="form-group" style={{ minWidth: "230px" }}>
                 <label className="form-label">Cuenta</label>
@@ -823,7 +825,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                 {compact ? "Vista detallada" : "Vista compacta"}
               </button>
             </div>
-          </div>
+          </InfoDisclosure>
 
           <div className="card" style={{ marginBottom: "16px", padding: "14px", background: "var(--bg-secondary)" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>

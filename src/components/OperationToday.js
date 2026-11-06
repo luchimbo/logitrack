@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
-import { getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
+import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
 
 const CACHE_TTL_MS = 60_000;
 const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
-let operationCache = null;
+const operationCaches = new Map();
 
-export default function OperationToday({ onNavigate }) {
-  const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null, sheet: null });
+export default function OperationToday({ currentUser, onNavigate }) {
+  const cacheKey = currentUser?.workspaceId;
+  const operationCache = operationCaches.get(cacheKey);
+  const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null });
   const [loading, setLoading] = useState(() => !operationCache);
   const [manualUpdating, setManualUpdating] = useState(false);
   const [error, setError] = useState("");
@@ -21,6 +23,7 @@ export default function OperationToday({ onNavigate }) {
   }, []);
 
   const load = useCallback(async (options = {}) => {
+    const operationCache = operationCaches.get(cacheKey);
     const manualRefresh = Boolean(options?.currentTarget);
     const force = options?.force === true || manualRefresh;
     const syncSources = options?.syncSources === true || manualRefresh;
@@ -34,28 +37,23 @@ export default function OperationToday({ onNavigate }) {
     if (manualRefresh) setManualUpdating(true);
     setError("");
     try {
-      const mlPromise = api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message }));
-      const sheetPromise = api("/shipments/sheet?status=pending").catch((error) => ({ error: error.message }));
-      // La consulta en vivo a Mercado Libre puede tardar; la planilla se muestra apenas llega.
-      sheetPromise.then((sheetResult) => setSources((prev) => ({ ...prev, sheet: sheetResult })));
-      const [mlResult, sheetResult] = await Promise.all([mlPromise, sheetPromise]);
+      const mlResult = await api(`/admin/mercadolibre?sync=${syncSources ? "live" : "0"}`).catch((error) => ({ error: error.message }));
       const snapshot = {
         sources: {
           mercadolibre: syncSources
             ? mlResult
             : { ...mlResult, liveOrders: operationCache?.sources?.mercadolibre?.liveOrders ?? null },
-          sheet: sheetResult,
         },
         updatedAt: new Date(), cachedAt: Date.now(),
       };
-      operationCache = snapshot;
+      operationCaches.set(cacheKey, snapshot);
       hydrate(snapshot);
     } catch (err) { setError(err.message || "No se pudo cargar la operación de hoy."); }
     finally {
       setLoading(false);
       if (manualRefresh) setManualUpdating(false);
     }
-  }, [hydrate]);
+  }, [hydrate, cacheKey]);
   // Los webhooks guardan los cambios de ML/Tiendanube apenas ocurren. El tablero
   // relee ese estado local con frecuencia: es mucho más rápido que recorrer todas
   // las ventas contra las APIs externas en cada actualización.
@@ -69,21 +67,47 @@ export default function OperationToday({ onNavigate }) {
     };
   }, [load]);
 
+  const mlData = sources.mercadolibre;
+  const mlUnavailable = !mlData || mlData.error || mlData.ok === false || !Array.isArray(mlData.liveOrders);
+  const mlOrders = mlUnavailable ? [] : mlData.liveOrders;
+  const metrics = getMercadoLibrePackingMetrics(mlOrders);
+  const breakdown = getMercadoLibrePackingBreakdown(mlOrders);
+  const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Sin datos de Mercado Libre." : "";
+
   return <div className="section operation-today">
-    <div style={{display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16}}><button className="btn btn-ghost" onClick={() => onNavigate('deliveryControl')}>Control de entregas</button><button className="btn btn-ghost" onClick={() => onNavigate('logisticsFinance')}>Ventas y costos</button></div>
-    <div className="operation-header"><div><p className="operation-kicker">Etiquetas a preparar</p><h1 className="section-title">Operación de hoy</h1><p className="section-subtitle">Mercado Libre y el Excel de etiquetas se actualizan automáticamente.</p>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre y Excel…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div><button className="btn btn-ghost" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button></div>
+    <div className="operation-toolbar">
+      <div>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div>
+      <div className="operation-toolbar-links">
+        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
+        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button>
+      </div>
+    </div>
     {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
-    <section className="operation-sources" aria-label="Etiquetas por origen"><div className="operation-section-heading"><div><p className="operation-kicker">Paquetes a preparar</p><h2>Por origen</h2><p>Las etiquetas de Mercado Libre y del Excel se mantienen separadas para preparar sin mezclas.</p></div></div><div className="operation-source-grid"><SourceCard title="Mercado Libre" subtitle="Etiquetas listas para imprimir" tone="ml" data={sources.mercadolibre} loading={loading || manualUpdating} requireLiveData onOpen={() => onNavigate("mercadolibre")} renderMetrics={(data) => <MercadoLibreMetrics orders={data.liveOrders} />} /><SourceCard title="Etiquetas a preparar" subtitle="Pendientes recibidos desde Excel" tone="sheet" data={sources.sheet} onOpen={() => onNavigate("sheetSync")} renderMetrics={(data) => <SheetMetrics shipments={data.shipments} />} /></div></section>
+    <section className="operation-method-grid" aria-label="Paquetes listos para imprimir">
+      <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
+      <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
+    </section>
   </div>;
 }
 
-function SourceCard({ title, subtitle, tone, data, loading = false, requireLiveData = false, onOpen, renderMetrics }) {
-  const unavailable = !data || data.error || data.ok === false || (requireLiveData && !Array.isArray(data.liveOrders));
-  return <article className={`operation-source-card ${tone}`}><div className="operation-source-head"><div><p>{title}</p><span>{subtitle}</span></div><button className="btn btn-ghost btn-sm" onClick={onOpen}>Ver sector</button></div>{unavailable ? <div className="operation-source-empty">{loading && !data?.error ? "Consultando Mercado Libre…" : title === "Envíos a coordinar" ? "La planilla no está disponible para este espacio." : "Sin datos sincronizados o integración no conectada."}</div> : renderMetrics(data)}</article>;
+// Vista mínima: un número por tipo. Doble click (o Enter) abre el detalle por cuenta.
+function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((value) => !value);
+  return <article
+    className={`operation-method-card ${tone} ${open ? "open" : ""}`}
+    title="Doble click para ver el detalle"
+    onDoubleClick={toggle}
+  >
+    <p className="operation-method-title">{title}</p>
+    {pending ? <div className="operation-source-empty">{pending}</div> : <div className="operation-source-total"><strong>{total}</strong><span>paquetes listos</span></div>}
+    <button type="button" className="operation-detail-toggle" aria-expanded={open} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggle(); }}>{open ? "Ocultar detalle" : "Ver detalle"}</button>
+    {open ? <div className="operation-method-detail" onDoubleClick={(event) => event.stopPropagation()}>
+      <div className="operation-source-rows">
+        {accounts.length ? accounts.map((row) => <div key={row.account}><span>{row.account}</span><strong>{row.count}</strong></div>) : <div><span>Sin paquetes listos</span></div>}
+      </div>
+      <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Ir al sector</button>
+    </div> : null}
+  </article>;
 }
-function MercadoLibreMetrics({ orders = [] }) {
-  const metrics = getMercadoLibrePackingMetrics(orders);
-  return <SourceMetrics total={metrics.total} rows={[{ label: "Flex", value: metrics.flex }, { label: "Colecta", value: metrics.colecta }]} />;
-}
-function SheetMetrics({ shipments = [] }) { const packed = shipments.filter((shipment) => Boolean(shipment.packed)).length; return <SourceMetrics total={shipments.length} rows={[{ label: "Empaquetados", value: packed }, { label: "Pendientes", value: Math.max(0, shipments.length - packed) }]} />; }
-function SourceMetrics({ total, rows }) { return <><div className="operation-source-total"><strong>{total}</strong><span>paquetes</span></div><div className="operation-source-rows">{rows.map((row) => <div key={row.label}><span>{row.label}</span><strong>{row.value}</strong></div>)}</div></>; }

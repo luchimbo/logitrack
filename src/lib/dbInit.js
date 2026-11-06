@@ -458,6 +458,14 @@ export async function initDb() {
     // Vínculo etiqueta ↔ venta en el cálculo de Ventas y costos: sin estos índices cada lectura tarda decenas de segundos.
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_row ON mercadolibre_orders(workspace_id, shipment_row_id)`,
     `CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_workspace_shipment ON mercadolibre_orders(workspace_id, shipment_id)`,
+    // Días de órdenes de cada cuenta que ya se listaron completos en ML: las liquidaciones no los vuelven a buscar.
+    `CREATE TABLE IF NOT EXISTS ml_order_coverage (
+      integration_connection_id INTEGER PRIMARY KEY,
+      workspace_id INTEGER NOT NULL,
+      covered_from TEXT NOT NULL,
+      covered_to TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS mercadolibre_notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       topic TEXT,
@@ -672,6 +680,9 @@ export async function initDb() {
     // ZPL de la etiqueta guardado al imprimir, para poder reimprimir aunque ML ya no la entregue
     // (NOT_PRINTABLE_STATUS cuando el envío avanzó de estado).
     await addColumnIfMissing("mercadolibre_orders", "printed_label_zpl", "TEXT");
+    // Entregada o cancelada con el detalle completo leído: ya no cambia y no hay que volver a pedirla a ML.
+    await addColumnIfMissing("mercadolibre_orders", "closed_at", "DATETIME");
+    await exec("CREATE INDEX IF NOT EXISTS idx_mercadolibre_orders_open ON mercadolibre_orders(integration_connection_id, closed_at, created_at_external)");
     await addColumnIfMissing("zipnova_shipments", "workspace_id", "INTEGER");
     await addColumnIfMissing("zipnova_shipments", "account_id", "INTEGER");
     await addColumnIfMissing("zipnova_shipments", "delivery_time_json", "TEXT");
@@ -772,7 +783,8 @@ export async function initDb() {
     // Migration: Tiendanube orders must allow the same external order id across multiple stores.
     try {
       const indexes = await exec("PRAGMA index_list(tiendanube_orders)");
-      const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1);
+      // The new per-connection index is unique too; only an older unique index means the legacy table.
+      const hasLegacyUnique = indexes.rows.some((row) => Number(row.unique) === 1 && row.name !== "idx_tiendanube_orders_connection_unique");
 
       if (hasLegacyUnique) {
         await exec("DROP TABLE IF EXISTS tiendanube_orders_new");
@@ -823,6 +835,8 @@ export async function initDb() {
         await exec("ALTER TABLE tiendanube_orders_new RENAME TO tiendanube_orders");
         await exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendanube_orders_connection_unique ON tiendanube_orders(integration_connection_id, tiendanube_id) WHERE integration_connection_id IS NOT NULL");
         await exec("CREATE INDEX IF NOT EXISTS idx_tiendanube_orders_workspace_legacy ON tiendanube_orders(workspace_id, tiendanube_id)");
+        // The rebuilt table only has the columns copied above; later column checks must look again.
+        columnsByTable?.delete("tiendanube_orders");
         console.log("Tiendanube migration: enabled multi-store order ids");
       }
     } catch (e) {
@@ -830,6 +844,12 @@ export async function initDb() {
       try { await exec("DROP TABLE IF EXISTS tiendanube_orders_new"); } catch (_) { }
       console.error("Tiendanube multi-store migration error:", e.message || e);
     }
+  }
+
+  if (!schemaCurrent) {
+    await addColumnIfMissing("tiendanube_orders", "shipping_cost_customer", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "shipping_cost_owner", "TEXT");
+    await addColumnIfMissing("tiendanube_orders", "order_source", "TEXT");
   }
 
   // Datos que se reconcilian en cada arranque (no dependen del esquema): todo en un solo viaje.

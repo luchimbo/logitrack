@@ -36,11 +36,8 @@ function getComparisonRange(period) {
     return null;
 }
 
-// Solo las columnas que usa summarizeShipments: evita traer raw_zpl (miles de bytes por envío) en cada consulta.
-const SUMMARY_FIELDS = ["quantity", "status", "shipping_method", "assigned_carrier", "province"];
-
 function summarizeShipments(shipments, period) {
-    const total_packages = shipments.length;
+    const total_packages = shipments.reduce((total, s) => total + Number(s.package_count), 0);
     let total_units = 0;
     const by_status = {};
     const by_method = {};
@@ -49,25 +46,26 @@ function summarizeShipments(shipments, period) {
     const by_day = {};
 
     for (const s of shipments) {
-        total_units += Number(s.quantity) || 1;
-        by_status[s.status] = (by_status[s.status] || 0) + 1;
+        const count = Number(s.package_count);
+        total_units += Number(s.unit_count);
+        by_status[s.status] = (by_status[s.status] || 0) + count;
         const method = s.shipping_method || "desconocido";
-        by_method[method] = (by_method[method] || 0) + 1;
+        by_method[method] = (by_method[method] || 0) + count;
         if (s.shipping_method === 'flex') {
             const carrier = s.assigned_carrier || "Sin asignar (Flex)";
-            by_carrier[carrier] = (by_carrier[carrier] || 0) + 1;
+            by_carrier[carrier] = (by_carrier[carrier] || 0) + count;
         }
         const prov = s.province || "Desconocida";
-        by_province[prov] = (by_province[prov] || 0) + 1;
+        by_province[prov] = (by_province[prov] || 0) + count;
 
         if (period === 'range' && s.batch_date) {
             if (!by_day[s.batch_date]) {
                 by_day[s.batch_date] = { date: s.batch_date, total: 0, colecta: 0, flex: 0, zipnova: 0 };
             }
-            by_day[s.batch_date].total += 1;
-            if (method === 'colecta') by_day[s.batch_date].colecta += 1;
-            if (method === 'flex') by_day[s.batch_date].flex += 1;
-            if (method === 'zipnova') by_day[s.batch_date].zipnova += 1;
+            by_day[s.batch_date].total += count;
+            if (method === 'colecta') by_day[s.batch_date].colecta += count;
+            if (method === 'flex') by_day[s.batch_date].flex += count;
+            if (method === 'zipnova') by_day[s.batch_date].zipnova += count;
         }
     }
 
@@ -92,13 +90,20 @@ async function buildSummary(workspaceId, actor, range, period, batchId = null) {
     let sql;
     let args;
 
+    // Aggregate in SQLite so historical periods do not transfer one row per shipment.
+    const dateField = period === 'range' && !batchId ? 'b.date' : 'NULL';
+    const fields = `s.status, s.shipping_method, s.assigned_carrier, s.province, ${dateField} AS batch_date,
+        COUNT(*) AS package_count, SUM(CASE WHEN CAST(s.quantity AS NUMERIC) = 0 OR s.quantity IS NULL THEN 1 ELSE CAST(s.quantity AS NUMERIC) END) AS unit_count`;
     if (batchId) {
-        sql = `SELECT ${SUMMARY_FIELDS.join(", ")}, NULL AS batch_date FROM shipments WHERE workspace_id = ? AND batch_id = ?`;
+        sql = `SELECT ${fields} FROM shipments s WHERE s.workspace_id = ? AND s.batch_id = ?
+            GROUP BY s.status, s.shipping_method, s.assigned_carrier, s.province`;
         args = [workspaceId, batchId];
     } else {
-        sql = `SELECT ${SUMMARY_FIELDS.map((c) => `s.${c}`).join(", ")}, b.date AS batch_date FROM shipments s
+        const dateGroup = period === 'range' ? ', b.date' : '';
+        sql = `SELECT ${fields} FROM shipments s
              JOIN daily_batches b ON s.batch_id = b.id
-             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
+             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?
+             GROUP BY s.status, s.shipping_method, s.assigned_carrier, s.province${dateGroup}`;
         args = [workspaceId, workspaceId, range.from, range.to];
     }
 

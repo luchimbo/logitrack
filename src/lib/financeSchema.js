@@ -46,4 +46,10 @@ export const FINANCE_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_finance_snapshot_day ON finance_snapshot(workspace_id, dispatch_day)`,
   `CREATE TABLE IF NOT EXISTS finance_snapshot_meta (
     workspace_id INTEGER PRIMARY KEY, built_at TEXT NOT NULL, options_json TEXT NOT NULL)`,
+  // Background search in Mercado Libre of a settlement's period; the open app advances it and announces the end.
+  `CREATE TABLE IF NOT EXISTS settlement_fetch_jobs (
+    settlement_id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL, status TEXT NOT NULL, phase TEXT NOT NULL,
+    cursor_json TEXT NOT NULL DEFAULT '{}', progress_json TEXT NOT NULL DEFAULT '{}', error TEXT, lease_until TEXT,
+    finished_at TEXT, notified_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE INDEX IF NOT EXISTS idx_settlement_fetch_workspace ON settlement_fetch_jobs(workspace_id, status)`,
 ];

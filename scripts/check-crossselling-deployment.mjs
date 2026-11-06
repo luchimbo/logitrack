@@ -5,6 +5,14 @@ import { pathToFileURL } from 'node:url';
 // No consulta carritos, no activa promociones y no cambia datos de la tienda.
 export async function checkCrossSellingDeployment(baseUrl, fetchImpl = fetch) {
   const base = new URL(baseUrl);
+  for (const endpoint of ['config', 'meli']) {
+    const response = await fetchImpl(new URL(`/api/reviews/${endpoint}?storeId=78394`, base), {
+      redirect: 'error', signal: AbortSignal.timeout(20_000),
+    });
+    assert.equal(response.status, 401, `Reseñas ${endpoint}: debe rechazar la solicitud sin firma`);
+    assert.equal((await response.json()).error, endpoint === 'config' ? 'Publicación no autorizada' : 'Solicitud no autorizada',
+      `Reseñas ${endpoint}: la solicitud debe llegar al handler HMAC, sin quedar bloqueada por Clerk`);
+  }
   for (const endpoint of ['config', 'module', 'report']) {
     const response = await fetchImpl(new URL(`/api/cross-selling/${endpoint}?storeId=78394`, base), {
       redirect: 'error', signal: AbortSignal.timeout(20_000),

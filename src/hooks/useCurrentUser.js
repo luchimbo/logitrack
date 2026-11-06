@@ -13,7 +13,7 @@ export function useCurrentUser({ isLoaded, isSignedIn, router }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const res = await fetch("/api/auth/me");
+        const res = await fetch("/api/auth/me", { signal: AbortSignal.timeout(20000) });
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));
           setCurrentUser(null);

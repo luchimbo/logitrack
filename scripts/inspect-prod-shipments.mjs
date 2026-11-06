@@ -1,20 +1,6 @@
+import { productionDatabaseConfig } from './database-env.mjs';
 import { createClient } from "@libsql/client";
-import fs from "fs";
-
-const env = Object.fromEntries(
-  fs.readFileSync(".env.local", "utf8")
-    .split("\n")
-    .filter((l) => l.includes("="))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    })
-);
-
-const db = createClient({
-  url: env.TURSO_DATABASE_URL_PROD,
-  authToken: env.TURSO_AUTH_TOKEN_PROD,
-});
+const db = createClient(productionDatabaseConfig({ readOnly: true }));
 
 const cols = await db.execute("PRAGMA table_info(shipments)");
 console.log("=== columnas shipments ===");

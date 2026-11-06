@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { databaseConfig } from '../src/lib/databaseConfig.js';
 import bcrypt from "bcryptjs";
 import { createClient } from "@libsql/client";
 
@@ -58,13 +59,13 @@ async function ensureLegacyUsersTable(db) {
 async function main() {
   loadEnvFile(path.join(ROOT_DIR, ".env.local"));
 
-  const dbUrl = String(process.env.TURSO_DATABASE_URL || "").trim();
-  const dbAuthToken = String(process.env.TURSO_AUTH_TOKEN || "").trim();
+  const dbUrl = String(process.env.DATABASE_URL || "").trim();
+  const dbAuthToken = String(process.env.DATABASE_AUTH_TOKEN || "").trim();
   const username = parseArgValue("--username") || String(process.env.LEGACY_ADMIN_USERNAME || "").trim();
   const password = parseArgValue("--password") || String(process.env.LEGACY_ADMIN_PASSWORD || "").trim();
 
   if (!dbUrl || !dbAuthToken) {
-    console.error("Faltan TURSO_DATABASE_URL o TURSO_AUTH_TOKEN.");
+    console.error("Faltan DATABASE_URL o DATABASE_AUTH_TOKEN.");
     process.exit(1);
   }
 
@@ -78,7 +79,7 @@ async function main() {
     process.exit(1);
   }
 
-  const db = createClient({ url: dbUrl, authToken: dbAuthToken });
+  const db = createClient(databaseConfig());
   await ensureLegacyUsersTable(db);
 
   const passwordHash = await bcrypt.hash(password, 10);

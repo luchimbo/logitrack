@@ -95,10 +95,11 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
 
     const error = new Error(lastData?.message || (typeof lastData?.error === 'string' ? lastData.error : '') || `Tiendanube error ${lastRes?.status || 'desconocido'}`);
     error.status = lastRes?.status;
+    error.description = lastData?.description;
     throw error;
   }
 
-  async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', q = '' } = {}) {
+  async function listOrders({ page = 1, perPage = 50, status = '', paymentStatus = '', shippingStatus = '', createdAtMin = '', createdAtMax = '', updatedAtMin = '', updatedAtMax = '', fields = '', q = '' } = {}) {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('per_page', String(perPage));
@@ -107,10 +108,20 @@ export function createTiendanubeClient({ accessToken, storeId } = {}) {
     if (shippingStatus) params.set('shipping_status', shippingStatus);
     if (createdAtMin) params.set('created_at_min', createdAtMin);
     if (createdAtMax) params.set('created_at_max', createdAtMax);
+    if (updatedAtMin) params.set('updated_at_min', updatedAtMin);
+    if (updatedAtMax) params.set('updated_at_max', updatedAtMax);
+    if (fields) params.set('fields', fields);
     if (q) params.set('q', q);
 
-    const payload = await tiendanubeFetch(`/orders?${params.toString()}`);
-    return normalizeOrdersResponse(payload);
+    try {
+      const payload = await tiendanubeFetch(`/orders?${params.toString()}`);
+      return normalizeOrdersResponse(payload);
+    } catch (error) {
+      // TN returns 404 for an empty collection or a page beyond its last page.
+      // Keep missing routes, stores and authorization errors visible.
+      if (error.status === 404 && /last page is \d+/i.test(error.description || '')) return [];
+      throw error;
+    }
   }
 
   async function getOrder(id) {

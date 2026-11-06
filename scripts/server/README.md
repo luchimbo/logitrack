@@ -1,71 +1,64 @@
-# Base GeoModi en `pcmidi`
+# Base GeoModi en PC MIDI
 
-Se instaló `sqld` 0.24.32 en `/home/administrador/services/geomodi-libsql` como servicio de usuario `geomodi-libsql.service`. Escucha **solo** en `127.0.0.1:8088`. El servicio y `geomodi-libsql-backup.timer` quedan habilitados tras reinicios; el usuario ya tiene `linger` activado.
+Procedimiento vigente desde el 29/10/2026. Los datos operativos están en libSQL propio, no en Turso.
 
-Los tokens JWT de lectura/escritura y solo lectura están en `keys/app-rw.jwt` y `keys/portal-ro.jwt` dentro del servidor, con permisos `0600`. La clave privada no debe copiarse a Vercel. Los tokens actuales vencen un año después de su creación.
+## Conexión
 
-Comprobaciones realizadas:
+- Administración: `ssh pcmidi`.
+- Servicio: `geomodi-libsql.service`, sqld 0.24.32.
+- Datos: `/home/administrador/services/geomodi-libsql/data/geomodi.db`.
+- Puerto interno: `127.0.0.1:8088`, sin exposición directa.
+- Acceso HTTPS de la aplicación: `https://pcmidi.tailef6e62.ts.net`, mediante Tailscale Funnel, que reenvía a ese puerto interno.
+- `geomodi-libsql-https.service` (Caddy) está inactivo. No es necesario habilitarlo ni configurar `db.geomodi.ai` para usar el acceso vigente.
 
-- El cliente `@libsql/client` pudo escribir y leer por el puerto local y por un túnel HTTPS temporal.
-- El token de solo lectura rechazó escrituras y el servidor rechazó consultas sin token.
-- Un SQLite de prueba se importó al iniciar `sqld` y se pudo consultar.
-- La copia nocturna detiene el servicio, guarda el directorio completo `data` junto a `keys` y lo vuelve a iniciar. Se conservan 14 días. **Esta copia está en el mismo disco; falta una copia externa.**
+Vercel necesita HTTPS; no mantiene un túnel SSH. El alias SSH `pcmidi` se usa para administración y acceso local opcional. El servidor debe permanecer encendido, con Internet y Tailscale activos.
 
-## Exportación pendiente
+## Variables
 
-En un equipo con Turso CLI y sesión autorizada:
+En `.env.local` y en Vercel **logitrack** (`prj_whyqDb9sDWCJ1VrBcY3cNxWr5pOJ`), Production y Preview:
 
-```bash
-turso db export logitrack --output-file logitrack.db
+```dotenv
+DATABASE_URL=https://pcmidi.tailef6e62.ts.net
+DATABASE_AUTH_TOKEN=<contenido de keys/app-rw.jwt del servidor>
+DATABASE_READONLY_AUTH_TOKEN=<contenido de keys/portal-ro.jwt del servidor>
 ```
 
-La exportación genera un snapshot SQLite que puede no contener las últimas transacciones. Hay que validar integridad y conteos, y sincronizar cualquier cambio posterior, antes de cambiar la app. Si Turso no permite exportar por la cuota, habrá que restaurar temporalmente el acceso o esperar la renovación de la cuota.
+Las claves existentes se reutilizan sin rotarlas. Los tokens se cargan como sensibles en Vercel; nunca deben guardarse en Git ni mostrarse en logs. El portal usa exclusivamente el token RO, también en desarrollo. `@libsql/client` sigue siendo el cliente compatible con el servidor propio; no requiere una cuenta de Turso.
 
-Copiar el archivo al servidor, sin ponerlo en el repositorio:
+`node scripts/configure-pcmidi-database.mjs --apply` comprueba el proyecto y ambos tokens, configura estas variables en Vercel y actualiza `.env.local`, quitando de ese archivo las variables `TURSO_*` antiguas. No despliega ni modifica datos. Vercel aplica el entorno a despliegues nuevos. El código ya no lee variables `TURSO_*` y rechaza hosts de Turso. Las tres variables antiguas de Turso se retiraron de Vercel después de promover y verificar la versión nueva. No se eliminó la base histórica de la cuenta de Turso.
 
-```bash
-scp logitrack.db pcmidi:services/geomodi-libsql/incoming/
-```
+`DATABASE_URL_PROD`, `DATABASE_AUTH_TOKEN_PROD` y `DATABASE_READONLY_AUTH_TOKEN_PROD` son sobreescrituras opcionales para scripts; el destino de producción siempre debe ser el HTTPS de PC MIDI. Normalmente basta con las tres variables sin sufijo.
 
-**No reemplazar todavía** `data/geomodi.db`: primero se probará la exportación en una instancia separada y se compararán esquema y conteos. Después se hará un corte controlado con respaldo y opción de volver a Turso.
+**El desarrollo local usa la base operativa real.** Para experimentar sin alterar datos reales, usar una copia SQLite separada. `scripts/pull-prod-db.mjs --yes` solo acepta `DATABASE_COPY_URL=file:ruta/a/copia.db` como destino descartable, y lee la fuente de PC MIDI con el token RO. Nunca borra una base remota. No ejecutar scripts de siembra para comprobar conectividad.
 
-## Vercel
+## Verificaciones
 
-El proyecto de producción de `www.geomodi.ai` es **`logitrack`**. El directorio local está vinculado a otro proyecto, `logitrack-tan`; no usar `vercel env add` desde la raíz del repositorio sin verificar el proyecto.
-
-Cuando exista un hostname HTTPS estable para la base y los datos estén migrados, en **logitrack → Settings → Environment Variables → Production** se cambiarán:
-
-- `TURSO_DATABASE_URL`: URL HTTPS del servidor libSQL.
-- `TURSO_AUTH_TOKEN`: contenido de `keys/app-rw.jwt`.
-- `TURSO_READONLY_AUTH_TOKEN`: contenido de `keys/portal-ro.jwt`.
-
-Los tokens deben cargarse como variables sensibles. Vercel aplica cambios de entorno solo a despliegues nuevos, por lo que luego hace falta desplegar y verificar `/api/auth/me` y los flujos de lectura/escritura. Mantener los valores anteriores para poder revertir el corte.
-
-## Estado y respaldo
-
-```bash
+```powershell
+npm run db:check
+node scripts/check-database.mjs --production
 ssh pcmidi 'systemctl --user status geomodi-libsql.service'
+ssh pcmidi 'tailscale funnel status'
 ssh pcmidi 'systemctl --user list-timers geomodi-libsql-backup.timer'
-ssh pcmidi 'systemctl --user start geomodi-libsql-backup.service'
 ```
 
-## HTTPS directo sin Cloudflare
+El diagnóstico verifica lectura autenticada, tablas presentes, rechazo de escritura con el token RO y HTTP 401 sin credenciales. La comprobación de permisos usa un nombre único y lo limpia si una credencial incorrectamente privilegiada permite crearlo. No modifica tablas de negocio.
 
-El binario oficial de Caddy 2.11.4, `Caddyfile` y `geomodi-libsql-https.service` están instalados en el servidor. El servicio HTTPS está **deshabilitado y detenido** hasta completar la red. Se validó la configuración y se probó el proxy con un certificado local temporal; la prueba se detuvo y eliminó.
+Para acceder mediante SSH desde esta PC, dejar `npm run db:tunnel` abierto y usar `DATABASE_URL=http://127.0.0.1:18088` con las mismas credenciales. Los scripts con `--production` siguen usando el HTTPS de PC MIDI.
 
-Valores necesarios:
+Antes de publicar: `npm test`, `npm run build` y `npm run deploy:production`. El último crea un despliegue sin dominios, verifica las rutas HMAC y dominios de ambas tiendas y recién después lo promueve. Redis conserva las aceptaciones de cross-selling.
 
-1. En Hostinger, crear un registro **A** `db.geomodi.ai` → `186.108.111.3` (host `db`, TTL predeterminado). Si ya existe, corregirlo en vez de duplicarlo.
-2. Confirmar que la IP WAN/Internet del Archer C5 sea `186.108.111.3`. Si es distinta o está en rango privado/CGNAT, el reenvío directo no funcionará: resolver la IP pública con el proveedor o usar un túnel estable.
-3. Reservar `192.168.1.100` para el servidor en DHCP del router, ya que actualmente obtiene esa dirección dinámicamente.
-4. En NAT/Virtual Servers del Archer C5, reenviar **TCP externo 443** a `192.168.1.100`, **TCP interno 8443**. Solo este puerto debe quedar publicado; `8088` permanece local.
-5. En el servidor, abrir únicamente el puerto interno con `sudo ufw allow 8443/tcp` si UFW está activo. El usuario `administrador` no tiene sudo sin contraseña, por lo que esto debe ejecutarlo el propietario del servidor. No compartir la contraseña.
+## Respaldos y operación
 
-Caddy usa el desafío TLS-ALPN en el puerto público 443 para obtener el certificado. No necesita publicar el puerto 80. Después de completar los cinco puntos:
+`geomodi-libsql-backup.timer` hace una copia nocturna y conserva 14 días. Detiene brevemente el servicio, guarda datos y claves y vuelve a iniciarlo. El 29/10/2026 se verificaron servicio activo, 54 tablas, lectura por HTTPS con ambos tokens, rechazo de escritura RO, rechazo anónimo y respaldo del día. Falta una copia externa: los respaldos actuales residen en el mismo disco del servidor.
 
-```bash
-ssh pcmidi 'systemctl --user enable --now geomodi-libsql-https.service'
-ssh pcmidi 'systemctl --user status geomodi-libsql-https.service'
-```
+Los JWT vencen un año después de su creación. Planificar su renovación antes del vencimiento; no cambiar claves por una regresión del código o del proxy. Ante un fallo, comprobar servicio, espacio de disco, Funnel y conectividad antes de intervenir sobre los datos.
 
-Comprobar desde una red externa `https://db.geomodi.ai/v2/pipeline`: sin token debe responder `401`, lo cual confirma que HTTPS y el proxy funcionan. La prueba completa con token debe ejecutarse sin mostrarlo en logs o consola compartida. Cuando la base migrada esté validada, usar `https://db.geomodi.ai` en Vercel y desplegar nuevamente. Si cambia la IP pública, actualizar el registro A y revisar si conviene un servicio DDNS.
+Las instrucciones antiguas de exportación desde Turso y acceso directo por Caddy quedaron reemplazadas por este procedimiento. No volver a importar el snapshot antiguo sobre la base actual.
+
+## Publicación verificada del 29/10/2026
+
+Código `f94ec00`, despliegue `dpl_CtszbRCqf5sheVuWbPAxDzPyNNEF`, promovido a `https://www.geomodi.ai` con `npm run deploy:production`. Se verificó que el dominio público resuelve a ese despliegue y al proyecto logitrack.
+
+Validación: 167 pruebas aprobadas, compilación local y en Vercel aprobadas, ESLint de los archivos modificados aprobado. Prueba HTTPS con escritura y lectura, `lastInsertRowid`, token RO y rechazo anónimo aprobada; la tabla temporal de prueba se eliminó. Controles públicos de cross-selling aprobados antes y después de promover. Una consulta de reseñas con SKU de diagnóstico respondió HTTP 200 tanto en el despliegue privado como en el dominio público; ejecuta una lectura real de la base, sin cambios de datos.
+
+Se retiraron `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` y `TURSO_READONLY_AUTH_TOKEN` del proyecto de Vercel y todas las variables `TURSO_*` de `.env.local`. Production y Preview conservan únicamente las tres variables nuevas de conexión para esta base. No se rotaron claves, repitieron autorizaciones ni cambiaron Redis, scripts de tienda o promociones.

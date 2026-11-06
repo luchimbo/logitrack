@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useEffect, useState } from "react";
 
 export default function WorkspaceSetupSection() {
@@ -73,14 +75,17 @@ export default function WorkspaceSetupSection() {
         <p className="section-subtitle">Este setup deja aislada la impresión V2 por workspace y define la impresora compartida de la PC local.</p>
       </div>
 
-      <div className="card" style={{ marginBottom: '18px' }}>
+      {error ? <div role="alert" className="card" style={{ marginBottom: '18px', color: 'var(--danger)' }}>{error}</div> : null}
+      {message ? <div role="status" className="card" style={{ marginBottom: '18px', color: 'var(--success)' }}>{message}</div> : null}
+
+      <InfoDisclosure title="Preparar la PC de impresión" description={workspace?.name || "Mi espacio"} className="card" style={{ marginBottom: '18px' }}>
         <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
           <div><strong>Workspace:</strong> {workspace?.name || 'Mi espacio'}</div>
           <div><strong>Qué tenés que hacer en la PC:</strong> compartir la Zebra en Windows, copiar estos datos a `print-agent/config.json` y ejecutar `diagnostico-impresora-v2.bat`.</div>
         </div>
-      </div>
+      </InfoDisclosure>
 
-      <div className="card" style={{ maxWidth: '760px' }}>
+      <InfoDisclosure title="Configuración de la impresora" description="Impresora y conexión con el agente local" className="card" style={{ maxWidth: '760px' }}>
         <form onSubmit={handleSave} style={{ display: 'grid', gap: '14px' }}>
           <div>
             <label className="form-label">Nombre visible</label>
@@ -109,14 +114,11 @@ export default function WorkspaceSetupSection() {
             <input className="form-input" value={form.workspaceKey} onChange={(e) => setForm((prev) => ({ ...prev, workspaceKey: e.target.value }))} placeholder="Se genera automáticamente si lo dejás vacío" />
           </div>
 
-          {error ? <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', padding: '10px', borderRadius: '8px' }}>{error}</div> : null}
-          {message ? <div style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '10px', borderRadius: '8px' }}>{message}</div> : null}
-
           <button type="submit" className="btn btn-primary" disabled={loading || saving}>
             {saving ? 'Guardando...' : 'Guardar configuración'}
           </button>
         </form>
-      </div>
+      </InfoDisclosure>
     </section>
   );
 }

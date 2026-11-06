@@ -15,21 +15,21 @@ const TiendanubeSection = dynamic(() => import("@/components/TiendanubeSection")
 const UploadSection = dynamic(() => import("@/components/UploadSection"), { loading });
 const UserManagementSection = dynamic(() => import("@/components/UserManagementSection"), { loading });
 const ZipnovaSection = dynamic(() => import("@/components/ZipnovaSection"), { loading });
+const WorkspaceSetupSection = dynamic(() => import("@/components/WorkspaceSetupSection"), { loading });
 const ZoneConfig = dynamic(() => import("@/components/ZoneConfig"), { loading });
-const GoogleSheetsSection = dynamic(() => import("@/components/GoogleSheetsSection"), { loading });
 const OperationToday = dynamic(() => import("@/components/OperationToday"), { loading });
 const PackageHistorySection = dynamic(() => import("@/components/PackageHistorySection"), { loading });
 const LogisticsFinance = dynamic(() => import("@/components/LogisticsFinance"), { loading });
 
 export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
   switch (activeTab) {
-    case "operationToday": return <OperationToday onNavigate={onNavigate} />;
+    case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} />;
     case "upload": return <UploadSection />;
     case "pickingList": return <PickingList />;
     case "flex": return <FlexSection />;
     case "colecta": return <ColectaSection />;
+    case "workspaceSetup": return canManageUsers ? <WorkspaceSetupSection /> : <div>No autorizado</div>;
     case "zoneConfig": return <ZoneConfig />;
-    case "sheetSync": return currentUser ? <GoogleSheetsSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
     case "dashboard": return <Dashboard />;
     case "logisticsFinance": return <LogisticsFinance key="finance" currentUser={currentUser} />;
     case "deliveryControl": return <LogisticsFinance key="delivery" currentUser={currentUser} delivery />;
@@ -40,7 +40,7 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
-    case "userManagement": return canManageUsers ? <UserManagementSection /> : <div>No autorizado</div>;
+    case "userManagement": return canManageUsers ? <UserManagementSection currentUser={currentUser} /> : <div>No autorizado</div>;
     default: return <div>Página no encontrada</div>;
   }
 }

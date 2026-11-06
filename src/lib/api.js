@@ -63,7 +63,7 @@ export async function downloadLabelsZpl(shipmentIds) {
     URL.revokeObjectURL(url);
 }
 
-export function toast(message, type = 'info') {
+export function toast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toast-container');
     if (!container) return; // Fallback if container not rendered yet
 
@@ -71,5 +71,5 @@ export function toast(message, type = 'info') {
     el.className = `toast ${type}`;
     el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span><span>${message}</span>`;
     container.appendChild(el);
-    setTimeout(() => el.remove(), 3500);
+    setTimeout(() => el.remove(), duration);
 }
