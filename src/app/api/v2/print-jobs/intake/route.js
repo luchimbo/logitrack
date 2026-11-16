@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
-import { assignCarrier } from "@/lib/zoneMapper";
+import { assignFlexCarrier } from "@/lib/flexCarrierAssignment";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 import { isNonProductLabelValue } from "@/lib/dispatchDate";
 
@@ -456,12 +456,11 @@ async function insertLegacyShipments(workspaceId, batchId, normalizedLabels) {
         "Etiqueta sin producto";
     }
 
-    if ((shipment.shipping_method || "").toLowerCase() === "flex" && shipment.partido && !shipment.assigned_carrier) {
-      try {
-        shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
-      } catch {
-        shipment.assigned_carrier = null;
-      }
+    try {
+      await assignFlexCarrier(shipment, { workspaceId });
+    } catch {
+      shipment.partido = null;
+      shipment.assigned_carrier = null;
     }
 
     await db.execute({

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { parseZplFile } from "@/lib/zplParser";
-import { assignCarrier } from "@/lib/zoneMapper";
+import { assignFlexCarrier } from "@/lib/flexCarrierAssignment";
 import { getArgentinaDateString } from "@/lib/dateUtils";
 
 function asDbValue(value) {
@@ -138,7 +138,7 @@ async function getExistingShipments(trackings) {
 
 async function recoverJob(jobId) {
   const headerResult = await db.execute({
-    sql: `SELECT id, job_id, created_at_client, source_files_json
+    sql: `SELECT id, job_id, workspace_id, created_at_client, source_files_json
           FROM print_jobs
           WHERE job_id = ?
           LIMIT 1`,
@@ -224,12 +224,11 @@ async function recoverJob(jobId) {
       shipment.product_name = pickFirst(shipment.sku, shipment.tracking_number, "Etiqueta sin producto") || "Etiqueta sin producto";
     }
 
-    if ((shipment.shipping_method || "").toLowerCase() === "flex" && shipment.partido && !shipment.assigned_carrier) {
-      try {
-        shipment.assigned_carrier = await assignCarrier(shipment.partido);
-      } catch {
-        shipment.assigned_carrier = null;
-      }
+    try {
+      await assignFlexCarrier(shipment, { workspaceId: header.workspace_id });
+    } catch {
+      shipment.partido = null;
+      shipment.assigned_carrier = null;
     }
 
     await db.execute({

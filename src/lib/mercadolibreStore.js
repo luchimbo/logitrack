@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { assignCarrier } from '@/lib/zoneMapper';
+import { assignFlexCarrier } from '@/lib/flexCarrierAssignment';
 import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
@@ -560,8 +561,8 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     }
     if (!shipment.city) shipment.city = order.address?.city?.name || '';
     if (!shipment.province) shipment.province = order.address?.state?.name || '';
-  }
-  if (shipment.partido) {
+    await assignFlexCarrier(shipment, { workspaceId, mlAddress: order.address });
+  } else if (shipment.partido) {
     shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { parseZplFile } from '@/lib/zplParser';
-import { assignCarrier } from '@/lib/zoneMapper';
+import { assignFlexCarrier } from '@/lib/flexCarrierAssignment';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
@@ -50,9 +50,7 @@ export async function POST(request) {
             const parsed = parseZplFile(text);
             console.log(`[UPLOAD] File: ${file.name}, parsed: ${parsed.length}, first has raw_zpl: ${!!parsed[0]?.raw_zpl}, raw_zpl length: ${parsed[0]?.raw_zpl?.length || 0}`);
             for (const shipment of parsed) {
-                if (shipment.shipping_method === 'flex' && shipment.partido) {
-                    shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
-                }
+                await assignFlexCarrier(shipment, { workspaceId });
             }
             allShipments.push(...parsed);
         }
