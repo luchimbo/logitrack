@@ -147,3 +147,16 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 
 - Logs de producción de la última hora sin filtro de rama. Upkeep a las 08:43:46, request 559jp-1794570226127-4b5eda350cce en dpl_ELK5a1VH3q5Mzyh3C8tXa4eV5spM, terminó con HTTP 500. La inicialización de libSQL de PC MIDI falló por resolución DNS (ENOTFOUND). El error fatal impidió obtener resultados por cuenta. No se observó timeout en esa solicitud.
 - Sigue pendiente verificar sync. No se dispararon ejecuciones manuales.
+
+### Recuperación de libSQL y comprobación de Mercado Libre · 13/11/2026
+
+- El último registro del arranque anterior de PC MIDI fue el 12/11 a las 22:33:58 Argentina. El siguiente arranque fue el 13/11 a las 10:03:53. Tailscale y libSQL quedaron activos a las 10:04. El intervalo coincide con el `ENOTFOUND` de upkeep. El historial del servidor no identifica qué provocó la interrupción ni contiene el estado del DNS durante el fallo.
+- Se verificó la resolución pública del host de Funnel, el acceso autenticado de libSQL por HTTPS y una consulta de reseñas de PC MIDI desde producción con HTTP 200 y sin caché de CDN. También pasaron los controles públicos de cross-selling de ambas tiendas. La conexión se recuperó con el arranque de PC MIDI, sin despliegue ni cambios de configuración.
+- Vercel muestra ambos cron activos, sync a las 08:00 y upkeep a las 08:20 Argentina, con la ventana flexible de Hobby. La ejecución programada de sync del 13/11 quedó fuera de la retención consultable. Se lanzó una prueba manual por tarea desde Cron Jobs, en el despliegue `dpl_ELK5a1VH3q5Mzyh3C8tXa4eV5spM`.
+- **Upkeep manual**, 15:43:26 Argentina, request `p8hwx-1794595406223-d626d8064a5a`: HTTP 200 sin errores en el registro. Antes de iniciar sync, la base registró un pedido actualizado y tres cierres para la conexión 3. El registro de Vercel no conserva el cuerpo de la respuesta, por lo que queda sin confirmar el resultado individual de la conexión 91.
+- **Sync manual**, 15:43:34 Argentina, request `t7vbp-1794595414001-6f19e2614529`: HTTP 200 y `sync complete` con `ok=true`. Las conexiones 3 y 91 conciliaron correctamente y sincronizaron 250 registros cada una, incluidas actualizaciones. Vercel confirmó `snapshot done` del espacio 1.
+
+### Recuperación observada · 16/11/2026
+
+- Logs de producción de la última hora sin filtro de rama, despliegue dpl_ELK5a1VH3q5Mzyh3C8tXa4eV5spM. Sync (dslmk-1794827268117-6ebea9ea3a27) terminó HTTP 200 y ok=true. Las conexiones 3 y 91 conciliaron correctamente y sincronizaron 250 registros cada una.
+- Upkeep (cj86b-1794829426148-c82a844bccb4) respondió HTTP 200 tras el fallo DNS observado el 13/11. La evidencia disponible no confirma resultados por cuenta. Panel gráfico no inspeccionado.
