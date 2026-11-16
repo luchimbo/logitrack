@@ -140,6 +140,7 @@ const LOCALITY_TO_PARTIDO = {
     "EL PALOMAR": "3_de_febrero",
     "PABLO PODESTA": "3_de_febrero",
     "CHURRUCA": "3_de_febrero",
+    "EL LIBERTADOR": "3_de_febrero",
     "LOMA HERMOSA": "3_de_febrero",
     // Morón
     "HAEDO": "moron",
@@ -602,25 +603,13 @@ function parseFlexLabel(content) {
     const zoneMatch = content.match(/\^FO\d+,485\^A0N,48,48\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/)
         || content.match(/\^FO0,660\^A0N,40,40\^FB800,1,0,C\^FH\^FD(.+?)\^FS/);
     if (zoneMatch) {
-        const zone = decodeZplHex(zoneMatch[1].trim());
-        shipment.province = zone;
-        const norm = normalizePartido(zone);
-        if (norm === "capital_federal" || zone === "CABA") {
-            shipment.province = "Capital Federal";
-            shipment.partido = "capital_federal";
-        } else if (Object.values(PARTIDO_MAP).includes(norm)) {
-            shipment.partido = norm;
-        }
+        shipment.province = decodeZplHex(zoneMatch[1].trim());
     }
 
     const barrioMatch = content.match(/\^FO\d+,580\^A0N,45,45\^FB\d+,\d+,\d+,C\^FH\^FD(.+?)\^FS/)
         || content.match(/\^FO0,705\^A0N,40,40\^FB800,1,0,C\^FH\^FD(.+?)\^FS/);
     if (barrioMatch) {
         shipment.city = decodeZplHex(barrioMatch[1].trim());
-    }
-
-    if (!shipment.partido && shipment.city) {
-        shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
     }
 
     const dirMatch = content.match(/\^FDDireccion:\s*(.+?)\^FS/);
@@ -654,7 +643,7 @@ function parseFlexLabel(content) {
         if (barrio && !shipment.city) shipment.city = barrio;
     }
 
-    if (!shipment.city || !shipment.province || !shipment.partido) {
+    if (!shipment.city || !shipment.province) {
         const cpPos = content.indexOf("CP:");
         if (cpPos !== -1) {
             const candidates = [
@@ -693,23 +682,21 @@ function parseFlexLabel(content) {
         }
     }
 
-    if (!shipment.partido && shipment.province) {
-        const provinceUpper = sanitizeUpper(shipment.province);
-        if (provinceUpper === "CABA" || provinceUpper === "CAPITAL FEDERAL") {
-            shipment.province = "Capital Federal";
-            shipment.partido = "capital_federal";
-        } else if (shipment.city) {
-            shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
-        } else {
-            const provNorm = normalizePartido(shipment.province);
-            if (Object.values(PARTIDO_MAP).includes(provNorm)) {
-                shipment.partido = provNorm;
-            }
-        }
-    }
-
-    if (!shipment.partido && shipment.city) {
-        shipment.partido = resolvePartidoFromGeo(shipment.city, shipment.province);
+    // En Flex, el campo de zona puede traer un partido o una localidad.
+    const zoneName = sanitizeUpper(shipment.province);
+    const zonePartido = normalizePartido(zoneName);
+    const knownPartidos = Object.values(PARTIDO_MAP);
+    const cityPartido = shipment.city ? resolvePartidoFromGeo(shipment.city, shipment.province) : null;
+    // El campo de zona posicionado explícitamente tiene prioridad sobre el barrio.
+    // Si la zona se recuperó del texto libre, respetamos una localidad ya reconocida.
+    const zoneIsPartido = knownPartidos.includes(zonePartido);
+    if (zoneIsPartido && (zoneMatch || !knownPartidos.includes(cityPartido))) {
+        shipment.partido = zonePartido;
+        if (zonePartido === "capital_federal") shipment.province = "Capital Federal";
+    } else if (cityPartido) {
+        shipment.partido = cityPartido;
+    } else if (Object.hasOwn(LOCALITY_TO_PARTIDO, zoneName)) {
+        shipment.partido = resolvePartidoFromGeo(zoneName);
     }
 
     return shipment;
