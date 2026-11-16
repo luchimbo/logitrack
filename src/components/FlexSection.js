@@ -20,8 +20,8 @@ export default function FlexSection() {
   const publish = async () => { try { const s = await api("/flex-portal-settings", { method: "POST" }); setSettings(s); toast("Operación publicada para hoy", "success"); } catch (e) { toast(e.message || "No se pudo publicar", "error"); } };
   const copy = async (carrier) => { const url = portals.find((p) => p.carrier_id === carrier.id)?.portal?.url; if (!url) return toast("Link no disponible", "error"); try { await navigator.clipboard.writeText(url); toast("Link copiado", "success"); } catch { toast("No se pudo copiar el link", "error"); } };
   const createOrCopyLink = async (carrier) => { const current = portals.find((p) => p.carrier_id === carrier.id)?.portal; if (current?.url) return copy(carrier); try { const response = await api("/carrier-portals", { method: "POST", body: JSON.stringify({ carrierId: carrier.id }) }); setPortals((items) => { const rest = items.filter((item) => item.carrier_id !== carrier.id); return [...rest, { carrier_id: carrier.id, portal: response.portal }]; }); await navigator.clipboard.writeText(response.portal.url); toast(`Link de ${carrier.display_name || carrier.name} creado y copiado`, "success"); } catch (error) { toast(error.message || "No se pudo crear el link", "error"); } };
-  const Card = ({ shipment }) => { const busy = moving.has(shipment.id), c = carriers.find((x) => x.name === shipment.assigned_carrier); return <article className={`flex-board-card ${busy ? "is-saving" : ""}`} draggable={!busy} onDragStart={() => setDragged(shipment.id)} onDragEnd={() => setDragged(null)}><label className="flex-card-check"><input type="checkbox" checked={selected.has(shipment.id)} onChange={() => toggle(shipment.id)} aria-label={`Seleccionar ${shipment.product_name}`} /></label><div className="flex-card-main"><strong title={shipment.product_name}>{shipment.product_name || "Producto sin nombre"}</strong><span>{shipment.sku ? `SKU ${shipment.sku}` : "Sin SKU"} · {zoneOf(shipment)}</span>{!shipment.assigned_carrier && !shipment.partido && <><span>Revisá el partido del domicilio</span><span>{[shipment.address, shipment.postal_code, shipment.city].filter(Boolean).join(" · ") || "Domicilio sin datos"}</span>{shipment.province && <span>Zona en la etiqueta · {shipment.province}</span>}</>}</div><select value={shipment.assigned_carrier || ""} onChange={(e) => move([shipment.id], e.target.value)} disabled={busy} aria-label={`Transportista de ${shipment.product_name}`} style={c?.color ? { borderColor: c.color } : undefined}><option value="">Sin asignar</option>{carriers.map((x) => <option value={x.name} key={x.id}>{x.display_name || x.name}</option>)}</select>{busy && <span className="flex-saving" role="status">Guardando</span>}</article>; };
-  const Lane = ({ carrier, items }) => {
+  const renderCard = (shipment) => { const busy = moving.has(shipment.id), c = carriers.find((x) => x.name === shipment.assigned_carrier); return <article key={shipment.id} className={`flex-board-card ${busy ? "is-saving" : ""}`} draggable={!busy} onDragStart={() => setDragged(shipment.id)} onDragEnd={() => setDragged(null)}><label className="flex-card-check"><input type="checkbox" checked={selected.has(shipment.id)} onChange={() => toggle(shipment.id)} aria-label={`Seleccionar ${shipment.product_name}`} /></label><div className="flex-card-main"><strong title={shipment.product_name}>{shipment.product_name || "Producto sin nombre"}</strong><span>{shipment.sku ? `SKU ${shipment.sku}` : "Sin SKU"} · {zoneOf(shipment)}</span>{!shipment.assigned_carrier && !shipment.partido && <><span className="flex-address-warning">Revisá el partido del domicilio</span><span>{[shipment.address, shipment.postal_code, shipment.city].filter(Boolean).join(" · ") || "Domicilio sin datos"}</span>{shipment.province && <span>Zona en la etiqueta · {shipment.province}</span>}</>}</div><select value={shipment.assigned_carrier || ""} onChange={(e) => move([shipment.id], e.target.value)} disabled={busy} aria-label={`Transportista de ${shipment.product_name}`} style={c?.color ? { borderColor: c.color } : undefined}><option value="">Sin asignar</option>{carriers.map((x) => <option value={x.name} key={x.id}>{x.display_name || x.name}</option>)}</select>{busy && <span className="flex-saving" role="status">Guardando</span>}</article>; };
+  const renderLane = (carrier, items) => {
     const hasLink = Boolean(portals.find((p) => p.carrier_id === carrier.id)?.portal?.url);
     const collapsed = !expandedLanes.has(carrier.id);
     const toggleCollapsed = () => setExpandedLanes((current) => {
@@ -31,6 +31,7 @@ export default function FlexSection() {
     });
     return (
       <section
+        key={carrier.id}
         className={`flex-lane ${collapsed ? "is-collapsed" : ""}`}
         onDragOver={(event) => event.preventDefault()}
         onDrop={() => {
@@ -50,7 +51,7 @@ export default function FlexSection() {
           <button type="button" onClick={() => createOrCopyLink(carrier)}>{hasLink ? "Copiar link" : "Crear link"}</button>
         </header>
         <div id={`flex-carrier-${carrier.id}`} className="flex-lane-list" hidden={collapsed}>
-          {items.map((shipment) => <Card shipment={shipment} key={shipment.id} />)}
+          {items.map(renderCard)}
           {!items.length ? <p className="flex-lane-empty">No hay paquetes asignados</p> : null}
         </div>
       </section>
@@ -65,5 +66,23 @@ export default function FlexSection() {
       const matchingCarriers = shipments.filter((s) => [s.product_name, s.sku, s.partido, s.assigned_carrier].join(" ").toLowerCase().includes(value.trim().toLowerCase())).map((s) => s.assigned_carrier);
       setExpandedLanes((current) => new Set([...current, ...carriers.filter((c) => matchingCarriers.includes(c.name)).map((c) => c.id)]));
     }
-  }} placeholder="Buscar producto, SKU o zona" aria-label="Buscar paquetes Flex" /><span>{selected.size ? `${selected.size} seleccionados` : "Arrastrá o seleccioná paquetes"}</span><select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Destino de la selección"><option value="">Mover selección a…</option>{carriers.map((c) => <option key={c.id} value={c.name}>{c.display_name || c.name}</option>)}</select><button type="button" className="btn btn-primary btn-sm" disabled={!selected.size || !target} onClick={() => move([...selected], target)}>Mover</button></div>{unassigned.length > 0 && <section className="flex-unassigned"><strong>Sin asignar · {unassigned.length}</strong><div>{unassigned.map((s) => <Card shipment={s} key={s.id} />)}</div></section>}<main className="flex-lanes" aria-label="Tablero de transportistas">{carriers.map((c) => <Lane key={c.id} carrier={c} items={byCarrier[c.name] || []} />)}</main></section>;
+  }} placeholder="Buscar producto, SKU o zona" aria-label="Buscar paquetes Flex" />
+    <span className="flex-selection-count" role="status">{selected.size ? `${selected.size} seleccionados` : "Seleccioná paquetes para moverlos"}</span>
+    <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Destino de la selección">
+      <option value="">Elegir transportista</option>
+      {carriers.map((c) => <option key={c.id} value={c.name}>{c.display_name || c.name}</option>)}
+    </select>
+    <button type="button" className="btn btn-primary btn-sm" disabled={!selected.size || !target} onClick={() => move([...selected], target)}>Mover</button>
+  </div>
+  {unassigned.length > 0 && (
+    <section className="flex-unassigned" aria-labelledby="flex-unassigned-title">
+      <h2 id="flex-unassigned-title">Sin asignar · {unassigned.length}</h2>
+      <div>{unassigned.map(renderCard)}</div>
+    </section>
+  )}
+  {query.trim() && filtered.length === 0 && <p className="flex-search-empty" role="status">No encontramos paquetes que coincidan con la búsqueda.</p>}
+  <section className="flex-lanes" aria-label="Tablero de transportistas">
+    {carriers.map((carrier) => renderLane(carrier, byCarrier[carrier.name] || []))}
+  </section>
+  </section>;
 }

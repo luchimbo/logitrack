@@ -13,10 +13,12 @@ import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 import MobileSelectionBar from "./MobileSelectionBar";
 import SectionTitle from "./SectionTitle";
+import AppIcon from "./AppIcon";
 
 export default function UploadSection() {
     const [isDragOver, setIsDragOver] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState("");
     const [uploadResult, setUploadResult] = useState(null);
     const [todayShipments, setTodayShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
@@ -49,7 +51,7 @@ export default function UploadSection() {
 
     const handleDragOver = (e) => {
         e.preventDefault();
-        setIsDragOver(true);
+        if (!isUploading) setIsDragOver(true);
     };
 
     const handleDragLeave = () => {
@@ -92,7 +94,9 @@ export default function UploadSection() {
     };
 
     const processFiles = async (files) => {
+        if (isUploading) return;
         setIsUploading(true);
+        setUploadError("");
         setUploadResult(null);
 
         try {
@@ -144,7 +148,7 @@ export default function UploadSection() {
             toast(`✅ ${data.total_parsed} nuevos envíos agregados (${data.total_in_batch} total)`, "success");
         } catch (error) {
             console.error(error);
-            toast(error?.message || "Error procesando las etiquetas", "error");
+            setUploadError(error?.message || "No se pudieron procesar las etiquetas.");
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -233,7 +237,7 @@ export default function UploadSection() {
         <div id="section-upload" className="section active">
             <div className="section-header">
                 <SectionTitle icon="upload">Subir etiquetas</SectionTitle>
-                <p className="section-subtitle">Arrastrá o seleccioná archivos ZPL/TXT, o un .rar con el archivo &quot;Etiquetas de Envío.txt&quot; adentro. Las etiquetas se procesan y entran directo a la operación del workspace actual.</p>
+                <p className="section-subtitle">Importá etiquetas a la operación del espacio de trabajo actual.</p>
             </div>
 
             <div
@@ -241,40 +245,41 @@ export default function UploadSection() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
             >
                 <input
                     type="file"
                     className="upload-input"
                     ref={fileInputRef}
                     multiple
+                    disabled={isUploading}
                     accept=".txt,.zpl,.rar,.TXT,.ZPL,.RAR"
                     onChange={handleFileSelect}
                     style={{ display: 'none' }}
                 />
-                <div className="upload-icon">📄</div>
-                <p className="upload-title">Arrastrá archivos aquí</p>
-                <p className="upload-subtitle">o hacé click para seleccionar — Archivos .txt, .zpl o .rar</p>
+                <div className="upload-icon"><AppIcon name="upload" size={27} /></div>
+                <button type="button" className="btn btn-primary" disabled={isUploading} aria-describedby="upload-formats" onClick={() => fileInputRef.current?.click()}>
+                    Elegir archivos
+                </button>
+                <p className="upload-subtitle" id="upload-formats">También podés arrastrar archivos .zpl, .txt o .rar con etiquetas en .txt.</p>
             </div>
 
             {isUploading && (
-                <div className="mt-md" style={{ display: 'block' }}>
+                <div className="mt-md" role="status">
                     <div className="card">
                         <div className="flex-between mb-md">
-                            <span>Procesando archivos...</span>
-                            <div className="spinner" style={{ width: '24px', height: '24px', margin: 0 }}></div>
-                        </div>
-                        <div className="progress-bar">
-                            <div className="progress-fill" style={{ width: '100%', transition: 'width 2s' }}></div>
+                            <span>Procesando archivos…</span>
+                            <div className="spinner" aria-hidden="true" style={{ width: '24px', height: '24px', margin: 0 }}></div>
                         </div>
                     </div>
                 </div>
             )}
 
+            {uploadError && <p className="card upload-error mt-md" role="alert">{uploadError}</p>}
+
             {uploadResult && !isUploading && (
                 <div className="mt-lg">
                     <div className="card" style={{ borderColor: 'var(--success)', borderLeft: '4px solid var(--success)' }}>
-                        <h3 style={{ marginBottom: '16px' }}>✅ Resumen de Carga</h3>
+                        <h2 style={{ marginBottom: '16px', fontSize: '18px' }}>Resumen de carga</h2>
 
                         <div className="stats-grid">
                             <div className="stat-card card accent">
@@ -294,7 +299,7 @@ export default function UploadSection() {
                         )}
 
                         <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                            Revisá el total del lote y, si hace falta, abrí “Datos de Hoy” para validar los envíos cargados antes de seguir operando.
+                            Revisá el total del lote y, si hace falta, abrí “Envíos de hoy” para validar los envíos cargados antes de seguir operando.
                         </p>
 
                         <div className="flex-between gap-sm" style={{ flexWrap: 'wrap', marginTop: '16px' }}>
@@ -310,11 +315,11 @@ export default function UploadSection() {
             <div className="mt-lg">
                 <div className="card">
                     <div className="flex-between mb-md" style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '16px' : '8px', alignItems: isMobile ? 'stretch' : 'center' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>
-                            📋 Datos de Hoy ({todayShipments.length})
-                        </h3>
+                        <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>
+                            Envíos de hoy ({todayShipments.length})
+                        </h2>
                         <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
-                            <button className="btn btn-ghost btn-sm" style={{ flex: isMobile ? 1 : 'none' }} onClick={() => { setShowShipments(!showShipments); if (!showShipments) fetchTodayShipments(); }}>
+                            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={showShipments} style={{ flex: isMobile ? 1 : 'none' }} onClick={() => { setShowShipments(!showShipments); if (!showShipments) fetchTodayShipments(); }}>
                                 {showShipments ? '🔼 Ocultar' : '🔽 Ver'}
                             </button>
                             {todayShipments.length > 0 && (

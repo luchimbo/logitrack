@@ -46,3 +46,17 @@
 .tab_flex[aria-pressed="true"]{border-color:#fbbf74 !important;color:#fbbf74 !important;background:rgba(251,191,116,.1) !important}
 .tab_colecta[aria-pressed="true"]{border-color:#60a5fa !important;color:#60a5fa !important;background:rgba(96,165,250,.1) !important}
 .tab_all[aria-pressed="true"]{border-color:#6ee7b7 !important;color:#6ee7b7 !important;background:rgba(110,231,183,.1) !important}
+
+.tabs button,.filters input,.filters select,.form input,.form select{min-height:44px}
+.filters input,.filters select{border-color:var(--border-hover);min-width:0}
+.filterFooter{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.filterFooter .muted{flex:1 1 220px}
+.metricAction{text-align:left;cursor:pointer}
+.metricAction:hover,.metricAction[aria-pressed="true"]{background:color-mix(in srgb,var(--finance-accent) 9%,var(--surface))}
+.metricAction small{color:var(--finance-accent)}
+.metricAction:focus-visible,.tableWrap:focus-visible{outline:2px solid var(--finance-accent);outline-offset:-2px}
+@media(max-width:500px){
+  .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tabs button{padding-inline:8px}
+  .filters input,.filters select,.form input,.form select{font-size:16px}
+}

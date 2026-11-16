@@ -75,19 +75,26 @@ export default function OperationToday({ currentUser, onNavigate }) {
   const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Sin datos de Mercado Libre." : "";
 
   return <div className="section operation-today">
-    <div className="operation-toolbar">
-      <div>{manualUpdating ? <small className="operation-last-update" aria-live="polite">Actualizando Mercado Libre…</small> : lastUpdated ? <small className="operation-last-update">Actualizado {formatArgentinaDateTime(lastUpdated)}</small> : null}</div>
-      <div className="operation-toolbar-links">
-        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
-        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading || manualUpdating}>{manualUpdating ? "Actualizando…" : "Actualizar"}</button>
+    <header className="operation-toolbar">
+      <div>
+        <h1 id="operation-packing-title">Paquetes listos para imprimir</h1>
+        <p className="operation-last-update" role="status">
+          {manualUpdating ? "Actualizando Mercado Libre…" : mlPending || (lastUpdated ? `Mercado Libre · Actualizado ${formatArgentinaDateTime(lastUpdated)}` : "Mercado Libre")}
+        </p>
       </div>
-    </div>
-    {error ? <div className="operation-alert critical"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
-    <section className="operation-method-grid" aria-label="Paquetes listos para imprimir">
+      <button type="button" className="btn btn-ghost btn-sm operation-refresh" onClick={load} disabled={loading || manualUpdating}>
+        {manualUpdating ? "Actualizando…" : "Actualizar"}
+      </button>
+    </header>
+    {error ? <div className="operation-alert critical" role="alert"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
+    <section className="operation-method-grid" aria-labelledby="operation-packing-title">
       <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
       <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
     </section>
+    <nav className="operation-shortcuts" aria-label="Accesos de Operación de hoy">
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
+    </nav>
   </div>;
 }
 

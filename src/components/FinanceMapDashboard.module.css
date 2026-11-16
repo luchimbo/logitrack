@@ -73,3 +73,11 @@
 .kindHead span{font-size:13px;opacity:.8}
 .refreshPill{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-style:normal;font-size:12px;opacity:.9}
 .refreshPill i{width:12px;height:12px;border-radius:50%;border:2px solid rgba(128,128,128,.4);border-top-color:var(--kind-color);animation:mapSpin .8s linear infinite}
+
+.presets button,.dates input,.method select{min-height:44px}
+.mapHint{white-space:normal;text-align:center}
+@media(max-width:500px){
+  .dates input,.method select{font-size:16px;padding-inline:6px}
+  .presets button{min-height:44px}
+  .zoom button{width:44px;height:44px}
+}

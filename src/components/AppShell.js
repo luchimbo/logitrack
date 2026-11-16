@@ -15,6 +15,7 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 const COLLAPSED_STORAGE_KEY = "geomodi.sidebarCollapsed";
+const SUBSECTION_LABELS = { upload: "Subir etiquetas", integrations: "Conectar un canal", operationToday: "Resumen" };
 
 function NavigationItem({ active, badge, item, onNavigate, variant = "sidebar", compact = false }) {
   const className = variant === "mobile" ? "mobile-bottom-nav-item" : "nav-link";
@@ -64,6 +65,7 @@ export default function AppShell({
     { title: "Admin Maestro", icon: "settings", items: findItems(["adminOverview"]) },
   ].filter((group) => group.items.length);
   const activeSection = sections.find((group) => group.items.some((item) => item.id === activeTab)) || sections[0];
+  const activeItem = activeSection?.items.find((item) => item.id === activeTab);
   const sectionItem = (group) => ({ ...group.items[0], label: group.title, icon: group.icon });
   const groupedMobile = { primaryItems: sections.slice(0, 4).map(sectionItem), moreGroups: sections.slice(4).map((group) => ({ title: group.title, items: [sectionItem(group)] })) };
   const sheetRef = useRef(null);
@@ -101,7 +103,7 @@ export default function AppShell({
     const sheet = sheetRef.current;
     const previousFocus = document.activeElement;
     const focusable = sheet?.querySelectorAll(FOCUSABLE_SELECTOR);
-    focusable?.[0]?.focus();
+    focusable?.[0]?.focus({ preventScroll: true });
     document.body.classList.add("mobile-nav-open");
 
     const handleKeyDown = (event) => {
@@ -127,7 +129,7 @@ export default function AppShell({
     return () => {
       document.body.classList.remove("mobile-nav-open");
       document.removeEventListener("keydown", handleKeyDown);
-      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
     };
   }, [onCloseSidebar, sidebarOpen]);
 
@@ -153,6 +155,17 @@ export default function AppShell({
           {sections.map((group) => (
             <div key={group.title} className="nav-group">
               <NavigationItem active={activeSection === group} badge={sectionBadge(group)} item={sectionItem(group)} onNavigate={onNavigate} compact={collapsed} />
+              {!collapsed && activeSection === group && group.items.length > 1 && (
+                <ul className="sidebar-subsections">
+                  {group.items.map((item) => (
+                    <li key={item.id}>
+                      <button type="button" className="btn btn-ghost btn-sm app-subsection" aria-current={activeTab === item.id ? "page" : undefined} onClick={() => onNavigate(item.id)}>
+                        {SUBSECTION_LABELS[item.id] || item.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
           <a href="/soporte" className="nav-link">Soporte</a>
@@ -179,6 +192,7 @@ export default function AppShell({
             <div className="topbar-mobile-mark" aria-hidden="true"><Image src="/icon.png" alt="" width={34} height={34} /></div>
             <div className="topbar-heading">
               <div className="topbar-title">{activeSection?.title || sectionTitle}</div>
+              {activeItem && activeSection.items.length > 1 && <div className="topbar-subsection">{SUBSECTION_LABELS[activeItem.id] || activeItem.label}</div>}
               <div className="topbar-user desktop-only">{currentUser?.email || currentUser?.username}</div>
             </div>
           </div>
@@ -191,8 +205,8 @@ export default function AppShell({
         </header>
 
         <div className="content-area" id="app-content" tabIndex={-1}>
-          {activeSection?.items.length > 1 && <nav aria-label={`Apartados de ${activeSection.title}`} style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-            {activeSection.items.map((item) => <button key={item.id} type="button" className={`btn btn-sm ${activeTab === item.id ? "btn-primary" : "btn-ghost"}`} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => onNavigate(item.id)}>{item.id === "upload" ? "Subir etiquetas" : item.id === "integrations" ? "Conectar un canal" : item.id === "operationToday" ? "Resumen" : item.label}</button>)}
+          {activeSection?.items.length > 1 && <nav className="app-subsections" aria-label={`Apartados de ${activeSection.title}`}>
+            {activeSection.items.map((item) => <button key={item.id} type="button" className="btn btn-ghost btn-sm app-subsection" aria-current={activeTab === item.id ? "page" : undefined} onClick={() => onNavigate(item.id)}>{SUBSECTION_LABELS[item.id] || item.label}</button>)}
           </nav>}
           {children}</div>
       </main>

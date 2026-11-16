@@ -1,6 +1,7 @@
 "use client";
 
 import InfoDisclosure from "./InfoDisclosure";
+import SectionTitle from "./SectionTitle";
 
 import { useEffect, useState } from "react";
 
@@ -71,51 +72,52 @@ export default function WorkspaceSetupSection() {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Configuración inicial de impresión</h2>
-        <p className="section-subtitle">Este setup deja aislada la impresión V2 por workspace y define la impresora compartida de la PC local.</p>
+        <SectionTitle icon="print">Configuración de impresión</SectionTitle>
+        <p className="section-subtitle">Elegí la impresora compartida y configurá la conexión con el agente de impresión V2.</p>
       </div>
 
       {error ? <div role="alert" className="card" style={{ marginBottom: '18px', color: 'var(--danger)' }}>{error}</div> : null}
       {message ? <div role="status" className="card" style={{ marginBottom: '18px', color: 'var(--success)' }}>{message}</div> : null}
 
       <InfoDisclosure title="Preparar la PC de impresión" description={workspace?.name || "Mi espacio"} className="card" style={{ marginBottom: '18px' }}>
-        <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-          <div><strong>Workspace:</strong> {workspace?.name || 'Mi espacio'}</div>
-          <div><strong>Qué tenés que hacer en la PC:</strong> compartir la Zebra en Windows, copiar estos datos a `print-agent/config.json` y ejecutar `diagnostico-impresora-v2.bat`.</div>
-        </div>
+        <ol className="printer-setup-steps">
+          <li>Compartí la impresora Zebra en Windows.</li>
+          <li>Copiá los datos de este espacio a <code>print-agent/config.json</code>.</li>
+          <li>Ejecutá <code>diagnostico-impresora-v2.bat</code> en la PC de impresión.</li>
+        </ol>
       </InfoDisclosure>
 
       <InfoDisclosure title="Configuración de la impresora" description="Impresora y conexión con el agente local" className="card" style={{ maxWidth: '760px' }}>
-        <form onSubmit={handleSave} style={{ display: 'grid', gap: '14px' }}>
+        <form onSubmit={handleSave} className="printer-setup-form">
           <div>
-            <label className="form-label">Nombre visible</label>
-            <input className="form-input" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+            <label className="form-label" htmlFor="printer-name">Nombre visible</label>
+            <input id="printer-name" className="form-input" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
           </div>
 
           <div>
-            <label className="form-label">printerPath</label>
-            <input className="form-input" value={form.printerPath} onChange={(e) => setForm((prev) => ({ ...prev, printerPath: e.target.value }))} placeholder="\\127.0.0.1\ZDesigner ZD420-203dpi ZPL" />
+            <label className="form-label" htmlFor="printer-path">Ruta de la impresora</label>
+            <input id="printer-path" className="form-input" value={form.printerPath} onChange={(e) => setForm((prev) => ({ ...prev, printerPath: e.target.value }))} placeholder="\\127.0.0.1\ZDesigner ZD420-203dpi ZPL" />
           </div>
 
           <div>
-            <label className="form-label">syncUrl</label>
-            <input className="form-input" value={form.syncUrl} onChange={(e) => setForm((prev) => ({ ...prev, syncUrl: e.target.value }))} placeholder="https://tu-dominio/api/v2/print-jobs/intake" />
+            <label className="form-label" htmlFor="printer-sync-url">URL de sincronización</label>
+            <input id="printer-sync-url" className="form-input" value={form.syncUrl} onChange={(e) => setForm((prev) => ({ ...prev, syncUrl: e.target.value }))} placeholder="https://tu-dominio/api/v2/print-jobs/intake" />
           </div>
 
           {workspace?.slug === 'legacy' ? (
             <div>
-              <label className="form-label">syncToken</label>
-              <input className="form-input" value={form.syncToken} onChange={(e) => setForm((prev) => ({ ...prev, syncToken: e.target.value }))} placeholder="Token del agente de impresión" />
+              <label className="form-label" htmlFor="printer-sync-token">Token del agente</label>
+              <input id="printer-sync-token" className="form-input" value={form.syncToken} onChange={(e) => setForm((prev) => ({ ...prev, syncToken: e.target.value }))} placeholder="Token del agente de impresión" />
             </div>
           ) : null}
 
           <div>
-            <label className="form-label">workspaceKey</label>
-            <input className="form-input" value={form.workspaceKey} onChange={(e) => setForm((prev) => ({ ...prev, workspaceKey: e.target.value }))} placeholder="Se genera automáticamente si lo dejás vacío" />
+            <label className="form-label" htmlFor="printer-workspace-key">Clave del espacio</label>
+            <input id="printer-workspace-key" className="form-input" value={form.workspaceKey} onChange={(e) => setForm((prev) => ({ ...prev, workspaceKey: e.target.value }))} placeholder="Se genera automáticamente si lo dejás vacío" />
           </div>
 
           <button type="submit" className="btn btn-primary" disabled={loading || saving}>
-            {saving ? 'Guardando...' : 'Guardar configuración'}
+            {saving ? 'Guardando…' : 'Guardar configuración'}
           </button>
         </form>
       </InfoDisclosure>

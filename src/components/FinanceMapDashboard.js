@@ -154,7 +154,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     <div className={styles.kindHead} style={{ '--kind-color': kind === 'all' ? '#6ee7b7' : METHOD_COLORS[kind] }}><strong>{KIND_TITLES[kind][0]}</strong><span>{KIND_TITLES[kind][1]}</span>
       {report && refreshing ? <em className={styles.refreshPill} role="status"><i aria-hidden="true" />Actualizando…{report.cachedAt ? ` mostrando lo guardado a las ${new Date(report.cachedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ''}</em> : null}</div>
     <section className={styles.period} aria-label="Período del mapa">
-      <div className={styles.periodTop}><div><span className={styles.kicker}>01 · Elegí el período</span><h2>¿Qué período querés consultar?</h2></div><span className={styles.dateBasis}>Por fecha de despacho</span></div>
+      <div className={styles.periodTop}><h2>Período de despacho</h2></div>
       <div className={styles.periodControls}><div className={styles.presets}>{PRESETS.map(([key, label]) => {
         const range = periodPreset(key);
         const active = (filters.from || '') === range.from && (filters.to || '') === range.to;
@@ -167,7 +167,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     <div className={styles.workspace}>
       <section className={styles.mapPanel} aria-label={`Selección de ${what} en el mapa`}>
         {kind !== 'flex' ? <nav className={styles.crumbs} aria-label="Nivel del mapa"><button type="button" aria-current={country ? 'page' : undefined} onClick={() => onLevel('argentina')}>Argentina</button><span aria-hidden="true">›</span><button type="button" aria-current={!country ? 'page' : undefined} onClick={() => onLevel('amba')}>AMBA</button></nav> : null}
-        <div className={styles.mapHeading}><div><span className={styles.kicker}>02 · Marcá {what}</span><h2>{country ? 'Tu operación en el país' : 'Tu operación en el AMBA'}</h2><p>{country ? 'Marcá una o varias provincias. Doble clic en Buenos Aires, o el botón, para ver el detalle del AMBA.' : `Podés seleccionar más de ${byPartido ? 'uno' : 'una'}. Los importes se suman solos.`}</p></div>
+        <div className={styles.mapHeading}><div><h2>{country ? 'Mapa de Argentina' : 'Mapa del AMBA'}</h2><p>{country ? 'Seleccioná una o varias provincias. Hacé doble clic en Buenos Aires o usá el botón para abrir el mapa del AMBA.' : `Seleccioná ${what} que quieras incluir en el resumen.`}</p></div>
           {!country ? <div className={styles.modeSwitch} role="group" aria-label="Tipo de selección"><button type="button" aria-pressed={!byPartido} onClick={() => onMode('zone')}>Por zona</button><button type="button" aria-pressed={byPartido} onClick={() => onMode('partido')}>Por partido</button></div> : <button type="button" className={styles.reset} onClick={() => onLevel('amba')}>Ver detalle AMBA</button>}
           <button type="button" className={styles.reset} aria-pressed={!chosen.length} onClick={() => country ? onProvinces([]) : byPartido ? onPartidos([]) : onSelect([])}>{country ? 'Todo el país' : byPartido ? 'Todos los partidos' : 'Todas las zonas'}</button></div>
         <div className={`${styles.mapCanvas} ${country ? styles.mapCanvasTall : ''}`}>
@@ -237,7 +237,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
         <details className={styles.mapSource}><summary>Cómo se agrupan</summary><p>En el AMBA se usan las zonas operativas de la app; La Matanza está dividida en Norte (GBA 1) y Sur (GBA 2). {colecta ? 'Con Colecta o Todo, el AMBA muestra solo los envíos de CABA y la provincia de Buenos Aires; los de Buenos Aires fuera del AMBA quedan como “Sin zona”.' : ''} En el país, cada envío va a la provincia de su dirección de entrega.</p><p>Geometrías: {shapes.attribution} (AMBA) y {provinceShapes.attribution} (provincias). La selección solo filtra la consulta.</p></details>
       </section>
       <aside className={styles.summary} aria-label="Resumen de la selección" aria-busy={loading}>
-        <div className={styles.summaryHead}><span className={styles.kicker}>03 · Tu resumen automático</span><h2>{selectionName}</h2><p role="status">{scope}</p></div>
+        <div className={styles.summaryHead}><h2>{selectionName}</h2><p role="status">{scope}</p></div>
         <div className={styles.sales}><span>Ventas de productos (pedidos pagados)</span><strong>{report ? money(summary.salesCents) : '—'}</strong><small>{summary.paidOrderCount} pedidos pagados · No incluye el envío cobrado al cliente</small></div>
         <div className={styles.summaryGrid}><Stat label="Costo total de envíos" value={report && summary.knownCount ? money(summary.totalCents) : '—'} /><Stat label="Envíos" value={report ? summary.count : '—'} note={report && !filters.method ? <><b style={{ color: METHOD_COLORS.flex }}>Flex {summary.flexCount}</b> · <b style={{ color: METHOD_COLORS.colecta }}>Colecta {summary.colectaCount}</b></> : null} /><Stat label="Costo promedio por envío" value={money(summary.averageCents)} /><Stat label="Venta promedio por pedido" value={money(summary.averageSaleCents)} /></div>
         <InfoDisclosure title="Comisiones y saldo" description="Cargos de Mercado Libre y saldo estimado">

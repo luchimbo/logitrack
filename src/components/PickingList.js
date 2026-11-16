@@ -214,6 +214,7 @@ export default function PickingList() {
     };
 
     const renderItem = (item, idx) => {
+        const pendingShipments = item.statuses.filter((status) => status === 'pendiente').length;
         return (
             <div key={idx} className={`picking-item ${item.total_quantity >= 6 ? 'picking-item-priority' : ''}`}>
                 <div className="picking-qty">
@@ -223,10 +224,11 @@ export default function PickingList() {
                 <div className="picking-info">
                     <div className="picking-name">{item.product_name}</div>
                     <div className="picking-sku">
-                        <span>SKU: {item.sku || 'N/A'}</span>
+                        <strong>{item.sku ? `SKU ${item.sku}` : 'Sin SKU'}</strong>
                         {item.color && <span>{item.color}</span>}
                         <span>{item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}</span>
                     </div>
+                    <p className="picking-progress">{pendingShipments} de {item.shipment_count} envíos pendientes</p>
                 </div>
             </div>
         );
@@ -255,9 +257,8 @@ export default function PickingList() {
         <div className="section active picking-section">
             <div className="picking-hero">
                 <div>
-                    <p className="picking-kicker">Operación diaria</p>
                     <SectionTitle icon="picking">Picking</SectionTitle>
-                    <p className="section-subtitle">Productos a preparar, priorizados por unidades pendientes.</p>
+                    <p className="section-subtitle">Productos agrupados por método de envío.</p>
                 </div>
                 <LoadingButton isLoading={isExportingPdf} spinnerSize="md" className="btn btn-primary" onClick={handleExportPdf}>
                     Exportar PDF
@@ -284,10 +285,10 @@ export default function PickingList() {
             </div>
 
             <div className="picking-layout">
-                <main className="picking-main" aria-label="Productos para picking">
+                <section className="picking-main" aria-label="Productos para picking">
                     {renderSection('Colecta', 'colecta', colectaItems, colectaUnits)}
                     {renderSection('Flex', 'flex', flexItems, flexUnits)}
-                </main>
+                </section>
             </div>
         </div>
     );

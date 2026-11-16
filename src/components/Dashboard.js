@@ -42,13 +42,13 @@ export default function Dashboard() {
     const today = getArgentinaDateString();
 
     const PERIODS = [
-        { id: 'today', label: 'Hoy', icon: '📅' },
-        { id: 'date', label: 'Fecha', icon: '🗓️' },
-        { id: 'range', label: 'Rango', icon: '🧭' },
-        { id: 'week', label: 'Semana', icon: '📆' },
-        { id: 'month', label: 'Mes', icon: '📊' },
-        { id: 'year', label: 'Año', icon: '📈' },
-        { id: 'all', label: 'Todo', icon: '🗃️' },
+        { id: 'today', label: 'Hoy' },
+        { id: 'date', label: 'Fecha' },
+        { id: 'range', label: 'Rango' },
+        { id: 'week', label: 'Semana' },
+        { id: 'month', label: 'Mes' },
+        { id: 'year', label: 'Año' },
+        { id: 'all', label: 'Todo' },
     ];
 
     useEffect(() => {
@@ -87,46 +87,24 @@ export default function Dashboard() {
     };
 
     const renderPeriodPicker = () => (
-        <div style={{ 
-            marginTop: '16px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: isMobile ? '6px' : '8px',
-            background: 'var(--bg-secondary)',
-            padding: isMobile ? '8px' : '10px',
-            borderRadius: '12px',
-            border: '1px solid var(--border)'
-        }}>
+        <div className="period-picker dashboard-period-picker" role="group" aria-label="Período de envíos">
             {PERIODS.map((p) => (
                 <button
                     key={p.id}
+                    type="button"
+                    className={`period-tab${period === p.id ? ' active' : ''}`}
+                    aria-pressed={period === p.id}
                     onClick={() => setPeriod(p.id)}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: isMobile ? '6px 10px' : '8px 12px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: period === p.id ? 'var(--accent)' : 'var(--surface)',
-                        color: period === p.id ? 'white' : 'var(--text)',
-                        fontSize: isMobile ? '12px' : '13px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        flex: isMobile ? '1 1 calc(50% - 6px)' : '0 0 auto',
-                        justifyContent: 'center',
-                        minWidth: isMobile ? '60px' : '88px'
-                    }}
                 >
-                    <span style={{ fontSize: '14px' }}>{p.icon}</span>
-                    <span>{p.label}</span>
+                    {p.label}
                 </button>
             ))}
 
             {period === 'date' && (
-                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                <div className="dashboard-period-fields">
                     <input
                         type="date"
+                        aria-label="Fecha de los envíos"
                         className="form-input"
                         style={{ 
                             width: '100%', 
@@ -153,10 +131,11 @@ export default function Dashboard() {
             )}
 
             {period === 'range' && (
-                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                <div className="dashboard-period-fields">
                     <div style={{ display: 'flex', gap: '8px', width: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
                         <input
                             type="date"
+                            aria-label="Desde"
                             className="form-input"
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeFrom}
@@ -165,6 +144,7 @@ export default function Dashboard() {
                         />
                         <input
                             type="date"
+                            aria-label="Hasta"
                             className="form-input"
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeTo}
@@ -261,10 +241,10 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos</SectionTitle>
                 {renderPeriodPicker()}
             </div>
-            <div className="spinner"></div>
+            <div className="spinner" role="status" aria-label="Cargando resumen de envíos"></div>
             </div>
         );
     }
@@ -273,10 +253,10 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos</SectionTitle>
                 {renderPeriodPicker()}
             </div>
-            <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+            <p role="alert" style={{ color: "var(--danger)" }}>No se pudo cargar el resumen. {error}</p>
         </div>
     );
 }
@@ -285,7 +265,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                    <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones del período</p>
                     {renderPeriodPicker()}
                 </div>
@@ -304,7 +284,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                    <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones</p>
                     {renderPeriodPicker()}
                 </div>
@@ -411,7 +391,7 @@ export default function Dashboard() {
     return (
         <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                 <p className="section-subtitle">Resumen de operaciones del período</p>
                 {renderPeriodPicker()}
             </div>
@@ -433,7 +413,7 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px" }}>
+            <div className="dashboard-breakdowns">
                 {/* By Method */}
                 <InfoDisclosure className="card" title="Envíos por método" description={`${methodEntries.length} métodos de envío`}>
                     <div className="chart-bar-container">
@@ -555,6 +535,8 @@ export default function Dashboard() {
             {data.total_packages > 0 && (
                 <div className="card" style={{ marginTop: '20px' }}>
                     <button
+                        type="button"
+                        aria-expanded={showShipments}
                         onClick={() => setShowShipments(v => !v)}
                         style={{
                             width: '100%',
@@ -563,7 +545,7 @@ export default function Dashboard() {
                             justifyContent: 'space-between',
                             background: 'transparent',
                             border: 'none',
-                            padding: '0',
+                            minHeight: '44px',
                             cursor: 'pointer',
                             fontSize: '15px',
                             fontWeight: 700,

@@ -1,6 +1,7 @@
 "use client";
 
 import InfoDisclosure from "./InfoDisclosure";
+import SectionTitle from "./SectionTitle";
 
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
@@ -79,9 +80,9 @@ export default function UserManagementSection({ currentUser }) {
   }
   return (
     <section className="section workspace-users">
-      <div className="section-header"><h2 className="section-title">Espacio y miembros</h2><p className="section-subtitle">Asigná acceso por email, con o sin cuenta creada.</p></div>
+      <div className="section-header"><SectionTitle icon="users">Espacio y miembros</SectionTitle><p className="section-subtitle">Administrá quién puede entrar al espacio y qué rol tiene.</p></div>
       <div className="card destination">
-        <label className="eyebrow" htmlFor="members-workspace">Espacio que estás gestionando</label>
+        {currentUser?.isGlobalAdmin && workspaces.length > 0 ? <label className="eyebrow" htmlFor="members-workspace">Espacio que estás gestionando</label> : <p className="eyebrow">Espacio que estás gestionando</p>}
         {currentUser?.isGlobalAdmin && workspaces.length > 0 ? <select id="members-workspace" className="form-select" value={workspaceId} disabled={Boolean(busy)} onChange={event => { setWorkspaceId(event.target.value); setReassignment(null); setError(""); setNotice(null); }}>
           {workspaces.map(item => <option key={item.id} value={item.id}>{item.slug === "legacy" ? "GeoModi" : item.name} · {item.owner_email || item.slug} · #{item.id}</option>)}
         </select> : <h3 id="members-workspace">{workspace?.name || "Cargando espacio…"}</h3>}
@@ -94,7 +95,7 @@ export default function UserManagementSection({ currentUser }) {
         </div>
           <label className="email-choice"><input type="checkbox" checked={sendEmail} disabled={Boolean(busy) || loading} onChange={event => { setSendEmail(event.target.checked); setReassignment(null); }} />Enviar correo con el acceso</label>
           <p className="muted">Si ya tiene cuenta, podrá iniciar sesión. Si todavía no tiene cuenta, podrá registrarse con ese email y entrar al espacio asignado.</p>
-          <button className="btn" type="submit" disabled={Boolean(busy) || loading || !workspace}>{busy === "assign" ? "Asignando acceso…" : sendEmail ? "Asignar y enviar acceso" : "Asignar acceso"}</button>
+          <button className="btn btn-primary" type="submit" disabled={Boolean(busy) || loading || !workspace}>{busy === "assign" ? "Asignando acceso…" : sendEmail ? "Asignar y enviar acceso" : "Asignar acceso"}</button>
         </form>
       </InfoDisclosure></div>
       {reassignment && <div className="card confirmation" role="alert"><h3>Esta persona ya pertenece a otro espacio</h3><p><strong>{reassignment.email}</strong> pasará a <strong>{workspace?.name}</strong> y perderá acceso a sus espacios anteriores. Sus datos se conservarán.</p>
@@ -103,7 +104,7 @@ export default function UserManagementSection({ currentUser }) {
       {error && <div className="card message error" role="alert">{error}</div>}
       {notice && <div className={`card message ${notice.warning ? "warning" : "success"}`} role="status">{notice.text}</div>}
       <div className="card members"><InfoDisclosure title={`Miembros de ${workspace?.name || "este espacio"}`} description={`${users.length} personas · roles y acceso`}><div className="flex-between"><button className="btn btn-sm btn-ghost" disabled={loading || Boolean(busy)} onClick={() => { setError(""); loadUsers(); }}>{loading ? "Cargando…" : "Actualizar"}</button></div>
-        {loading ? <p className="muted">Cargando miembros…</p> : users.length === 0 ? <p className="muted">Todavía no hay miembros. Asigná el primer acceso desde el formulario.</p> : <ul className="member-list">{users.map(user => <li className="member" key={user.id}>
+        {loading ? <p className="muted" role="status">Cargando miembros…</p> : users.length === 0 ? <p className="muted">Todavía no hay miembros. Asigná el primer acceso desde el formulario.</p> : <ul className="member-list">{users.map(user => <li className="member" key={user.id}>
           <div className="member-identity"><strong>{user.email}</strong><span className={`account-state ${user.is_pending ? "pending" : "active"}`}>{user.is_pending ? "Pendiente de ingreso" : "Cuenta vinculada"}</span>
             <span className="muted">{user.email_status === "sent" ? `Correo enviado ${formatArgentinaDateTime(user.email_sent_at)}` : user.email_status === "failed" ? "No se pudo enviar el correo. El acceso sigue asignado." : user.email_status === "sending" ? "Envío en curso…" : "Sin correo de acceso enviado"}</span>
           </div>
