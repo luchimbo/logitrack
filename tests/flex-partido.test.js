@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasFlexPartidoConflict, verifyFlexPartido } from '../src/lib/flexPartido.js';
+import { hasFlexPartidoConflict, sharedFlexCarrier, verifyFlexPartido } from '../src/lib/flexPartido.js';
 
 const cityHall = { latitude: -34.662495, longitude: -58.364856 };
 const shipment = {
     city: 'Avellaneda', province: 'Lanús', partido: 'lanus',
-    address: 'Av Mitre 750',
+    address: 'Calle Av Mitre 750',
 };
 const avellanedaResult = {
     altura: { valor: 750 },
@@ -33,12 +33,21 @@ test('confirms an interpolated point through an exact street and height match', 
     let searches = 0;
     const partido = await verifyFlexPartido(shipment, { ...cityHall, geolocation_type: 'RANGE_INTERPOLATED' }, async (url) => {
         searches++;
-        assert.equal(url.searchParams.get('direccion'), 'Av Mitre 750');
+        assert.equal(url.searchParams.get('direccion'), 'Calle Av Mitre 750');
         assert.equal(url.searchParams.get('localidad'), 'Avellaneda');
         return { ok: true, json: async () => ({ direcciones: [avellanedaResult] }) };
     });
     assert.equal(searches, 1);
     assert.equal(partido, 'avellaneda');
+});
+
+test('uses a shared carrier only when every possible mapped partido agrees', async () => {
+    const label = { city: 'Villa Adelina', province: 'San Isidro' };
+    const carriers = { san_isidro: 'FlexPRO', vicente_lopez: 'FlexPRO', merlo: 'EntregoYa' };
+    assert.equal(await sharedFlexCarrier(label, null, partido => carriers[partido]), 'FlexPRO');
+    assert.equal(await sharedFlexCarrier(label, null, partido => partido === 'san_isidro' ? 'FlexPRO' : null), null);
+    assert.equal(await sharedFlexCarrier(label, { municipality: { name: 'Merlo' } }, partido => carriers[partido]), null);
+    assert.equal(await sharedFlexCarrier({ city: 'Villa Adelina' }, null, () => 'FlexPRO'), null);
 });
 
 test('leaves partial, contradictory and unavailable address lookups for review', async () => {

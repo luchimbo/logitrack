@@ -21,6 +21,16 @@ function knownPartido(value) {
     return knownPartidos.has(id) ? id : null;
 }
 
+export async function sharedFlexCarrier(shipment, mlAddress, carrierForPartido) {
+    const city = knownPartido(shipment.city);
+    const zone = knownPartido(shipment.province);
+    if (!city || !zone || parentOf(city) === parentOf(zone)) return null;
+    const municipality = knownPartido(mlAddress?.municipality?.name);
+    const partidos = new Set([city, zone, municipality].filter(Boolean));
+    const carriers = await Promise.all([...partidos].map(carrierForPartido));
+    return carriers[0] && carriers.every(carrier => carrier === carriers[0]) ? carriers[0] : null;
+}
+
 export function hasFlexPartidoConflict(shipment, mlAddress) {
     const city = knownPartido(shipment.city) || knownPartido(shipment.partido);
     const zone = knownPartido(shipment.province);
@@ -95,7 +105,7 @@ async function searchGeoref(shipment, mlAddress, fetchImpl) {
         if (!response.ok) return null;
         const { direcciones } = await response.json();
         const candidates = new Set();
-        const streetTokens = normalize(address.street).split(' ');
+        const streetTokens = normalize(address.street).replace(/^calle /, '').split(' ');
         for (const result of direcciones || []) {
             const matchedLocalities = [result.localidad?.nombre, result.localidad_censal?.nombre].map(normalize);
             const matchedStreet = normalize(result.calle?.nombre).split(' ');

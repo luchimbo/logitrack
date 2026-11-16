@@ -15,7 +15,7 @@ export async function POST(request) {
         const { searchParams } = new URL(request.url);
         const batch_id = searchParams.get('batch_id');
 
-        let sql = "SELECT id, partido, assigned_carrier FROM shipments WHERE workspace_id = ? AND shipping_method = 'flex'";
+        let sql = "SELECT id, partido, assigned_carrier FROM shipments WHERE workspace_id = ? AND shipping_method = 'flex' AND NULLIF(TRIM(partido), '') IS NOT NULL";
         const args = [workspaceId];
 
         if (batch_id) {
