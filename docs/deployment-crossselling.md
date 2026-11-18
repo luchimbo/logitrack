@@ -164,3 +164,7 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 ### Seguimiento automático · 17/11/2026
 
 - Los logs de producción de la última hora sin filtro de rama muestran upkeep a las 08:43:46 de Argentina (xx6zx-1794915826124-a084f28164d8, despliegue dpl_7MWjKTgSr1fBgszRsVMNQMUMmPDy). Respondió HTTP 200 y sigue pendiente verificar el resultado por cuenta. Sync no figura en la ventana consultada.
+
+### Seguimiento automático · 18/11/2026
+
+- Logs de producción de la última hora sin filtro de rama: upkeep respondió HTTP 200 (drq8z-1795002226134-4a6054c82882, despliegue dpl_7MWjKTgSr1fBgszRsVMNQMUMmPDy). No se obtuvo el resultado por cuenta. Sync no figura en la ventana consultada. La API de Vercel confirma ambos cron habilitados.
