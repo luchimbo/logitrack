@@ -140,7 +140,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     return () => { clearTimeout(first); clearInterval(timer); };
   }, [busyLoading]);
   const stage = seconds < 4 ? 'Consultando la base de datos…' : seconds < 20 ? 'Calculando ventas, cargos y costos de cada envío…' : 'Armando el resumen guardado. Esta primera vez puede tardar unos minutos; después abre rápido.';
-  const scope = report ? summary.count ? `${summary.count} envíos en la selección` : 'Sin envíos en este período' : 'Calculando el período…';
+  const scope = report ? summary.count ? `${summary.count} envíos en la selección` : 'Sin envíos en este período. Probá con otro período o conectá un canal en Canales.' : 'Calculando el período…';
   const visibleZones = groupMap.has('__missing__') ? [...MAP_ZONES, '__missing__'] : MAP_ZONES;
   const colecta = filters.method !== 'flex';
   const what = country ? 'las provincias' : byPartido ? 'los partidos' : 'las zonas';

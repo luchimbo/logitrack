@@ -142,7 +142,7 @@ export default function LogisticsFinance({ currentUser, delivery = false }) {
     // Orders are created a few days before their dispatch day.
     const dateFrom = filters.from ? `${day(filters.from, -5)}T00:00:00.000-03:00` : '';
     const dateTo = filters.to ? `${day(filters.to, 1)}T23:59:59.999-03:00` : '';
-    if (!plan.connections.length) throw new Error('No hay cuentas de Mercado Libre conectadas o su acceso venció. Reconectá la cuenta desde Integraciones.');
+    if (!plan.connections.length) throw new Error('No hay cuentas de Mercado Libre conectadas o su acceso venció. Conectala o reconectala desde Canales e integraciones.');
     const totals = { saved: 0, failed: 0, found: 0 };
     for (const [index, account] of plan.connections.entries()) {
       let offset = 0, total = null, saved = 0;

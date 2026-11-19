@@ -26,8 +26,8 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} onReplayTour={onReplayTour} />;
     case "upload": return <UploadSection />;
     case "pickingList": return <PickingList />;
-    case "flex": return <FlexSection />;
-    case "colecta": return <ColectaSection />;
+    case "flex": return <FlexSection onNavigate={onNavigate} />;
+    case "colecta": return <ColectaSection onNavigate={onNavigate} />;
     case "workspaceSetup": return canManageUsers ? <WorkspaceSetupSection /> : <div>No autorizado</div>;
     case "zoneConfig": return <ZoneConfig />;
     case "dashboard": return <Dashboard />;

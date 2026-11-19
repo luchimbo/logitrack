@@ -13,13 +13,16 @@ import LoadingButton from "./LoadingButton";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 import MobileSelectionBar from "./MobileSelectionBar";
 import SectionTitle from "./SectionTitle";
+import EmptyGuide from "./EmptyGuide";
+import { EMPTY_STATES, loadFailure } from "@/lib/emptyStates";
 
-export default function ColectaSection() {
+export default function ColectaSection({ onNavigate }) {
     const { getTodayQueryString, reloadBatches } = useBatch();
     const [allShipments, setAllShipments] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [reloadKey, setReloadKey] = useState(0);
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
@@ -43,7 +46,7 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [getTodayQueryString, clearSelection]);
+    }, [getTodayQueryString, clearSelection, reloadKey]);
 
     // Deduce which sender (remitente) belongs to ATO (the account that ships
     // Arturia products); every other sender is PCM. See lib/accountDetection.js.
@@ -159,6 +162,7 @@ export default function ColectaSection() {
             <div className="section active">
                 <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
                 <div className="spinner"></div>
+                <p className="empty-state-text" role="status">Cargando colecta…</p>
             </div>
         );
     }
@@ -167,7 +171,7 @@ export default function ColectaSection() {
         return (
             <div className="section active">
                 <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
-                <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+                <EmptyGuide error title={loadFailure("la colecta").title} text={error} onRetry={() => setReloadKey((key) => key + 1)} />
             </div>
         );
     }
@@ -182,10 +186,7 @@ export default function ColectaSection() {
                     </div>
                     {accountSelector}
                 </div>
-                <div className="empty-state">
-                    <div className="empty-state-icon">📦</div>
-                    <p className="empty-state-text">Sin envíos de colecta.</p>
-                </div>
+                <EmptyGuide title={EMPTY_STATES.colecta.title} text={EMPTY_STATES.colecta.text} actions={EMPTY_STATES.colecta.actions} onNavigate={onNavigate} />
             </div>
         );
     }
