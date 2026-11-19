@@ -7,3 +7,12 @@ node_modules
 
 # Local diagnostics and downloaded deployment settings
 .vercel-inspect/
+
+# Historical recoveries and portable printer distributions are not web source.
+recuperados/
+GeoModi-Impresion-V2/
+PAQUETE-IMPRESION-V2.zip
+GeoModi-Impresion-V2.zip
+_legacy_backup/
+logs/
+.claude/

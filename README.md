@@ -71,12 +71,6 @@ npm run dev
 
 App en `http://localhost:3000`.
 
-Sandbox visual sin login ni DB:
-
-- `http://localhost:3000/dev/geomodi-preview`
-- usa datos mock permanentes para probar cambios de UI
-- si definis `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, la pestaña mapa usa el componente real
-
 Build de verificacion:
 
 ```bash
@@ -148,7 +142,9 @@ ni se realizan transferencias. Subsidios Flex y recargos por peso/producto queda
 - `npm run start`: servir build
 - `npm run lint`: lint
 - `npm run bootstrap:legacy-admin -- --username <usuario> --password <clave-segura>`: crear o rotar admin legacy
-- `npm run db:pull-prod:yes`: borrar la base Turso local y copiar schema/datos desde produccion
+- `npm test`: ejecutar las pruebas
+- `npm run db:check`: comprobar la conexión con la base
+- `npm run deploy:production`: publicar con las verificaciones de producción
 
 ---
 
@@ -268,16 +264,16 @@ Estados:
 
 ## Deploy
 
-Flujo recomendado:
-
-1. Commit/push a `main`
-2. Esperar deploy en Vercel
-3. Verificar endpoints criticos:
+El proyecto público es `logitrack`. Desde este repositorio:
 
 ```bash
-curl -s https://logitrack-tan.vercel.app/api/flex-health?period=today
-curl -s https://logitrack-tan.vercel.app/api/v2/print-jobs?limit=1
+npm test
+npm run deploy:production
 ```
+
+El comando verifica el proyecto, crea un despliegue sin asignar dominios y comprueba
+las rutas y dominios de las tiendas antes de promoverlo. Si falla una comprobación,
+se conserva la versión pública anterior. Ver el [procedimiento vigente](docs/deployment-crossselling.md).
 
 ---
 

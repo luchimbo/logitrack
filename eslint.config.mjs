@@ -10,6 +10,15 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Historical copies and local artifacts are not application source.
+    "recuperados/**",
+    "_backup/**",
+    "_legacy_backup/**",
+    ".vercel/**",
+    ".vercel-inspect/**",
+    "logs/**",
+    ".claude/**",
+    "GeoModi-Impresion-V2/**",
   ]),
 ]);
 
