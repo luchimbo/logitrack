@@ -73,7 +73,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
   const mlOrders = mlUnavailable ? [] : mlData.liveOrders;
   const metrics = getMercadoLibrePackingMetrics(mlOrders);
   const breakdown = getMercadoLibrePackingBreakdown(mlOrders);
-  const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Sin datos de Mercado Libre." : "";
+  const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Todavía no hay paquetes de Mercado Libre para mostrar. Conectá tu cuenta en Canales o subí etiquetas." : "";
 
   return <div className="section operation-today">
     <GettingStarted onNavigate={onNavigate} canManage={currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role)} />
@@ -90,8 +90,8 @@ export default function OperationToday({ currentUser, onNavigate }) {
     </header>
     {error ? <div className="operation-alert critical" role="alert"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
     <section className="operation-method-grid" aria-labelledby="operation-packing-title">
-      <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} />
-      <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} />
+      <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} onConnect={() => onNavigate("integrations")} />
+      <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} onConnect={() => onNavigate("integrations")} />
     </section>
     <nav className="operation-shortcuts" aria-label="Accesos de Operación de hoy">
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate("deliveryControl")}>Control de entregas</button>
@@ -101,7 +101,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
 }
 
 // Vista mínima: un número por tipo. Doble click (o Enter) abre el detalle por cuenta.
-function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
+function MethodCard({ title, tone, total, pending, accounts, onOpen, onConnect }) {
   const [open, setOpen] = useState(false);
   const toggle = () => setOpen((value) => !value);
   return <article
@@ -110,7 +110,10 @@ function MethodCard({ title, tone, total, pending, accounts, onOpen }) {
     onDoubleClick={toggle}
   >
     <p className="operation-method-title">{title}</p>
-    {pending ? <div className="operation-source-empty">{pending}</div> : <div className="operation-source-total"><strong>{total}</strong><span>paquetes listos</span></div>}
+    {pending ? <div className="operation-source-empty">
+      {pending}
+      {!pending.startsWith("Consultando") && onConnect ? <button type="button" className="btn btn-ghost btn-sm" onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onConnect(); }}>Ir a Canales</button> : null}
+    </div> :<div className="operation-source-total"><strong>{total}</strong><span>paquetes listos</span></div>}
     <button type="button" className="operation-detail-toggle" aria-expanded={open} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggle(); }}>{open ? "Ocultar detalle" : "Ver detalle"}</button>
     {open ? <div className="operation-method-detail" onDoubleClick={(event) => event.stopPropagation()}>
       <div className="operation-source-rows">
