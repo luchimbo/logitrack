@@ -183,3 +183,7 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 ### Corrección de redirección de ingreso (19/11/2026)
 
 Publicada con `npm run deploy:production` a `dpl_4XmEBnEXUAMnEzUbnBT1HX9gNCPH` (código `d5db268`): login y registro fuerzan `/app` también en la transferencia entre ambos. Controles HMAC y dominios aprobados antes y después de promover. No verificada con un ingreso real de cuenta nueva; la causa se dedujo del código.
+
+### Etiquetas de interfaz (19/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_24VNwgi3h28n9ZX8rUA7PBWH5kdC` (código `dae94c1`): «GBA 3» sin «OPCIONAL» y el menú «Canales e integraciones» (la barra móvil conserva «Canales»). Controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
