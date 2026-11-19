@@ -645,3 +645,7 @@ test('refresh targets include recent Flex orders with missing sale totals even w
   } finally { cleanup(); }
 });
 
+
+// El driver nativo en Windows a veces falla (0xC0000005) al cerrar el proceso con bases de archivo
+// recién cerradas; esperar un instante evita ese cierre abrupto sin ocultar fallos reales.
+test.after(() => new Promise((resolve) => setTimeout(resolve, 500)));
