@@ -179,3 +179,7 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 - Publicado con `npm run deploy:production` a `dpl_FrbDzZbv7jMJsV9Jb4YrnVQXNv52` (`logitrack-856dxlvcc-lucio-tamborinis-projects.vercel.app`), código `3315372`, proyecto logitrack. El script verificó rutas HMAC y dominios antes de promover.
 - Después de promover: `https://www.geomodi.ai/` y `/login` responden 200; `/api/shipments` sin sesión, 401; `node scripts/check-crossselling-deployment.mjs https://www.geomodi.ai` aprobado (rutas HMAC, dominios de ambas tiendas y script). Las rutas administrativas retiradas responden 401 sin sesión (el 410 solo se ve con sesión).
 - La migración de transportistas se aplicó antes (ver `docs/recuperacion.md`). Versión pública anterior: ver el registro de despliegues de Vercel. No se verificó con un inicio de sesión real de Clerk ni los recorridos con sesión; queda pendiente.
+
+### Corrección de redirección de ingreso (19/11/2026)
+
+Publicada con `npm run deploy:production` a `dpl_4XmEBnEXUAMnEzUbnBT1HX9gNCPH` (código `d5db268`): login y registro fuerzan `/app` también en la transferencia entre ambos. Controles HMAC y dominios aprobados antes y después de promover. No verificada con un ingreso real de cuenta nueva; la causa se dedujo del código.
