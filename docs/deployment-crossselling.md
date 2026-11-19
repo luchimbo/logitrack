@@ -173,3 +173,9 @@ Mantener estos archivos versionados en el repositorio principal. Publicar direct
 
 - Logs de producción de la última hora sin filtro de rama. Upkeep respondió HTTP 200 a las 08:43:46 (6lrcv-1795088626138-e707c933f6e7) en dpl_7MWjKTgSr1fBgszRsVMNQMUMmPDy, sin mensajes de runtime ni resultados por cuenta. Sync no figura en esa ventana.
 - La API de Vercel confirma ambos cron habilitados con horarios 11:00 y 11:20 UTC. Panel gráfico no inspeccionado. Sigue pendiente verificar el resultado por cuenta de upkeep.
+
+## Publicación del 19/11/2026 (apertura a usuarios externos, etapas locales)
+
+- Publicado con `npm run deploy:production` a `dpl_FrbDzZbv7jMJsV9Jb4YrnVQXNv52` (`logitrack-856dxlvcc-lucio-tamborinis-projects.vercel.app`), código `3315372`, proyecto logitrack. El script verificó rutas HMAC y dominios antes de promover.
+- Después de promover: `https://www.geomodi.ai/` y `/login` responden 200; `/api/shipments` sin sesión, 401; `node scripts/check-crossselling-deployment.mjs https://www.geomodi.ai` aprobado (rutas HMAC, dominios de ambas tiendas y script). Las rutas administrativas retiradas responden 401 sin sesión (el 410 solo se ve con sesión).
+- La migración de transportistas se aplicó antes (ver `docs/recuperacion.md`). Versión pública anterior: ver el registro de despliegues de Vercel. No se verificó con un inicio de sesión real de Clerk ni los recorridos con sesión; queda pendiente.
