@@ -13,6 +13,13 @@ Actualizado el 19/11/2026. Describe lo medido y lo que sigue sin resolverse; no 
 
 Limitación declarada: la copia está en la misma PC (no fuera del sitio) y la clave solo se descifra con ese perfil de Windows. Perder la PC equivale a perder la copia externa y su clave.
 
+## Herramientas agregadas (19/11/2026)
+
+- **Retención de la copia cifrada:** `backup-offhost.ps1` elimina, después de crear y verificar una copia nueva, las de más de 30 días, sin bajar nunca de 7 archivos (`-RetentionDays`, `-MinimumCopies`). Aún no se ejecutó una eliminación real: todas las copias actuales son de hoy.
+- **Custodia de la clave:** `backup-key-custody.ps1 -Export -CustodyFile <ruta>` genera un archivo protegido por una frase de paso (PBKDF2 + AES-GCM) que se guarda fuera de la PC; `-Import` lo recupera en otra cuenta. Probado en una carpeta temporal con una clave ficticia (la clave vuelve idéntica; una frase errónea se rechaza). **No se ejecutó sobre la clave real**: lo debe hacer el responsable, porque la frase no puede conocerla otra persona, y debe guardar el archivo y la frase por separado.
+- **Redis:** `node scripts/backup-redis.mjs` (solo lectura: SCAN, TYPE, PTTL, GET, HGETALL) con `KV_REST_API_URL` y `KV_REST_API_TOKEN` en la terminal. Probado con un servidor simulado; **no se ejecutó contra el Redis real** (las credenciales viven en Vercel y no se extrajeron). Guarda en `_backup/redis`, fuera de Git; contiene datos de carritos.
+- **Exportación por espacio:** `node scripts/export-workspace.mjs --workspace <id> [--write]`. Probada en simulación y con un recuento de solo lectura en producción (espacio 2).
+
 ## Objetivos propuestos (a validar por el responsable)
 
 - Pérdida máxima tolerable (RPO): 24 h para la base (respaldo diario); sin definir para Redis.

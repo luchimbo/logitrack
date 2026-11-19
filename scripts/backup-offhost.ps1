@@ -1,7 +1,9 @@
 param(
     [string]$BackupDirectory = (Join-Path $PSScriptRoot '..\_backup\offhost'),
     [string]$SourceHost = 'pcmidi',
-    [string]$InputArchive = ''
+    [string]$InputArchive = '',
+    [int]$RetentionDays = 30,
+    [int]$MinimumCopies = 7
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security.Cryptography.ProtectedData
@@ -59,6 +61,10 @@ try {
     [System.IO.File]::Move($tempPath, $finalPath)
     & (Join-Path $PSScriptRoot 'verify-offhost.ps1') -BackupFile $finalPath -KeyFile $keyPath
     Write-Output "Respaldo cifrado creado: $finalPath"
+    # Retención: solo después de crear y verificar la copia nueva. Nunca queda por debajo de $MinimumCopies archivos.
+    $copies = @(Get-ChildItem -LiteralPath $backupRoot -Filter '*.gmbak' -File | Sort-Object LastWriteTimeUtc -Descending)
+    $expired = @($copies | Select-Object -Skip $MinimumCopies | Where-Object { $_.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddDays(-$RetentionDays) })
+    foreach ($old in $expired) { Remove-Item -LiteralPath $old.FullName -Force; Write-Output "Retención: eliminada $($old.Name)" }
 } finally {
     if ($key) { [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($key) }
     if ($plaintext) { [System.Security.Cryptography.CryptographicOperations]::ZeroMemory($plaintext) }
