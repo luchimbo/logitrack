@@ -21,9 +21,9 @@ const OperationToday = dynamic(() => import("@/components/OperationToday"), { lo
 const PackageHistorySection = dynamic(() => import("@/components/PackageHistorySection"), { loading });
 const LogisticsFinance = dynamic(() => import("@/components/LogisticsFinance"), { loading });
 
-export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate }) {
+export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate, onReplayTour }) {
   switch (activeTab) {
-    case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} />;
+    case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} onReplayTour={onReplayTour} />;
     case "upload": return <UploadSection />;
     case "pickingList": return <PickingList />;
     case "flex": return <FlexSection />;

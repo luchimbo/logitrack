@@ -10,7 +10,7 @@ const CACHE_TTL_MS = 60_000;
 const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
 const operationCaches = new Map();
 
-export default function OperationToday({ currentUser, onNavigate }) {
+export default function OperationToday({ currentUser, onNavigate, onReplayTour }) {
   const cacheKey = currentUser?.workspaceId;
   const operationCache = operationCaches.get(cacheKey);
   const [sources, setSources] = useState(() => operationCache?.sources || { mercadolibre: null });
@@ -76,7 +76,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
   const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Todavía no hay paquetes de Mercado Libre para mostrar. Conectá tu cuenta en Canales o subí etiquetas." : "";
 
   return <div className="section operation-today">
-    <GettingStarted onNavigate={onNavigate} canManage={currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role)} />
+    <GettingStarted onNavigate={onNavigate} onReplayTour={onReplayTour} canManage={currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role)} />
     <header className="operation-toolbar">
       <div>
         <h1 id="operation-packing-title">Paquetes listos para imprimir</h1>

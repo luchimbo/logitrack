@@ -20,6 +20,8 @@ export async function PATCH(request) {
     const body = await request.json().catch(() => ({}));
     const completed = body?.completed !== false;
 
+    // Omitir y finalizar ocultan el recorrido por igual (se puede volver a abrir desde
+    // «Primeros pasos»); la auditoría sí distingue una acción de la otra.
     await db.execute({
       sql: 'UPDATE app_users SET onboarding_completed = ? WHERE id = ?',
       args: [1, actor.appUserId],

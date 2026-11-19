@@ -26,7 +26,7 @@ export default function AppHome() {
   const handleBadgeUpdate = useCallback((key, count) => {
     setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
   }, []);
-  const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
+  const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, setShowOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
   useSettlementJobs(Boolean(currentUser?.workspaceId) && canManageWorkspace);
@@ -151,7 +151,7 @@ export default function AppHome() {
 
   return (
     <>
-      {showOnboarding && <OnboardingTour activeTab={effectiveActiveTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
+      {showOnboarding && <OnboardingTour activeTab={effectiveActiveTab} canManage={Boolean(canManageWorkspace)} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
       <AppShell
         activeTab={effectiveActiveTab}
         currentUser={currentUser}
@@ -171,6 +171,7 @@ export default function AppHome() {
           currentUser={currentUser}
           onBadgeUpdate={handleBadgeUpdate}
           onNavigate={handleNavClick}
+          onReplayTour={() => setShowOnboarding(true)}
         />
       </AppShell>
     </>

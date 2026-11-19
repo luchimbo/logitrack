@@ -1,42 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { tourStepsFor } from '@/lib/onboardingSteps';
 
-const STEPS = [
-  {
-    title: 'Bienvenido a GeoModi',
-    body: 'Este espacio te permite cargar etiquetas y seguir toda la operación logística sin mezclar datos con otros usuarios.',
-    recommended: 'Subir primeras etiquetas',
-  },
-  {
-    title: '1. Subí etiquetas',
-    body: 'Empezá desde “Subir Etiquetas”. Ahí cargás los archivos ZPL/TXT y el sistema los transforma en envíos operativos.',
-    tab: 'upload',
-    recommended: 'Subir primeras etiquetas',
-  },
-  {
-    title: '2. Revisá el Dashboard',
-    body: 'En Dashboard vas a ver envíos, unidades y comparativas por período. Podés usar fecha o rango y aplicar los filtros manualmente.',
-    tab: 'dashboard',
-    recommended: 'Mirar métricas y comparativas',
-  },
-  {
-    title: '3. Prepará Picking y operación',
-    body: 'Picking te resume productos y cantidades. Flex y Colecta separan la operación diaria para despacho.',
-    tab: 'pickingList',
-    recommended: 'Preparar el picking',
-  },
-];
-
-const STEP_BY_TAB = STEPS.reduce((acc, step, index) => {
-  if (step.tab) acc[step.tab] = index;
-  return acc;
-}, {});
-
-export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
+export default function OnboardingTour({ activeTab, canManage = false, onClose, onNavigate }) {
   const [hasStarted, setHasStarted] = useState(false);
   const dialogRef = useRef(null);
-  const step = hasStarted ? (STEP_BY_TAB[activeTab] ?? 1) : 0;
+  const STEPS = useMemo(() => tourStepsFor(canManage), [canManage]);
+  const stepByTab = useMemo(() => STEPS.reduce((acc, item, index) => {
+    if (item.tab) acc[item.tab] = index;
+    return acc;
+  }, {}), [STEPS]);
+  const step = hasStarted ? (stepByTab[activeTab] ?? 1) : 0;
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
 
@@ -80,6 +55,7 @@ export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
 
     if (isLast) {
       onClose(true);
+      onNavigate('operationToday');
       return;
     }
 
@@ -102,13 +78,13 @@ export default function OnboardingTour({ activeTab, onClose, onNavigate }) {
   };
 
   return (
-    <div className="onboarding-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(false); }}>
+    <div className="onboarding-overlay">
       <section ref={dialogRef} className="card onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
         <div className="onboarding-scroll">
         <div className="onboarding-heading">
           <div>
             <div className="onboarding-kicker">Recorrido inicial</div>
-            <h3 id="onboarding-title">{current.title}</h3>
+            <h3 id="onboarding-title">{step > 0 ? `${step}. ${current.title}` : current.title}</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.7 }}>{current.body}</p>
           </div>
           <div className="topbar-chip subtle">Página {step + 1} de {STEPS.length}</div>
