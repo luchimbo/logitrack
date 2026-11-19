@@ -60,13 +60,13 @@ export default function AppShell({
     { title: "Operación de hoy", icon: "operation", items: findItems(["operationToday", "pickingList", "flex", "colecta", "upload"]) },
     { title: "Seguimiento", icon: "colecta", items: findItems(["deliveryControl", "printJobs"]) },
     { title: "Resultados", icon: "dashboard", items: findItems(["dashboard", "logisticsFinance"]) },
-    { title: "Canales", icon: "integrations", items: findItems(["mercadolibre", "tiendanube", "shopify", "zipnova", "integrations"]) },
+    { title: "Canales e integraciones", mobileLabel: "Canales", icon: "integrations", items: findItems(["mercadolibre", "tiendanube", "shopify", "zipnova", "integrations"]) },
     { title: "Configuración", icon: "settings", items: findItems(["zoneConfig", "userManagement", "workspaceSetup"]) },
     { title: "Admin Maestro", icon: "settings", items: findItems(["adminOverview"]) },
   ].filter((group) => group.items.length);
   const activeSection = sections.find((group) => group.items.some((item) => item.id === activeTab)) || sections[0];
   const activeItem = activeSection?.items.find((item) => item.id === activeTab);
-  const sectionItem = (group) => ({ ...group.items[0], label: group.title, icon: group.icon });
+  const sectionItem = (group) => ({ ...group.items[0], label: group.mobileLabel || group.title, icon: group.icon });
   const groupedMobile = { primaryItems: sections.slice(0, 4).map(sectionItem), moreGroups: sections.slice(4).map((group) => ({ title: group.title, items: [sectionItem(group)] })) };
   const sheetRef = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
