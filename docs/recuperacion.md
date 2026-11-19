@@ -68,4 +68,4 @@ Simulada sobre una copia restaurada (3 transportistas creados, integridad correc
 3. `node scripts/apply-carrier-migration.mjs --apply --backup-verified` (una transacción; se revierte ante error).
 4. Revertir el código no deshace la migración: para volver atrás hay que restaurar la copia.
 
-No se aplicó en producción.
+**Aplicada en producción el 19/11/2026 con autorización del responsable**, con la copia `geomodi-20261119T134534901Z.gmbak` verificada y un volcado previo de las filas afectadas en `_backup/exports/prev-carrier-migration-20261119.json`. Resultado: 3 transportistas creados en el espacio 2 (ahora tiene 5), las 16 tarifas apuntan a transportistas propios, 0 tarifas sin transportista, los 3 transportistas de PC MIDI sin cambios y 3 registros de auditoría. Una segunda simulación da 0 pendientes. Se borró la instantánea financiera del espacio 2, que se reconstruye en segundo plano. El código con el aislamiento aún no está publicado: hasta publicarlo, la app pública sigue siendo la versión anterior.
