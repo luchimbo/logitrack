@@ -191,3 +191,7 @@ Publicado con `npm run deploy:production` a `dpl_24VNwgi3h28n9ZX8rUA7PBWH5kdC` (
 ### Tarjetas vacías de Operación de hoy (19/11/2026)
 
 Publicado con `npm run deploy:production` a `dpl_FVwuWbQ7Rv2DJXVqYTY1Zh9gMTft` (código `579e823`): las tarjetas Flex y Total Colecta sin datos de Mercado Libre explican cómo conectar el canal y enlazan a Canales. Tests (197) y build aprobados antes; controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
+
+### Mejoras para comercios nuevos (19/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt` (código `a88d679`): avisos visibles, errores de red claros, recorrido inicial unificado con «Primeros pasos», estados vacíos con acciones en Flex y Colecta, y corrección del test intermitente de finanzas. Tests (213) y build aprobados antes; controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
