@@ -1,19 +1,26 @@
 // src/lib/api.js
+import { friendlyNetworkError, messageForStatus } from './apiErrors.js';
 
 export async function api(path, options = {}) {
-    const res = await fetch(`/api${path}`, {
-        headers: { 'Content-Type': 'application/json', ...options.headers },
-        ...options,
-    });
+    let res;
+    try {
+        res = await fetch(`/api${path}`, {
+            headers: { 'Content-Type': 'application/json', ...options.headers },
+            ...options,
+        });
+    } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        throw friendlyNetworkError(error);
+    }
 
     if (!res.ok) {
         let err;
         try {
             err = await res.json();
         } catch (e) {
-            err = { detail: 'Error de servidor' };
+            err = {};
         }
-        throw new Error(err.detail || err.error || `Error ${res.status}`);
+        throw new Error(messageForStatus(res.status, err.detail || err.error));
     }
     return res.json();
 }
@@ -67,9 +74,18 @@ export function toast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toast-container');
     if (!container) return; // Fallback if container not rendered yet
 
+    const text = String(message ?? '');
+    // Los refrescos automáticos repiten el mismo error: no apilar avisos idénticos.
+    if (Array.from(container.children).some((child) => child.dataset.message === text)) return;
+
     const el = document.createElement('div');
     el.className = `toast ${type}`;
-    el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span><span>${message}</span>`;
+    el.dataset.message = text;
+    const icon = document.createElement('span');
+    icon.textContent = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+    const body = document.createElement('span');
+    body.textContent = text; // textContent: el mensaje puede venir del servidor
+    el.append(icon, body);
     container.appendChild(el);
     setTimeout(() => el.remove(), duration);
 }

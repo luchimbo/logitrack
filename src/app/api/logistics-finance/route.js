@@ -44,7 +44,7 @@ export async function GET(request) {
     const report = await repository.report(workspaceId, filters, { compact: ['map', 'targets'].includes(p.get('view')) && p.get('format') !== 'csv', withRows: p.get('view') === 'detail', withTargets: p.get('view') === 'targets', refresh: p.get('refresh') === '1', scheduleRefresh: (job) => after(job) });
     if (p.get('format') === 'csv') return csvResponse(report.rows, columns, 'gastos-envios');
     return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) { return NextResponse.json({ error: error.message || 'No se pudo cargar' }, { status: 500 }); }
+  } catch (error) { console.error('Error en ventas y costos:', error); return NextResponse.json({ error: 'No pudimos cargar ventas y costos. Reintentá en unos minutos.' }, { status: 500 }); }
 }
 export async function POST(request) {
   try {

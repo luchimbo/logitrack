@@ -212,6 +212,7 @@ export default function AppShell({
             {activeSection.items.map((item) => <button key={item.id} type="button" className="btn btn-ghost btn-sm app-subsection" aria-current={activeTab === item.id ? "page" : undefined} onClick={() => onNavigate(item.id)}>{SUBSECTION_LABELS[item.id] || item.label}</button>)}
           </nav>}
           {children}</div>
+        <div id="toast-container" className="toast-container" role="status" aria-live="polite" />
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Navegación móvil">

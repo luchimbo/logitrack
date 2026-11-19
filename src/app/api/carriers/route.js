@@ -20,7 +20,7 @@ export async function GET(request) {
         return NextResponse.json(result.rows);
     } catch (error) {
         console.error("Error fetching carriers:", error);
-        return NextResponse.json({ error: "Failed to fetch carriers" }, { status: 500 });
+        return NextResponse.json({ error: "No pudimos cargar los transportistas. Reintentá en unos minutos." }, { status: 500 });
     }
 }
 
