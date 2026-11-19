@@ -25,7 +25,7 @@ export default function GettingStarted({ onNavigate, canManage }) {
     { title:'Revisá el picking', detail:status.shipments ? 'Disponible con los envíos cargados' : 'Disponible cuando cargues envíos', tab:'pickingList', action:'Abrir picking' },
     { title:'Consultá tus etiquetas', detail:status.labels ? 'Hay etiquetas disponibles' : 'Aparecerán cuando cargues etiquetas compatibles', tab:'upload', action:'Ver etiquetas' },
   ];
-  return <details className={styles.box} defaultOpen={!status.shipments}>
+  return <details className={styles.box} open={!status.shipments || undefined}>
     <summary className={styles.summary}><span><strong>Primeros pasos</strong><small>Prepará tu espacio para operar</small></span><span className={styles.count}>{steps.filter(step => step.done).length}/3 configurados</span></summary>
     <ol className={styles.steps}>{steps.map((step, index) => <li key={step.title}>
       <span className={`${styles.marker} ${step.done ? styles.done : ''}`} aria-hidden="true">{step.done ? '✓' : index + 1}</span>

@@ -18,6 +18,7 @@ const eslintConfig = defineConfig([
     ".vercel-inspect/**",
     "logs/**",
     ".claude/**",
+    ".sandbox/**",
     "GeoModi-Impresion-V2/**",
   ]),
 ]);
