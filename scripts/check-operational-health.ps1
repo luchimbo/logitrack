@@ -27,6 +27,15 @@ try {
   $latest = Get-ChildItem -LiteralPath $BackupDirectory -Filter '*.gmbak' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
   if (-not $latest -or ([DateTime]::UtcNow - $latest.LastWriteTimeUtc).TotalHours -gt $MaximumBackupAgeHours) { $problems.Add('No hay una copia externa reciente') }
 } catch { $problems.Add('No se pudo verificar la copia externa o su tarea') }
+# Reintentos de sincronización: se informa como AVISO y no altera el código de salida hasta revisar el atraso existente
+# (63 reintentos de Mercado Libre de octubre sin reprocesar, ver docs/recuperacion.md).
+try {
+  $node = (Get-Command node -ErrorAction Stop).Source
+  $ErrorActionPreference = 'Continue'
+  $sync = @(& $node (Join-Path $PSScriptRoot 'check-sync-health.mjs') 2>$null)
+  if ($LASTEXITCODE -ne 0) { $sync | Where-Object { $_ -like 'ERROR:*' } | ForEach-Object { Write-Output ($_ -replace '^ERROR:', 'AVISO:') } }
+  $ErrorActionPreference = 'Stop'
+} catch { Write-Output 'AVISO: no se pudo comprobar los reintentos de sincronización' }
 if ($problems.Count) {
   $problems | ForEach-Object { Write-Output "ERROR: $_" }
   exit 1

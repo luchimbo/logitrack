@@ -20,6 +20,18 @@ Limitación declarada: la copia está en la misma PC (no fuera del sitio) y la c
 - **Redis:** `node scripts/backup-redis.mjs` (solo lectura: SCAN, TYPE, PTTL, GET, HGETALL) con `KV_REST_API_URL` y `KV_REST_API_TOKEN` en la terminal. Probado con un servidor simulado; **no se ejecutó contra el Redis real** (las credenciales viven en Vercel y no se extrajeron). Guarda en `_backup/redis`, fuera de Git; contiene datos de carritos.
 - **Exportación por espacio:** `node scripts/export-workspace.mjs --workspace <id> [--write]`. Probada en simulación y con un recuento de solo lectura en producción (espacio 2).
 
+## Riesgo aceptado: custodia de la clave (decisión del responsable, 19/11/2026)
+
+El responsable decidió no generar un archivo de custodia independiente de la clave. Consecuencia: la clave de la copia cifrada solo se descifra con la cuenta de Windows actual. Si se pierde la PC o el perfil, las copias `.gmbak` quedan inutilizables y la recuperación depende únicamente del respaldo nocturno del servidor (mismo equipo que la base). `backup-key-custody.ps1` queda disponible si se revierte la decisión.
+
+## Reintentos de sincronización
+
+`node scripts/check-sync-health.mjs` (solo lectura) detecta reintentos acumulados (>200), vencidos (>120 min) o con 10 o más intentos; el control horario lo informa como **AVISO** sin cambiar el código de salida. Consulta del 19/11/2026: `ml_sync_retries` tiene 63 filas del 22 al 27/10 (espacio legacy, conexiones 91 y 3) con el error `Cannot read properties of null (reading 'logistic')`. El código actual protege esas lecturas con `?.` y nada reprocesa esas filas (solo se borran al sincronizar la orden con éxito). No se modificaron datos: queda para revisión del responsable; cuando se resuelva, el aviso debe pasar a error.
+
+## Canal de alertas: propuesta (sin activar)
+
+Hoy: notificación local de Windows solo con la PC encendida. Propuesta mínima: un correo de aviso desde el servidor (que está siempre encendido) a una casilla del responsable, o un mensaje a un canal de mensajería elegido por él, disparado por el mismo control. Requiere definir destinatario y canal, y credenciales de envío; no se envió ni configuró nada.
+
 ## Objetivos propuestos (a validar por el responsable)
 
 - Pérdida máxima tolerable (RPO): 24 h para la base (respaldo diario); sin definir para Redis.
