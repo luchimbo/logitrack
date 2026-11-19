@@ -187,3 +187,7 @@ Publicada con `npm run deploy:production` a `dpl_4XmEBnEXUAMnEzUbnBT1HX9gNCPH` (
 ### Etiquetas de interfaz (19/11/2026)
 
 Publicado con `npm run deploy:production` a `dpl_24VNwgi3h28n9ZX8rUA7PBWH5kdC` (código `dae94c1`): «GBA 3» sin «OPCIONAL» y el menú «Canales e integraciones» (la barra móvil conserva «Canales»). Controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
+
+### Tarjetas vacías de Operación de hoy (19/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_FVwuWbQ7Rv2DJXVqYTY1Zh9gMTft` (código `579e823`): las tarjetas Flex y Total Colecta sin datos de Mercado Libre explican cómo conectar el canal y enlazan a Canales. Tests (197) y build aprobados antes; controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
