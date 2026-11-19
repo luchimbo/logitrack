@@ -17,7 +17,7 @@ async function getMercadoLibreAddress(workspaceId, tracking) {
 export async function assignFlexCarrier(shipment, { workspaceId, mlAddress } = {}) {
     if (shipment.shipping_method?.toLowerCase() !== 'flex') return;
     const conflict = hasFlexPartidoConflict(shipment, mlAddress);
-    const carrier = conflict ? null : await assignCarrier(shipment.partido);
+    const carrier = conflict ? null : await assignCarrier(shipment.partido, workspaceId);
     if (carrier) {
         shipment.assigned_carrier ||= carrier;
         return;
@@ -26,6 +26,6 @@ export async function assignFlexCarrier(shipment, { workspaceId, mlAddress } = {
     const address = mlAddress ?? await getMercadoLibreAddress(workspaceId, shipment.tracking_number);
     shipment.partido = await verifyFlexPartido(shipment, address);
     shipment.assigned_carrier = shipment.partido
-        ? await assignCarrier(shipment.partido)
-        : await sharedFlexCarrier(shipment, address, assignCarrier);
+        ? await assignCarrier(shipment.partido, workspaceId)
+        : await sharedFlexCarrier(shipment, address, (partido) => assignCarrier(partido, workspaceId));
 }

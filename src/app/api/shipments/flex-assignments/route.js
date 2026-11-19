@@ -5,16 +5,16 @@ import { requireWorkspaceActor } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { normalizeShipmentIds } from "@/lib/shipmentDeletion";
 import { bumpFlexPortalRevision } from "@/lib/flexPortal";
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from "@/lib/globalCarrierConfig";
+import { carrierConfigScope } from "@/lib/globalCarrierConfig";
 
 export async function PATCH(request) {
   try {
     await ensureDb(); const auth = await requireWorkspaceActor(request);
     if (auth.error) return NextResponse.json(auth.error.body, { status: auth.error.status });
-    await ensureGlobalCarrierConfig();
+    const scope = await carrierConfigScope(auth.actor.workspaceId);
     const { ids, carrierName } = await request.json(); const selected = normalizeShipmentIds(ids); const target = String(carrierName || "").trim();
     if (!selected.length || !target) return NextResponse.json({ error: "Elegí paquetes y transportista" }, { status: 400 });
-    const carrier = await db.execute({ sql: "SELECT display_name FROM carriers WHERE workspace_id = ? AND name = ? LIMIT 1", args: [GLOBAL_CARRIER_CONFIG_SCOPE, target] });
+    const carrier = await db.execute({ sql: "SELECT display_name FROM carriers WHERE workspace_id = ? AND name = ? LIMIT 1", args: [scope, target] });
     if (!carrier.rows.length) return NextResponse.json({ error: "El transportista no está disponible" }, { status: 400 });
     const placeholders = selected.map(() => "?").join(",");
     const owned = await db.execute({ sql: `SELECT id FROM shipments WHERE workspace_id = ? AND shipping_method = 'flex' AND id IN (${placeholders})`, args: [auth.actor.workspaceId, ...selected] });

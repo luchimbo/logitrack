@@ -31,7 +31,7 @@ Aplicacion web para operacion logistica diaria:
 
 - Node.js 18+
 - npm
-- Base Turso activa
+- Claves de prueba de Clerk para el entorno local
 
 ---
 
@@ -42,7 +42,7 @@ Crear `.env.local` en la raiz:
 ```env
 DATABASE_URL=https://pcmidi.tailef6e62.ts.net
 DATABASE_AUTH_TOKEN=<tu-token>
-# Token Turso separado, limitado a lectura, para el portal externo de transportistas.
+# Token separado, limitado a lectura, para el portal externo de transportistas.
 DATABASE_READONLY_AUTH_TOKEN=<tu-token-de-solo-lectura>
 # Secreto aleatorio de al menos 32 caracteres para firmar links externos.
 CARRIER_PORTAL_SIGNING_SECRET=<secreto-largo-y-unico>
@@ -64,12 +64,18 @@ Notas:
 
 ## Correr local
 
-```bash
+`npm run dev` usa una base SQLite separada en `.sandbox/geomodi.db` y no carga los valores de `.env.local`. Necesita una instancia **de prueba** de Clerk; configurá sus claves en variables de entorno de la terminal (nunca en el repositorio):
+
+```powershell
+$env:GEOMODI_SANDBOX_CLERK_PUBLISHABLE_KEY = '<pk_test_...>'
+$env:GEOMODI_SANDBOX_CLERK_SECRET_KEY = '<sk_test_...>'
 npm install
 npm run dev
 ```
 
-App en `http://localhost:3000`.
+App en `http://localhost:3000`. El portal externo está deshabilitado en este entorno porque SQLite local no ofrece la credencial independiente de solo lectura que exige el portal. Conexiones, claves, Redis y webhooks de producción no se copian al entorno local. Las integraciones reales requieren entornos de prueba separados.
+
+Preview debe contar con una base independiente; la aplicación rechaza el host operativo de PC MIDI en Preview.
 
 Build de verificacion:
 

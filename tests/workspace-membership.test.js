@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client';
-import { assignWorkspaceUser } from '../src/lib/workspaceMembership.js';
+import { assignWorkspaceUser, removeWorkspaceUser } from '../src/lib/workspaceMembership.js';
 
 const actor = { workspaceId: 1, appUserId: 1, role: 'owner', isGlobalAdmin: true, email: 'owner@example.com', authType: 'clerk' };
 async function fixture() {
@@ -118,4 +118,49 @@ test('first sign-in links an assigned pending identity without creating another 
     assert.equal((await db.execute('SELECT * FROM workspaces')).rows.length, 3);
     assert.equal((await db.execute("SELECT clerk_user_id FROM app_users WHERE email='pending@example.com'")).rows[0].clerk_user_id, 'clerk-new');
   } finally { delete globalThis.__pendingMembershipAuthTest; db.close(); }
+});
+
+test('quitar acceso protege propietarios y otros espacios, y registra la acción', async () => {
+  const db = await fixture();
+  try {
+    await assert.rejects(removeWorkspaceUser(db, actor, 1), e => e.status === 403);
+    await assert.rejects(removeWorkspaceUser(db, actor, 2), e => e.status === 404);
+    await assert.rejects(removeWorkspaceUser(db, {...actor,isGlobalAdmin:false,role:'user'}, 1), e => e.status === 403);
+    await assignWorkspaceUser(db,actor,{email:'new@example.com',role:'user'});
+    const member=(await db.execute("SELECT wm.id FROM workspace_members wm JOIN app_users u ON u.id=wm.app_user_id WHERE u.email='new@example.com'")).rows[0];
+    await removeWorkspaceUser(db,actor,member.id);
+    assert.equal((await db.execute({sql:'SELECT count(*) AS n FROM workspace_members WHERE id=?',args:[member.id]})).rows[0].n,0);
+    assert.equal((await db.execute("SELECT count(*) AS n FROM audit_logs WHERE action='remove_workspace_user'")).rows[0].n,1);
+    assert.equal((await db.execute('SELECT count(*) AS n FROM workspace_members WHERE workspace_id IN (2,3)')).rows[0].n,2);
+  } finally {db.close();}
+});
+
+test('fallo de auditoría revierte la baja de acceso', async () => {
+  const db=await fixture();
+  try {
+    await assignWorkspaceUser(db,actor,{email:'new@example.com'});
+    const member=(await db.execute("SELECT wm.id FROM workspace_members wm JOIN app_users u ON u.id=wm.app_user_id WHERE u.email='new@example.com'")).rows[0];
+    await db.execute("CREATE TRIGGER fail_remove BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+    await assert.rejects(removeWorkspaceUser(db,actor,member.id));
+    assert.equal((await db.execute({sql:'SELECT count(*) AS n FROM workspace_members WHERE id=?',args:[member.id]})).rows[0].n,1);
+  } finally {db.close();}
+});
+test('una sesión existente pierde acceso al espacio en la siguiente solicitud', async () => {
+  const db=await fixture();
+  globalThis.__removedMemberDb = db;
+  try {
+    await assignWorkspaceUser(db,actor,{email:'registered@example.com',reassign:true});
+    let source=readFileSync(new URL('../src/lib/auth.js',import.meta.url),'utf8');
+    source=source.replace('import { auth, currentUser } from "@clerk/nextjs/server";', `const auth = async () => ({userId:'clerk-user'}); const currentUser = async () => ({primaryEmailAddress:{emailAddress:'registered@example.com'}});`)
+      .replace('import { jwtVerify } from "jose";', 'const jwtVerify = async () => { throw Error("unused"); };')
+      .replace('import { db } from "@/lib/db";', 'const db = globalThis.__removedMemberDb;')
+      .replace('import { ensureDb } from "@/lib/ensureDb";', 'const ensureDb = async () => {};')
+      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};');
+    const {getCurrentActor}=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+    const request={cookies:{get:()=>undefined}};
+    assert.equal((await getCurrentActor(request)).workspaceId,1);
+    const member=(await db.execute('SELECT id FROM workspace_members WHERE workspace_id=1 AND app_user_id=2')).rows[0];
+    await removeWorkspaceUser(db,actor,member.id);
+    assert.notEqual((await getCurrentActor(request)).workspaceId,1);
+  } finally {delete globalThis.__removedMemberDb;db.close();}
 });

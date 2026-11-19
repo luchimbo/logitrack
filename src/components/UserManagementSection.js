@@ -78,6 +78,20 @@ export default function UserManagementSection({ currentUser }) {
     } catch (err) { setError(err.message); }
     finally { setBusy(""); }
   }
+  async function removeAccess(user) {
+    if (!window.confirm(`¿Quitar el acceso de ${user.email} a ${workspace?.name}? Los datos del espacio se conservan.`)) return;
+    setBusy(`remove:${user.id}`); setError(""); setNotice(null);
+    try {
+      const response = await fetch("/api/auth/users", {
+        method:"DELETE", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ membershipId:user.id, workspaceId:workspace.id }), signal:AbortSignal.timeout(20000),
+      });
+      const data=await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo quitar el acceso.");
+      setNotice({text:"Acceso quitado."}); await loadUsers();
+    } catch (err) { setError(err.name === "TimeoutError" ? "La operación está tardando. Actualizá la lista para comprobar si se quitó el acceso." : err.message); }
+    finally { setBusy(""); }
+  }
   return (
     <section className="section workspace-users">
       <div className="section-header"><SectionTitle icon="users">Espacio y miembros</SectionTitle><p className="section-subtitle">Administrá quién puede entrar al espacio y qué rol tiene.</p></div>
@@ -110,7 +124,7 @@ export default function UserManagementSection({ currentUser }) {
           </div>
           <div className="member-controls"><label className="sr-only" htmlFor={`member-role-${user.id}`}>Rol de {user.email}</label><select id={`member-role-${user.id}`} className="form-select" value={user.role} disabled={user.role === "owner" || Boolean(busy)} onChange={event => changeRole(user, event.target.value)}>
             {user.role === "owner" && <option value="owner">Propietario</option>}<option value="admin">Administrador</option><option value="user">Usuario</option>
-          </select><button className="btn btn-sm btn-ghost" disabled={Boolean(busy)} onClick={() => resend(user)}>{busy === `email:${user.id}` ? "Enviando…" : user.email_sent_at ? "Reenviar acceso" : "Enviar acceso"}</button></div>
+          </select><button className="btn btn-sm btn-ghost" disabled={Boolean(busy)} onClick={() => resend(user)}>{busy === `email:${user.id}` ? "Enviando…" : user.email_sent_at ? "Reenviar acceso" : "Enviar acceso"}</button><button className="btn btn-sm btn-ghost" disabled={Boolean(busy) || user.role === "owner" || Boolean(user.is_global_admin) || user.email?.toLowerCase() === currentUser?.email?.toLowerCase()} onClick={() => removeAccess(user)}>{busy === `remove:${user.id}` ? "Quitando…" : "Quitar acceso"}</button></div>
         </li>)}</ul>}
       </InfoDisclosure></div>
       <style jsx>{`
@@ -118,7 +132,7 @@ export default function UserManagementSection({ currentUser }) {
         .destination{border-left:3px solid var(--accent);display:grid;gap:10px}.destination .form-select{max-width:650px}.eyebrow{text-transform:uppercase;font-size:11px;letter-spacing:.1em;font-weight:700;color:var(--text-muted)}
         .destination p,.muted{font-size:13px;color:var(--text-muted);line-height:1.6;margin:0}.assignment>p{margin:8px 0 20px}.assignment-fields{display:grid;grid-template-columns:2fr 1fr;gap:16px}.assignment-fields label{display:grid;gap:8px;font-size:13px;font-weight:600}
         .email-choice{display:flex;align-items:center;gap:9px;margin-top:18px;font-size:13px}.email-choice input{accent-color:var(--accent);width:16px;height:16px}.assignment form>p{margin:8px 0 18px;max-width:650px}
-        .member-list{list-style:none;padding:0;margin:14px 0 0}.member{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:18px 0;border-top:1px solid var(--border)}.member-identity{display:flex;align-items:flex-start;flex-direction:column;gap:7px;min-width:0}.member-identity strong{font-size:14px;overflow-wrap:anywhere}.member-controls{display:flex;align-items:center;gap:12px;flex-shrink:0}.member-controls select{max-width:180px}.member-controls button{white-space:nowrap}
+        .member-list{list-style:none;padding:0;margin:14px 0 0}.member{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:18px 0;border-top:1px solid var(--border)}.member-identity{display:flex;align-items:flex-start;flex-direction:column;gap:7px;min-width:0}.member-identity strong{font-size:14px;overflow-wrap:anywhere}.member-controls{display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}.member-controls select{max-width:180px}.member-controls button{white-space:nowrap}
         .account-state{font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px}.active{background:var(--success-bg);color:var(--success)}.pending{background:var(--bg-secondary);color:var(--text-muted)}.message{margin-bottom:18px;font-size:14px}.error{background:var(--danger-bg);color:var(--danger)}.success{background:var(--success-bg);color:var(--success)}.warning,.confirmation{border-left:3px solid var(--accent)}.confirmation p{font-size:14px;line-height:1.7;margin:12px 0}.actions{display:flex;gap:10px;flex-wrap:wrap}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
         @media(max-width:650px){.assignment-fields{grid-template-columns:1fr}.member{align-items:stretch;flex-direction:column}.member-controls{justify-content:space-between;gap:8px}.member-controls select{max-width:55%}.destination .form-select{width:100%}}
       `}</style>

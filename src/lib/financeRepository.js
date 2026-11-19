@@ -34,7 +34,7 @@ const LEAN_FIELDS = ['connectionId', 'shipmentId', 'orderId', 'method', 'partido
   'paidOrderCount', 'paidKnownOrderCount', 'feesCents', 'feesMissingCount', 'netCents', 'stale', 'province', 'source', 'shippingCollectedCents', 'trackingNumber', 'sellerId', 'recipient', 'buyerPays', 'pickup'];
 const SNAPSHOT_TTL_MS = 5 * 60_000;
 // Bump when the calculation changes, so stored summaries are rebuilt on next read.
-const SNAPSHOT_VERSION = 11;
+const SNAPSHOT_VERSION = 12;
 const rebuilding = new Map();
 // Flex amounts that come straight from the rate table are recomputed on read, so changing a rate never needs a rebuild.
 function leanRecord(r) {
@@ -56,7 +56,7 @@ export function createFinanceRepository(db) {
   }
   async function saveRate(workspaceId, input, actorId) {
     if (!ZONE_ORDER.includes(input.zone) || !validDate(input.validFrom) || !Number.isSafeInteger(input.amountCents) || input.amountCents < 0) throw new Error('Zona, fecha o importe inválido');
-    const carrier = await execute('SELECT id FROM carriers WHERE id = ?', [Number(input.carrierId)]);
+    const carrier = await execute("SELECT id FROM carriers WHERE id = ? AND workspace_id = CASE WHEN EXISTS (SELECT 1 FROM workspaces WHERE id = ? AND slug = 'legacy') THEN 0 ELSE ? END", [Number(input.carrierId), workspaceId, workspaceId]);
     if (!carrier.rows.length) throw new Error('Transportista no encontrado');
     // Re-saving the same carrier, zone and date corrects that rate. Shipments already in a settlement keep their frozen amount.
     const existing = await execute('SELECT id FROM carrier_rates WHERE workspace_id = ? AND carrier_id = ? AND zone = ? AND valid_from = ?',
@@ -107,7 +107,7 @@ export function createFinanceRepository(db) {
             AND sx.integration_connection_id=mo.integration_connection_id ORDER BY sx.id DESC LIMIT 1),
           (SELECT st.id FROM shipments st WHERE st.workspace_id=mo.workspace_id AND st.tracking_number=mo.shipment_id ORDER BY st.id DESC LIMIT 1))
         LEFT JOIN daily_batches sb ON sb.id = s.batch_id AND sb.workspace_id = mo.workspace_id
-        LEFT JOIN carriers c ON c.workspace_id = 0 AND (c.name = s.assigned_carrier OR CAST(c.id AS TEXT) = s.assigned_carrier)
+        LEFT JOIN carriers c ON c.workspace_id = CASE WHEN EXISTS (SELECT 1 FROM workspaces w WHERE w.id = s.workspace_id AND w.slug = 'legacy') THEN 0 ELSE s.workspace_id END AND (c.name = s.assigned_carrier OR CAST(c.id AS TEXT) = s.assigned_carrier)
         LEFT JOIN shipment_finance f ON f.workspace_id = mo.workspace_id AND f.connection_id = mo.integration_connection_id AND f.shipment_id = mo.shipment_id
         LEFT JOIN carrier_settlement_items si ON si.workspace_id = mo.workspace_id AND si.shipment_id = mo.shipment_id
         WHERE mo.workspace_id = ? AND mo.shipment_id IS NOT NULL AND mo.shipment_id <> ''
@@ -116,7 +116,7 @@ export function createFinanceRepository(db) {
       identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT s.id, s.partido, s.assigned_carrier, s.recipient_name, s.province AS internal_province, s.tracking_number,
         s.shipping_method, s.dispatch_date, s.created_at, s.status AS internal_status, lb.date AS batch_date, c.id AS carrier_id, c.display_name AS carrier_display_name
         FROM shipments s LEFT JOIN daily_batches lb ON lb.id = s.batch_id AND lb.workspace_id = s.workspace_id
-        LEFT JOIN carriers c ON c.workspace_id=0 AND (c.name=s.assigned_carrier OR CAST(c.id AS TEXT)=s.assigned_carrier)
+        LEFT JOIN carriers c ON c.workspace_id=CASE WHEN EXISTS (SELECT 1 FROM workspaces w WHERE w.id=s.workspace_id AND w.slug='legacy') THEN 0 ELSE s.workspace_id END AND (c.name=s.assigned_carrier OR CAST(c.id AS TEXT)=s.assigned_carrier)
         WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta')
           AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_row_id=s.id)
           AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')
@@ -309,7 +309,7 @@ export function createFinanceRepository(db) {
   }
   async function createSettlement(workspaceId, input, actorId) {
     if (!validDate(input.from) || !validDate(input.to) || input.from > input.to) throw new Error('Período inválido');
-    if (!(await execute('SELECT id FROM carriers WHERE id = ?', [Number(input.carrierId)])).rows.length) throw new Error('Transportista no encontrado');
+    if (!(await execute("SELECT id FROM carriers WHERE id = ? AND workspace_id = CASE WHEN EXISTS (SELECT 1 FROM workspaces WHERE id = ? AND slug = 'legacy') THEN 0 ELSE ? END", [Number(input.carrierId), workspaceId, workspaceId])).rows.length) throw new Error('Transportista no encontrado');
     const inserted = await execute(`INSERT INTO carrier_settlements(workspace_id,carrier_id,date_from,date_to,created_by) VALUES(?,?,?,?,?)`, [workspaceId, Number(input.carrierId), input.from, input.to, actorId]);
     return Number(inserted.lastInsertRowid);
   }

@@ -43,3 +43,10 @@ El bloqueo de acceso coincidió con agotamientos de tiempo en varias APIs. El se
 La carga de `/api/auth/me` tiene ahora un límite de 20 segundos y presenta el error recuperable existente en caso de demora. Validación: 149 pruebas aprobadas, con regresión de conteos para miles de envíos, varios miembros y entradas de actividad.
 
 Publicación correctiva: `dpl_BJKU31X415AYdug3Ucc9ZPH7hT2o`, código `a187bd0`, promovida con `npm run deploy:production`. Controles públicos posteriores de cross-selling aprobados. Se recargó la pestaña de Lucio después de publicar y se verificó visualmente el Dashboard con su email y rol admin; consulta de solo lectura al libSQL actual confirmó una única membresía para cada cuenta en el espacio 1. Las consultas administrativas corregidas se ejecutaron también sobre la base actual en menos de 1 ms cada una.
+
+
+## Quitar acceso (cambio preparado localmente)
+
+Un propietario o administrador puede quitar a un miembro desde **Espacio y miembros**. Se conserva la identidad y los datos; se elimina únicamente su membresía en el espacio seleccionado y se registra la acción en la misma transacción. El propietario, el administrador global y la propia cuenta quedan protegidos. La siguiente solicitud de una sesión existente vuelve a resolver sus membresías y ya no accede al espacio anterior. Si la persona no tiene otra membresía, la lógica de primer ingreso puede crearle un espacio nuevo y vacío.
+
+La operación no revoca la cuenta de Clerk ni las invitaciones ya emitidas. La ausencia de membresía impide que esas invitaciones vuelvan a conceder acceso al espacio anterior. La funcionalidad está en el código local y no se considera publicada hasta verificar el despliegue.

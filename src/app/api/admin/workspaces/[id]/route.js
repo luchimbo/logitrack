@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireGlobalAdmin } from '@/lib/auth';
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
+import { carrierConfigScope } from '@/lib/globalCarrierConfig';
 
 export async function GET(request, { params }) {
   try {
@@ -13,7 +13,7 @@ export async function GET(request, { params }) {
     }
 
     const { id } = await params;
-    await ensureGlobalCarrierConfig();
+
 
     const workspaceResult = await db.execute({
       sql: `SELECT w.id, w.name, w.slug, w.created_at,
@@ -28,6 +28,7 @@ export async function GET(request, { params }) {
     }
 
     const workspace = workspaceResult.rows[0];
+    const scope = await carrierConfigScope(id);
 
     const [totals, today, week, month, carriers, topProducts, topProvinces, recentBatches, recentActivity, members] = await Promise.all([
       Promise.all([
@@ -56,7 +57,7 @@ export async function GET(request, { params }) {
               WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= date('now', 'start of month') AND b.date <= CURRENT_DATE`,
         args: [id, id],
       }),
-      db.execute({ sql: 'SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name', args: [GLOBAL_CARRIER_CONFIG_SCOPE] }),
+      db.execute({ sql: 'SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name', args: [scope] }),
       db.execute({
         sql: `SELECT product_name, sku, shipping_method, SUM(COALESCE(quantity, 1)) AS units, COUNT(*) AS shipments
               FROM shipments

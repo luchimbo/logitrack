@@ -29,7 +29,7 @@ Las claves existentes se reutilizan sin rotarlas. Los tokens se cargan como sens
 
 `DATABASE_URL_PROD`, `DATABASE_AUTH_TOKEN_PROD` y `DATABASE_READONLY_AUTH_TOKEN_PROD` son sobreescrituras opcionales para scripts; el destino de producción siempre debe ser el HTTPS de PC MIDI. Normalmente basta con las tres variables sin sufijo.
 
-**El desarrollo local usa la base operativa real.** Para experimentar sin alterar datos reales, usar una copia SQLite separada. `scripts/pull-prod-db.mjs --yes` solo acepta `DATABASE_COPY_URL=file:ruta/a/copia.db` como destino descartable, y lee la fuente de PC MIDI con el token RO. Nunca borra una base remota. No ejecutar scripts de siembra para comprobar conectividad.
+**`npm run dev` utiliza una base local aislada y no carga credenciales de `.env.local`.** Los scripts administrativos siguen pudiendo leer ese archivo y alcanzar la base operativa: comprobar su destino antes de ejecutarlos. Preview requiere una base independiente; la aplicación rechaza el host operativo en Preview. `scripts/pull-prod-db.mjs --yes` solo acepta `DATABASE_COPY_URL=file:ruta/a/copia.db` como destino descartable, y lee la fuente de PC MIDI con el token RO. Nunca borra una base remota. No ejecutar scripts de siembra para comprobar conectividad.
 
 ## Verificaciones
 
@@ -62,3 +62,24 @@ Código `f94ec00`, despliegue `dpl_CtszbRCqf5sheVuWbPAxDzPyNNEF`, promovido a `h
 Validación: 167 pruebas aprobadas, compilación local y en Vercel aprobadas, ESLint de los archivos modificados aprobado. Prueba HTTPS con escritura y lectura, `lastInsertRowid`, token RO y rechazo anónimo aprobada; la tabla temporal de prueba se eliminó. Controles públicos de cross-selling aprobados antes y después de promover. Una consulta de reseñas con SKU de diagnóstico respondió HTTP 200 tanto en el despliegue privado como en el dominio público; ejecuta una lectura real de la base, sin cambios de datos.
 
 Se retiraron `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` y `TURSO_READONLY_AUTH_TOKEN` del proyecto de Vercel y todas las variables `TURSO_*` de `.env.local`. Production y Preview conservan únicamente las tres variables nuevas de conexión para esta base. No se rotaron claves, repitieron autorizaciones ni cambiaron Redis, scripts de tienda o promociones.
+
+
+## Copia cifrada fuera del servidor
+
+En la PC Windows `DESKTOP-MG4UVAB`, la tarea programada `GeoModi-Respaldo-Externo` copia el último respaldo nocturno del servidor a `D:\Logística\_backup\offhost` todos los días a las 02:00, cuando la sesión del usuario está iniciada. Si la PC está apagada, el programador intenta ejecutar la tarea cuando vuelve a estar disponible. La tarea utiliza `scripts/backup-offhost-launch.ps1` y `scripts/backup-offhost.ps1`; para comprobar resultado y próxima ejecución, consultar `Get-ScheduledTaskInfo -TaskName GeoModi-Respaldo-Externo`.
+
+El archivo se cifra con AES-256-GCM. La clave queda protegida por DPAPI para la cuenta Windows que ejecuta la tarea, en `backup-key.dpapi`, y no se guarda en Git. **Para descifrar se necesita esa cuenta y su perfil Windows**. Si se pierde la PC o el perfil, esa clave protegida no garantiza recuperación; hace falta una segunda copia y un procedimiento independiente de recuperación de la clave. La copia se encuentra fuera del servidor, en esta PC, pero no fuera del sitio. Por decisión del usuario no se utiliza Google Drive para respaldos. No copiar la clave sin una solución segura de custodia.
+
+Comprobación manual desde la misma cuenta Windows:
+
+```powershell
+pwsh -NoProfile -File scripts/backup-offhost.ps1
+pwsh -NoProfile -File scripts/verify-offhost.ps1 -BackupFile 'D:\Logística\_backup\offhost\<archivo>.gmbak'
+```
+
+La verificación autentica y descifra el archivo, extrae únicamente la base a un directorio temporal, ejecuta `PRAGMA integrity_check` y cuenta las tablas; no restaura sobre producción ni extrae las claves del servidor. El 19/11/2026 se validó una copia ejecutada por la tarea: integridad correcta, 54 tablas; un archivo de prueba alterado fue rechazado. La tarea conserva los archivos cifrados sin borrado automático; hay que controlar espacio y definir retención. Redis y sus aceptaciones no están incluidos y requieren su propio respaldo.
+
+La primera verificación dejó una copia temporal en el directorio temporal de Windows por un archivo SQLite que permanecía abierto; se corrigió el cierre antes de la verificación exitosa. La carpeta temporal se eliminó el 19/11/2026 con un borrado normal y se verificó que ya no existe.
+
+
+Comprobación operativa de solo lectura: `pwsh -NoProfile -File scripts/check-operational-health.ps1`. Revisa la web, servicio, antigüedad del respaldo del servidor y de la copia local, y resultado de la tarea programada. Devuelve código de error si falla un control; se comprobó con una URL local inaccesible. Procedimientos y límites en `docs/recuperacion.md`. Aún debe conectarse a un canal de alertas para que alguien se entere sin ejecutarla manualmente.

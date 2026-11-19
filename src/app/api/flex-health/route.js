@@ -4,7 +4,7 @@ import { getDateRange } from "@/lib/dateUtils";
 import { ensureDb } from "@/lib/ensureDb";
 import { requireWorkspaceActor } from "@/lib/auth";
 import { ZONE_GROUPS, normalizeName } from "@/lib/zoneGroups";
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from "@/lib/globalCarrierConfig";
+import { carrierConfigScope } from "@/lib/globalCarrierConfig";
 
 function incrementCount(map, key) {
   map[key] = (map[key] || 0) + 1;
@@ -18,7 +18,7 @@ export async function GET(request) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
     const workspaceId = authResult.actor.workspaceId;
-    await ensureGlobalCarrierConfig();
+    const scope = await carrierConfigScope(authResult.actor.workspaceId);
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "today";
@@ -46,7 +46,7 @@ export async function GET(request) {
 
     const [shipmentsResult, mappingsResult] = await Promise.all([
       db.execute({ sql: shipmentsSql, args: shipmentsArgs }),
-      db.execute({ sql: "SELECT partido, carrier_name FROM zone_mappings WHERE workspace_id = ?", args: [GLOBAL_CARRIER_CONFIG_SCOPE] }),
+      db.execute({ sql: "SELECT partido, carrier_name FROM zone_mappings WHERE workspace_id = ?", args: [scope] }),
     ]);
 
     const shipments = shipmentsResult.rows || [];

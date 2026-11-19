@@ -149,7 +149,7 @@ export default function IntegrationsSection({ onNavigate }) {
       {!loading && !error && !available.length && <p className="card">No hay integraciones disponibles en este espacio de trabajo.</p>}
 
       <div className="integration-provider-grid">
-        {available.map((integration) => (
+        {available.filter((integration) => integration.status !== 'coming_soon' || integration.connected).map((integration) => (
           <IntegrationCard
             key={integration.provider}
             integration={integration}

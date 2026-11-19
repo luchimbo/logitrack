@@ -10,6 +10,9 @@ export function databaseConfig(env = process.env, { readOnly = false, production
   if (parsed.hostname.endsWith('.turso.io') || parsed.hostname === 'turso.io') {
     throw new Error('GeoModi usa libSQL de PC MIDI. No se permite conectar a Turso.');
   }
+  if (!production && env.VERCEL_ENV === 'preview' && parsed.hostname === new URL(PCMIDI_DATABASE_URL).hostname) {
+    throw new Error('Preview no puede usar la base operativa; configurá una base aislada.');
+  }
   if (production && parsed.href !== `${PCMIDI_DATABASE_URL}/`) {
     throw new Error('La base de producción debe ser el servicio HTTPS de PC MIDI.');
   }

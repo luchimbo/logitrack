@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import GettingStarted from "@/components/GettingStarted";
 import { api } from "@/lib/api";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
 import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
@@ -75,6 +76,7 @@ export default function OperationToday({ currentUser, onNavigate }) {
   const mlPending = mlUnavailable ? (loading || manualUpdating) && !mlData?.error ? "Consultando Mercado Libre…" : "Sin datos de Mercado Libre." : "";
 
   return <div className="section operation-today">
+    <GettingStarted onNavigate={onNavigate} canManage={currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role)} />
     <header className="operation-toolbar">
       <div>
         <h1 id="operation-packing-title">Paquetes listos para imprimir</h1>

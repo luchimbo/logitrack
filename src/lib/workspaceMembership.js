@@ -60,3 +60,24 @@ export async function assignWorkspaceUser(db, actor, input) {
     tx.close();
   }
 }
+
+export async function removeWorkspaceUser(db, actor, membershipId) {
+  const id = Number(membershipId);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new MembershipError(400, 'Miembro inválido');
+  if (!actor.workspaceId || (!actor.isGlobalAdmin && !['owner', 'admin'].includes(actor.role))) throw new MembershipError(403, 'Permisos insuficientes');
+  const tx = await db.transaction('write');
+  try {
+    const member = (await tx.execute({ sql: `SELECT wm.id,wm.app_user_id,wm.role,u.is_global_admin,u.email
+      FROM workspace_members wm JOIN app_users u ON u.id=wm.app_user_id
+      WHERE wm.id=? AND wm.workspace_id=?`, args:[id,actor.workspaceId] })).rows[0];
+    if (!member) throw new MembershipError(404, 'Miembro no encontrado');
+    if (member.role === 'owner' || Number(member.is_global_admin) === 1 || Number(member.app_user_id) === Number(actor.appUserId)) {
+      throw new MembershipError(403, 'No se puede quitar al propietario, al administrador global ni a tu propia cuenta');
+    }
+    await tx.execute({ sql:'DELETE FROM workspace_members WHERE id=? AND workspace_id=?', args:[id,actor.workspaceId] });
+    await tx.execute({ sql:`INSERT INTO audit_logs (workspace_id,app_user_id,actor_type,actor_label,action,entity_type,entity_id,metadata_json)
+      VALUES (?,?,?,?,?,'workspace_member',?,?)`, args:[actor.workspaceId,actor.appUserId ?? null,actor.authType,actor.email || actor.username || null,'remove_workspace_user',String(member.app_user_id),JSON.stringify({email:member.email,role:member.role})] });
+    await tx.commit();
+    return { success:true };
+  } catch (error) { await tx.rollback(); throw error; } finally { tx.close(); }
+}

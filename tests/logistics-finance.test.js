@@ -190,12 +190,14 @@ async function fixture() {
   const filename=join(directory,'test.db');
   const db=createClient({url:pathToFileURL(filename).href});
   await db.batch([
+    `CREATE TABLE workspaces(id INTEGER PRIMARY KEY,slug TEXT)`,
     `CREATE TABLE carriers(id INTEGER PRIMARY KEY,workspace_id INTEGER,name TEXT,display_name TEXT)`,
     `CREATE TABLE shipments(id INTEGER PRIMARY KEY,workspace_id INTEGER,partido TEXT,assigned_carrier TEXT,external_shipment_id TEXT,integration_connection_id INTEGER,shipping_method TEXT)`,
     `CREATE TABLE mercadolibre_orders(id INTEGER PRIMARY KEY,workspace_id INTEGER,integration_connection_id INTEGER,shipment_id TEXT,order_id TEXT,user_id TEXT,external_store_id TEXT,logistic_type TEXT,shipping_method TEXT,shipment_status TEXT,shipment_substatus TEXT,raw_shipment_json TEXT,lead_time_json TEXT,history_json TEXT,delays_json TEXT,address_json TEXT,shipment_row_id INTEGER,synced_at TEXT,recipient_name TEXT,label_printed_at TEXT,label_imported_at TEXT)`,
     `CREATE TABLE audit_logs(id INTEGER PRIMARY KEY,workspace_id INTEGER,app_user_id INTEGER,actor_type TEXT,action TEXT,entity_type TEXT,entity_id TEXT,metadata_json TEXT)`,
     ...FINANCE_SCHEMA,
-    "INSERT INTO carriers VALUES(1,0,'uno','Uno')",
+    "INSERT INTO workspaces VALUES(1,'legacy'),(2,'store-two')",
+    "INSERT INTO carriers VALUES(1,0,'uno','Uno'),(2,2,'uno','Otro Uno')",
     "INSERT INTO shipments VALUES(1,1,'capital_federal','uno','S1',10,'flex')",
     {sql:`INSERT INTO mercadolibre_orders(id,workspace_id,integration_connection_id,shipment_id,order_id,user_id,logistic_type,shipping_method,shipment_status,raw_shipment_json,shipment_row_id,synced_at) VALUES(1,1,10,'S1','O1','555','self_service','flex','delivered',?,1,CURRENT_TIMESTAMP)`,args:[base.raw_shipment_json]},
     // Two sales, and a second connection, still represent one physical package.
@@ -214,7 +216,7 @@ async function fixture() {
     shipping_cost_customer TEXT,shipping_cost_owner TEXT,order_source TEXT,synced_at TEXT)`);
   const repo=createFinanceRepository(db);
   await repo.saveRate(1,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:10000},7);
-  await repo.saveRate(2,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:30000},8);
+  await repo.saveRate(2,{carrierId:2,zone:'CABA',validFrom:'2026-10-01',amountCents:30000},8);
   // The native Windows driver can retain file handles until process exit.
   // Keep disposable test databases in the OS temp directory.
   const cleanup=()=>db.close();
@@ -227,8 +229,23 @@ test('schema migrations are repeatable, records deduplicate, workspace rates iso
     assert.equal((await repo.records(1)).length,1);
     assert.equal((await repo.report(1,{})).summary.totalCents,10000);
     assert.equal((await repo.listRates(2))[0].amount_cents,30000);
+    await assert.rejects(repo.saveRate(2,{carrierId:1,zone:'CABA',validFrom:'2026-10-01',amountCents:1},8),/Transportista no encontrado/);
+    await assert.rejects(repo.createSettlement(2,{carrierId:1,from:'2026-10-01',to:'2026-10-31'},8),/Transportista no encontrado/);
     assert.equal((await repo.records(2)).length,0);
     await assert.rejects(repo.settlementDetail(2,1),/no encontrada/);
+  } finally {cleanup();}
+});
+
+test('transportistas del espacio propio no se mezclan con los de otro espacio',async()=>{
+  const {db,repo,cleanup}=await fixture();
+  try {
+    await db.execute("INSERT INTO shipments(id,workspace_id,partido,assigned_carrier,shipping_method,dispatch_date) VALUES(2,2,'capital_federal','uno','flex','2026-10-10')");
+    const rows = await repo.records(2);
+    assert.equal(rows.length,1);
+    assert.equal(rows[0].carrierId,2);
+    assert.equal(rows[0].carrierName,'Otro Uno');
+    assert.equal((await repo.listRates(2))[0].amount_cents,30000);
+    await assert.rejects(repo.saveRate(1,{carrierId:2,zone:'CABA',validFrom:'2026-10-01',amountCents:1},7),/Transportista no encontrado/);
   } finally {cleanup();}
 });
 

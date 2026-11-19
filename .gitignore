@@ -71,3 +71,6 @@ GeoModi-Impresion-V2/**/config.json
 
 # Local diagnostics and downloaded deployment settings
 .vercel-inspect/
+
+# Base y artefactos locales de pruebas aisladas
+.sandbox/

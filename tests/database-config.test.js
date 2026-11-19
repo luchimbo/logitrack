@@ -15,3 +15,10 @@ test('los scripts de producción siempre consultan PC MIDI', () => {
   assert.equal(databaseConfig({ DATABASE_AUTH_TOKEN: 'rw' }, { production: true }).url, PCMIDI_DATABASE_URL);
   assert.throws(() => databaseConfig({ DATABASE_URL_PROD: 'https://other.example', DATABASE_AUTH_TOKEN: 'rw' }, { production: true }), /debe ser el servicio HTTPS de PC MIDI/);
 });
+
+test('Preview rechaza la base operativa tanto en escritura como en lectura', () => {
+  const env = { VERCEL_ENV: 'preview', DATABASE_URL: PCMIDI_DATABASE_URL, DATABASE_AUTH_TOKEN: 'rw', DATABASE_READONLY_AUTH_TOKEN: 'ro' };
+  assert.throws(() => databaseConfig(env), /Preview no puede usar/);
+  assert.throws(() => databaseConfig(env, {readOnly:true}), /Preview no puede usar/);
+  assert.equal(databaseConfig({ ...env, DATABASE_URL: 'https://isolated.example' }).url, 'https://isolated.example');
+});

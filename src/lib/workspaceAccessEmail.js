@@ -21,6 +21,7 @@ export async function resolveWorkspaceTarget(db, actor, requestedId) {
 // Clerk handles delivery and identity verification. Application access is always
 // granted by workspace_members, never by the invitation or its public metadata.
 export async function sendWorkspaceAccessEmail({ db, actor, email, getClient, appUrl }) {
+  if (process.env.GEOMODI_SANDBOX === '1') throw new MembershipError(403, 'El envío de correos está deshabilitado en el entorno de prueba');
   if (!actor.isGlobalAdmin && !['owner', 'admin'].includes(actor.role)) throw new MembershipError(403, 'Permisos insuficientes');
   const normalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
   const target = (await db.execute({

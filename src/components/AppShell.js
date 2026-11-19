@@ -75,7 +75,10 @@ export default function AppShell({
   const moreBadgeCount = sections.slice(4).reduce((total, group) => total + sectionBadge(group), 0);
 
   useEffect(() => {
-    try { setCollapsed(window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1"); } catch {}
+    const frame = window.requestAnimationFrame(() => {
+      try { setCollapsed(window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1"); } catch {}
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {

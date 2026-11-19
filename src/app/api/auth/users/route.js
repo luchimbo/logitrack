@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { assignWorkspaceUser, MembershipError } from '@/lib/workspaceMembership';
+import { assignWorkspaceUser, removeWorkspaceUser, MembershipError } from '@/lib/workspaceMembership';
 
 export async function GET(request) {
   try {
@@ -19,7 +19,7 @@ export async function GET(request) {
     const workspaceId = actor.workspaceId;
     await ensureWorkspaceAccessEmails(db);
     const result = await db.execute({
-      sql: `SELECT wm.id, wm.role, wm.created_at, au.id AS app_user_id, au.email, au.clerk_user_id,
+      sql: `SELECT wm.id, wm.role, wm.created_at, au.id AS app_user_id, au.email, au.clerk_user_id, au.is_global_admin,
                    CASE WHEN au.clerk_user_id LIKE 'pending:%' THEN 1 ELSE 0 END AS is_pending,
                    ae.status AS email_status, ae.sent_at AS email_sent_at
             FROM workspace_members wm
@@ -120,5 +120,20 @@ export async function PATCH(request) {
   } catch (error) {
     console.error('Update workspace user role error:', error);
     return NextResponse.json({ error: 'Error en el servidor' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    await ensureDb();
+    const authResult = await requireWorkspaceAdmin(request);
+    if (authResult.error) return NextResponse.json(authResult.error.body, { status: authResult.error.status });
+    const body = await request.json();
+    const actor = await resolveWorkspaceTarget(db, authResult.actor, body.workspaceId);
+    return NextResponse.json(await removeWorkspaceUser(db, actor, body.membershipId));
+  } catch (error) {
+    if (error instanceof MembershipError) return NextResponse.json({ error:error.message }, { status:error.status });
+    console.error('Remove workspace user error:', error);
+    return NextResponse.json({ error:'No se pudo quitar el acceso' }, { status:500 });
   }
 }

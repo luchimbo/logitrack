@@ -82,3 +82,11 @@ test('access landing keeps only new-account tickets and never forwards arbitrary
   const pending = GET({url:'https://www.geomodi.ai/workspace-access?registered=0&__clerk_ticket=secret'});
   assert.equal(pending.pathname,'/sign-up'); assert.equal(pending.searchParams.get('__clerk_ticket'),'secret');
 });
+test('sandbox impide enviar invitaciones incluso con una cuenta configurada', async () => {
+  const db=await fixture(), calls=[];
+  process.env.GEOMODI_SANDBOX='1';
+  try {
+    await assert.rejects(sendWorkspaceAccessEmail({db,actor,email:'member@example.com',getClient:provider(false,calls)}),e=>e.status===403);
+    assert.equal(calls.length,0);
+  } finally {delete process.env.GEOMODI_SANDBOX;db.close();}
+});
