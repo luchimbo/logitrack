@@ -26,7 +26,7 @@ El responsable decidió no generar un archivo de custodia independiente de la cl
 
 ## Reintentos de sincronización
 
-`node scripts/check-sync-health.mjs` (solo lectura) detecta reintentos acumulados (>200), vencidos (>120 min) o con 10 o más intentos; el control horario lo informa como **AVISO** sin cambiar el código de salida. Consulta del 19/11/2026: `ml_sync_retries` tiene 63 filas del 22 al 27/10 (espacio legacy, conexiones 91 y 3) con el error `Cannot read properties of null (reading 'logistic')`. El código actual protege esas lecturas con `?.` y nada reprocesa esas filas (solo se borran al sincronizar la orden con éxito). No se modificaron datos: queda para revisión del responsable; cuando se resuelva, el aviso debe pasar a error.
+`node scripts/check-sync-health.mjs` (solo lectura) detecta reintentos acumulados (>200), vencidos (>120 min) o con 10 o más intentos; el control horario lo informa como **AVISO** sin cambiar el código de salida. Consulta del 19/11/2026: `ml_sync_retries` tiene 63 filas del 22 al 27/10 (espacio legacy, conexiones 91 y 3) con el error `Cannot read properties of null (reading 'logistic')`. El código actual protege esas lecturas con `?.` y nada reprocesa esas filas (solo se borran al sincronizar la orden con éxito). Diagnóstico (solo lectura): los 63 pedidos ya están guardados en `mercadolibre_orders` y los 63 son ventas sin envío, la causa corregida el 27/10 en `c98203b`; son restos residuales. `node scripts/clear-stale-sync-retries.mjs` simula la limpieza (63 coinciden, 0 quedan); `--apply --backup-verified` las elimina en una transacción. **No se aplicó.** Después de limpiar, el aviso debe pasar a error.
 
 ## Canal de alertas: propuesta (sin activar)
 
