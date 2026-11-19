@@ -10,7 +10,8 @@ function LoginForm() {
   const params = useSearchParams();
   const returnTo = safeAppReturn(params.get("returnTo"));
   return <SignIn routing="path" path="/login" signUpUrl={signupPath(returnTo)}
-    fallbackRedirectUrl={returnTo} forceRedirectUrl={returnTo} />;
+    fallbackRedirectUrl={returnTo} forceRedirectUrl={returnTo}
+    signUpFallbackRedirectUrl={returnTo} signUpForceRedirectUrl={returnTo} />;
 }
 
 export default function LoginPage() {
