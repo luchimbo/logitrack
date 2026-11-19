@@ -68,7 +68,7 @@ const ZONE_GROUPS = [
     { id: 'capital', label: 'CAPITAL' },
     { id: 'gba1', label: 'GBA 1' },
     { id: 'gba2', label: 'GBA 2' },
-    { id: 'gba3', label: 'GBA 3 OPCIONAL' }
+    { id: 'gba3', label: 'GBA 3' }
 ];
 
 export default function ZoneConfig() {
