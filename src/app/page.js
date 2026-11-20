@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import PublicAccountLink from "@/components/PublicAccountLink";
 import styles from "./page.module.css";
 
 const workflow = [
@@ -252,7 +253,7 @@ export default function LandingPage() {
           <Link href="/terminos">Términos</Link>
           <Link href="/soporte">Soporte</Link>
         </nav>
-        <Link className={styles.loginButton} href="/login">Entrar</Link>
+        <PublicAccountLink className={styles.loginButton} />
       </header>
 
       <section id="inicio" className={styles.hero}>

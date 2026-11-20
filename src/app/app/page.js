@@ -103,11 +103,21 @@ export default function AppHome() {
 
   if (!authChecked) {
     return (
-      <main className="main-content" style={{ marginLeft: 0 }}>
-        <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-          <div className="spinner"></div>
+      // Show the app's outline while the account loads instead of a blank screen with a spinner.
+      <div className="app-skeleton" role="status" aria-label="Cargando GeoModi">
+        <aside className="app-skeleton-sidebar" aria-hidden="true">
+          <span className="skeleton-block" style={{ width: 120, height: 22 }} />
+          {[0, 1, 2, 3, 4].map((i) => <span key={i} className="skeleton-block" style={{ height: 34 }} />)}
+        </aside>
+        <div className="app-skeleton-main" aria-hidden="true">
+          <div className="app-skeleton-topbar"><span className="skeleton-block" style={{ width: 160, height: 18 }} /></div>
+          <div className="app-skeleton-content">
+            <span className="skeleton-block" style={{ width: '40%', height: 30 }} />
+            <div className="app-skeleton-cards"><span className="skeleton-block" /><span className="skeleton-block" /></div>
+            <span className="skeleton-block" style={{ height: 64 }} />
+          </div>
         </div>
-      </main>
+      </div>
     );
   }
 

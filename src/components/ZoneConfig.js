@@ -60,7 +60,7 @@ const PARTIDOS = [
 const ZONE_COLORS = {
     capital: '#ff69b4',
     gba1: '#20b2aa',
-    gba2: '#00008b',
+    gba2: '#4f7cff',
     gba3: '#ff0000',
 };
 
@@ -358,7 +358,7 @@ export default function ZoneConfig() {
                     const groupPartidos = PARTIDOS.filter(p => p.zone === group.id);
 
                     return (
-                        <InfoDisclosure title={group.label} description={`${groupPartidos.length} zonas · asignación de transportistas`} key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}` }}>
+                        <InfoDisclosure title={group.label} description={`${groupPartidos.length} ${groupPartidos.length === 1 ? "zona" : "zonas"} · asignación de transportistas`} key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}` }}>
                             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                                     <select className="form-select" id={`group-select-${group.id}`} aria-label={`Transportista para todos los partidos de ${group.label}`} style={{ flex: 1 }}>
                                         <option value="">— Asignar a todos —</option>

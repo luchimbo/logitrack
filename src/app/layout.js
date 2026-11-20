@@ -1,7 +1,7 @@
 import "./globals.css";
 import { BatchProvider } from "@/components/BatchContext";
 import { ClerkProvider } from "@clerk/nextjs";
-import { esES } from "@clerk/localizations";
+import { geomodiLocalization } from "@/lib/clerkLocalization";
 
 export const metadata = {
   title: "GeoModi | Logística e-commerce en un solo lugar",
@@ -37,7 +37,7 @@ export default function RootLayout({ children }) {
     <html lang="es">
       <body>
         <ClerkProvider
-          localization={esES}
+          localization={geomodiLocalization}
           appearance={{
             variables: {
               colorPrimary: "#818cf8",
@@ -56,6 +56,7 @@ export default function RootLayout({ children }) {
               formFieldInput: "clerk-input",
               socialButtonsBlockButton: "clerk-social-button",
               footerActionLink: "clerk-footer-link",
+              footerAction: "clerk-footer-action",
             },
           }}
         >

@@ -17,6 +17,15 @@ const FOCUSABLE_SELECTOR = [
 const COLLAPSED_STORAGE_KEY = "geomodi.sidebarCollapsed";
 const SUBSECTION_LABELS = { upload: "Subir etiquetas", integrations: "Conectar un canal", operationToday: "Resumen" };
 
+function SupportLink({ compact = false }) {
+  return (
+    <a href="/soporte" className="nav-link" title={compact ? "Soporte" : undefined} aria-label={compact ? "Soporte" : undefined}>
+      <span className="nav-icon"><AppIcon name="support" size={18} /></span>
+      <span className="nav-link-label">Soporte</span>
+    </a>
+  );
+}
+
 function NavigationItem({ active, badge, item, onNavigate, variant = "sidebar", compact = false }) {
   const className = variant === "mobile" ? "mobile-bottom-nav-item" : "nav-link";
 
@@ -57,17 +66,18 @@ export default function AppShell({
   if (providerLabels[activeTab] && !allItems.some((item) => item.id === activeTab)) allItems.push({ id: activeTab, label: providerLabels[activeTab], icon: "integrations" });
   const findItems = (ids) => ids.map((id) => allItems.find((item) => item.id === id)).filter(Boolean);
   const sections = [
-    { title: "Operación de hoy", icon: "operation", items: findItems(["operationToday", "pickingList", "flex", "colecta", "upload"]) },
+    { title: "Operación de hoy", mobileLabel: "Hoy", icon: "operation", items: findItems(["operationToday", "pickingList", "flex", "colecta", "upload"]) },
     { title: "Seguimiento", icon: "colecta", items: findItems(["deliveryControl", "printJobs"]) },
     { title: "Resultados", icon: "dashboard", items: findItems(["dashboard", "logisticsFinance"]) },
-    { title: "Canales e integraciones", mobileLabel: "Canales", icon: "integrations", items: findItems(["mercadolibre", "tiendanube", "shopify", "zipnova", "integrations"]) },
+    { title: "Canales e integraciones", sidebarLabel: "Canales", mobileLabel: "Canales", icon: "integrations", items: findItems(["mercadolibre", "tiendanube", "shopify", "zipnova", "integrations"]) },
     { title: "Configuración", icon: "settings", items: findItems(["zoneConfig", "userManagement", "workspaceSetup"]) },
     { title: "Admin Maestro", icon: "settings", items: findItems(["adminOverview"]) },
   ].filter((group) => group.items.length);
   const activeSection = sections.find((group) => group.items.some((item) => item.id === activeTab)) || sections[0];
   const activeItem = activeSection?.items.find((item) => item.id === activeTab);
-  const sectionItem = (group) => ({ ...group.items[0], label: group.mobileLabel || group.title, icon: group.icon });
-  const groupedMobile = { primaryItems: sections.slice(0, 4).map(sectionItem), moreGroups: sections.slice(4).map((group) => ({ title: group.title, items: [sectionItem(group)] })) };
+  const sectionItem = (group) => ({ ...group.items[0], label: group.sidebarLabel || group.title, icon: group.icon });
+  const mobileSectionItem = (group) => ({ ...group.items[0], label: group.mobileLabel || group.title, icon: group.icon });
+  const groupedMobile = { primaryItems: sections.slice(0, 4).map(mobileSectionItem), moreGroups: sections.slice(4).map((group) => ({ title: group.title, items: [mobileSectionItem(group)] })) };
   const sheetRef = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
   const moreIsActive = !sections.slice(0, 4).includes(activeSection);
@@ -171,7 +181,7 @@ export default function AppShell({
               )}
             </div>
           ))}
-          <a href="/soporte" className="nav-link">Soporte</a>
+          <SupportLink compact={collapsed} />
         </div>
         {currentUser ? (
           <div className="sidebar-account">
@@ -199,12 +209,6 @@ export default function AppShell({
               <div className="topbar-user desktop-only">{currentUser?.email || currentUser?.username}</div>
             </div>
           </div>
-          <div className="topbar-context desktop-only">
-            <span className="topbar-chip subtle">{currentUser?.role || "user"}</span>
-          </div>
-          {currentUser ? (
-            <button onClick={onLogout} className="btn btn-ghost btn-sm desktop-only">Cerrar sesión</button>
-          ) : null}
         </header>
 
         <div className="content-area" id="app-content" tabIndex={-1}>
@@ -262,7 +266,6 @@ export default function AppShell({
           </header>
 
           <div className="mobile-more-content">
-            <a href="/soporte" className="nav-link">Soporte</a>
             {groupedMobile.moreGroups.map((group) => (
               <div key={group.title} className="mobile-more-group">
                 <h3>{group.title}</h3>
@@ -279,6 +282,10 @@ export default function AppShell({
                 </div>
               </div>
             ))}
+            <div className="mobile-more-group">
+              <h3>Ayuda</h3>
+              <div className="mobile-more-list"><SupportLink /></div>
+            </div>
           </div>
 
           {currentUser ? (

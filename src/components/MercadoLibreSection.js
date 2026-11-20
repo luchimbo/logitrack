@@ -8,6 +8,7 @@ import { toast } from "@/lib/api";
 import { classifyDispatch, groupMercadoLibrePackages, mercadoLibrePackageKey } from "@/lib/mercadolibreLogistics";
 import { LABEL_PRINT_FORMATS, chooseLabelPrintFormat, downloadLabelPdf, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
+import SectionTitle from "./SectionTitle";
 
 const VIEW_OPTIONS = [
   { value: "", label: "Todos" },
@@ -798,7 +799,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Mercado Libre</h2>
+        <SectionTitle icon="integrations">Mercado Libre</SectionTitle>
         <p className="section-subtitle">Ventas pagadas, etiquetas ZPL, corte y seguimiento operativo.</p>
       </div>
 

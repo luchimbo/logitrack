@@ -8,6 +8,7 @@ import TiendanubeOrderCard from "@/components/tiendanube/TiendanubeOrderCard";
 import TiendanubeOrderDetails from "@/components/tiendanube/TiendanubeOrderDetails";
 import MobileSelectionBar from "@/components/MobileSelectionBar";
 import { useTiendanubeOrders } from "@/hooks/useTiendanubeOrders";
+import SectionTitle from "./SectionTitle";
 import {
   badgeStyle,
   formatDateTime,
@@ -181,8 +182,8 @@ export default function TiendanubeSection({ currentUser }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Dashboard de envíos Tienda Nube</h2>
-        <p className="section-subtitle">Pedidos de Tienda Nube que necesitan atención operativa inmediata.</p>
+        <SectionTitle icon="integrations">Tiendanube</SectionTitle>
+        <p className="section-subtitle">Pedidos de Tiendanube que necesitan atención operativa inmediata.</p>
       </div>
 
       {compactError ? <div className="card" style={{ marginBottom: '10px', padding: '10px 12px', fontSize: '13px', background: 'var(--danger-bg)', color: 'var(--danger)' }}>{compactError}</div> : null}

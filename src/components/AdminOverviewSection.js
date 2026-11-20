@@ -3,6 +3,7 @@
 import InfoDisclosure from "./InfoDisclosure";
 
 import { useEffect, useMemo, useState } from "react";
+import SectionTitle from "./SectionTitle";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -124,7 +125,7 @@ export default function AdminOverviewSection() {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Admin Maestro</h2>
+        <SectionTitle icon="settings">Admin Maestro</SectionTitle>
         <p className="section-subtitle">Vista global de GeoModi. Elegí usuarios o workspaces para ver su operación sin cambiar de sesión.</p>
       </div>
 

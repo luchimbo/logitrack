@@ -5,6 +5,7 @@ import InfoDisclosure from "./InfoDisclosure";
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import LoadingButton from "./LoadingButton";
+import SectionTitle from "./SectionTitle";
 
 function isLabelLikelyAvailable(shipment) {
   const status = String(shipment.status || '').toLowerCase();
@@ -363,7 +364,7 @@ export default function ZipnovaSection({ currentUser }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Zipnova</h2>
+        <SectionTitle icon="colecta">Zipnova</SectionTitle>
         <p className="section-subtitle">Integración con Zipnova. Los grupos dependen de si la etiqueta fue descargada desde GeoModi, no del estado informado por Zipnova.</p>
       </div>
 

@@ -5,6 +5,7 @@ import InfoDisclosure from "./InfoDisclosure";
 import { useCallback, useEffect, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
+import SectionTitle from "./SectionTitle";
 
 function formatOrderTotal(total, currency) {
   const numeric = Number(total);
@@ -152,7 +153,7 @@ export default function ShopifySection({ currentUser }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Dashboard de envíos Shopify</h2>
+        <SectionTitle icon="integrations">Shopify</SectionTitle>
         <p className="section-subtitle">Pedidos Shopify sincronizados por tienda para operación logística.</p>
       </div>
 

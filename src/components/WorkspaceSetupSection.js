@@ -87,8 +87,8 @@ export default function WorkspaceSetupSection() {
         </ol>
       </InfoDisclosure>
 
-      <InfoDisclosure title="Configuración de la impresora" description="Impresora y conexión con el agente local" className="card" style={{ maxWidth: '760px' }}>
-        <form onSubmit={handleSave} className="printer-setup-form">
+      <InfoDisclosure title="Configuración de la impresora" description="Impresora y conexión con el agente local" className="card">
+        <form onSubmit={handleSave} className="printer-setup-form" style={{ maxWidth: '760px' }}>
           <div>
             <label className="form-label" htmlFor="printer-name">Nombre visible</label>
             <input id="printer-name" className="form-input" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />

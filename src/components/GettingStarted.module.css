@@ -6,3 +6,6 @@
 
 .summary::after{content:"⌄";font-size:18px;color:var(--text-secondary)}
 details[open]>.summary::after{transform:rotate(180deg)}
+.doneLine{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;color:var(--text-muted);font-size:12px}
+.doneLine>span{color:var(--success);font-weight:800}
+.doneLine button{min-height:32px;padding:4px 10px;margin-left:auto}

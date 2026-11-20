@@ -45,6 +45,9 @@ const groupKey = (g) => g.name === 'Sin dato' ? '__missing__' : g.name;
 const KINDS = [['flex', 'Flex'], ['colecta', 'Colecta'], ['all', 'Todo']];
 const KIND_TITLES = { flex: ['Mapa Flex', 'Solo envíos Flex, en el AMBA.'], colecta: ['Mapa Colecta', 'Mercado Libre y pedidos con envío de Tiendanube.'], all: ['Mapa total', 'Flex y Colecta juntos.'] };
 
+// Long names overlap their neighbours on the country map; the full name stays in the tooltip.
+const MAP_SHORT_LABELS = { santiago_del_estero: 'Sgo. del Estero', tierra_del_fuego: 'T. del Fuego', entre_rios: 'E. Ríos', catamarca: 'Catam.', corrientes: 'Corr.' };
+
 export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, report, refreshing = false, filters, selected, onSelect, partidos = [], onPartidos = () => {}, mode = 'zone', onMode = () => {},
   provinces = [], onProvinces = () => {}, level = 'amba', onLevel = () => {}, onPeriod, onDetail }) {
   const loading = refreshing;
@@ -211,7 +214,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
               const flexN = data?.flexCount || 0, colectaN = data?.colectaCount || 0, total = flexN + colectaN;
               const [x, y] = shape.label;
               return <g key={shape.key} className={styles.provinceTag}>
-                <text x={x} y={y} className={styles.provinceLabel}>{provinceLabel(provinceKey(shape.name))}</text>
+                <text x={x} y={y} className={styles.provinceLabel}>{MAP_SHORT_LABELS[provinceKey(shape.name)] || provinceLabel(provinceKey(shape.name))}</text>
                 {!filters.method && total ? <><rect x={x - 14} y={y + 3} width={28 * flexN / total} height={3.5} rx={1} fill={METHOD_COLORS.flex} /><rect x={x - 14 + 28 * flexN / total} y={y + 3} width={28 * colectaN / total} height={3.5} rx={1} fill={METHOD_COLORS.colecta} /></> : null}
                 {total ? <text x={x} y={y + (filters.method ? 10 : 14)} className={styles.provinceCount}>{filters.method === 'flex' ? flexN : filters.method === 'colecta' ? colectaN : `${flexN} · ${colectaN}`}</text> : null}
               </g>;

@@ -48,7 +48,7 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
 
   return (
     <article className="card integration-card" style={{ padding: 0, overflow: 'hidden', border: `1px solid ${isConnected ? `${accent}55` : 'var(--border)'}` }}>
-      <div style={{ padding: '18px', display: 'grid', gap: '16px' }}>
+      <div className="integration-card-body">
         <div className="integration-card-head">
           <div style={{ display: 'flex', gap: '12px', minWidth: 0 }}>
             <div style={{ width: '54px', height: '54px', flex: '0 0 54px', borderRadius: '16px', display: 'grid', placeItems: 'center', background: '#ffffff', color: accent, fontWeight: 900, border: `1px solid ${accent}35`, padding: '6px' }}>
@@ -62,15 +62,15 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
                 />
               ) : providerIcon[integration.provider] || integration.name[0]}
             </div>
-            <div style={{ minWidth: 0 }}>
+            <div className="integration-title-block">
               <h2 className="integration-provider-title">{integration.name}</h2>
-              <p className="integration-provider-description">{integration.description}</p>
+              <span className={`integration-status${isConnected ? ' is-connected' : ''}`}>
+                {isConnected ? 'Conectado' : isComingSoon ? 'Próximamente' : 'Sin conectar'}
+              </span>
             </div>
           </div>
-          <span className={`integration-status${isConnected ? ' is-connected' : ''}`}>
-            {isConnected ? 'Conectado' : isComingSoon ? 'Próximamente' : 'Sin conectar'}
-          </span>
         </div>
+        <p className="integration-provider-description">{integration.description}</p>
 
         {connections.length ? (
           <InfoDisclosure title="Cuentas conectadas" description={`Conexiones: ${connections.length}`}><div style={{ display: 'grid', gap: '8px' }}>
@@ -86,7 +86,7 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
 
         {!isComingSoon && <button
           type="button"
-          className={isConnected ? 'btn btn-ghost' : 'btn btn-primary'}
+          className={`integration-card-action ${isConnected ? 'btn' : 'btn btn-primary'}`}
           onClick={() => onOpenProvider(integration.provider)}
           aria-label={`${isConnected ? 'Abrir' : 'Configurar'} ${integration.name}`}
         >
