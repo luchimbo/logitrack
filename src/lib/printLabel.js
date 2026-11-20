@@ -17,16 +17,9 @@ export function openPrintWindow() {
     return win;
 }
 
-// Carga el PDF de la etiqueta dentro de la ventana indicada usando un <iframe> al endpoint
-// (mismo origen, con cookies) y dispara el diálogo de impresión al terminar de cargar.
-// Se manipula el DOM del popup directamente (mismo origen) en vez de document.write para
-// máxima compatibilidad; navegar al endpoint evita los problemas de blob: entre ventanas.
-export async function renderPrintWindow(win, url, { onConfirmPrinted } = {}) {
-    if (!win) throw new Error("No se pudo abrir la ventana de impresión");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 55000);
+async function fetchLabelPdf(url, requestOptions) {
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, { ...requestOptions, signal: AbortSignal.timeout(55000) });
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             throw new Error(data.error || "No se pudo preparar el PDF de etiquetas");
@@ -34,7 +27,31 @@ export async function renderPrintWindow(win, url, { onConfirmPrinted } = {}) {
         if (!(response.headers.get("content-type") || "").includes("application/pdf")) {
             throw new Error("La respuesta no contiene un PDF de etiquetas");
         }
-        const blob = await response.blob();
+        return await response.blob();
+    } catch (error) {
+        if (["AbortError", "TimeoutError"].includes(error.name)) {
+            throw new Error("La preparación tardó demasiado. Intentá nuevamente con menos etiquetas.");
+        }
+        throw error;
+    }
+}
+
+export async function downloadLabelPdf(url, requestOptions) {
+    const blob = await fetchLabelPdf(url, requestOptions);
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = "etiquetas-mercadolibre.pdf";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+export async function renderPrintWindow(win, url, { onConfirmPrinted, requestOptions } = {}) {
+    if (!win) throw new Error("No se pudo abrir la ventana de impresión");
+    try {
+        const blob = await fetchLabelPdf(url, requestOptions);
         const blobUrl = URL.createObjectURL(blob);
         const doc = win.document;
         doc.title = "Etiquetas";
@@ -76,7 +93,5 @@ export async function renderPrintWindow(win, url, { onConfirmPrinted } = {}) {
         const message = error.name === "AbortError" ? "La preparación tardó demasiado. Intentá nuevamente con menos etiquetas." : (error.message || "No se pudo preparar la impresión");
         try { win.document.body.textContent = message; } catch { /* La ventana puede haberse cerrado. */ }
         throw new Error(message);
-    } finally {
-        clearTimeout(timer);
     }
 }

@@ -29,8 +29,8 @@ function formatCutoff(cutoff) {
   return `${cutoff.label}: ${cutoff.value}`;
 }
 
-export default function MercadoLibreShipmentMeta({ shipment, compact = false }) {
-  const state = shipment?.ml_package_state || shipment?.packageState;
+export default function MercadoLibreShipmentMeta({ shipment, compact = false, hideState = false }) {
+  const state = hideState ? null : (shipment?.ml_package_state || shipment?.packageState);
   const printability = shipment?.ml_printability || shipment?.printability;
   const cutoff = shipment?.ml_cutoff || shipment?.cutoffDetail;
   const cutoffLabel = formatCutoff(cutoff);

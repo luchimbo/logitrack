@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { createMercadoLibreClient } from '../src/lib/mercadolibreClient.js';
 import {
+  classifyDispatch,
+  groupMercadoLibrePackages,
   deriveCutoffDetail,
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
@@ -365,4 +367,30 @@ test('label download batches use at most 50 shipment ids', async (t) => {
   assert.equal(calls.length, 2);
   assert.ok(calls[0].includes(encodeURIComponent(ids.slice(0, 50).join(','))));
   assert.ok(calls[1].includes(encodeURIComponent(ids.slice(50).join(','))));
+});
+
+
+test('separa paquetes listos de despachados usando estados logísticos', () => {
+  const ready = { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'printed', printability: { id: 'printed' } };
+  assert.equal(classifyDispatch(ready), 'ready');
+  assert.equal(classifyDispatch({ ...ready, printability: { id: 'imported' } }), 'ready');
+  assert.equal(classifyDispatch({ ...ready, printability: { id: 'printable' } }), null);
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'shipped' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'delivered' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentSubstatus: 'picked_up' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'cancelled', shipmentSubstatus: 'picked_up' }), null);
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'not_delivered' }), null);
+});
+
+test('una fila por envío y cuenta conserva las ventas del paquete y el estado más reciente', () => {
+  const result = groupMercadoLibrePackages([
+    { id: '10', connectionId: 1, shipmentId: '20', syncedAt: '2026-11-19', shipmentStatus: 'ready_to_ship' },
+    { id: '11', connectionId: 1, shipmentId: '20', syncedAt: '2026-11-20', shipmentStatus: 'shipped' },
+    { id: '12', connectionId: 2, shipmentId: '20', shipmentStatus: 'delivered' },
+    { id: '13', connectionId: 2 },
+    { id: '14', connectionId: 2 },
+  ]);
+  assert.deepEqual(result.map((entry) => entry.orderIds), [['10', '11'], ['12'], ['13'], ['14']]);
+  assert.equal(classifyDispatch(result[0]), 'dispatched');
+  assert.equal(result[1].connectionId, 2);
 });

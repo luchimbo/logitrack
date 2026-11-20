@@ -289,6 +289,39 @@ export function derivePrintability({ shipmentId = '', shipmentStatus = '', shipm
   return asPrintability('not_ready', eventLabel(status, substatus));
 }
 
+// El despacho depende del estado logístico, no solo de que exista una etiqueta.
+export function classifyDispatch(order = {}) {
+  const status = lower(order.shipmentStatus);
+  const substatus = lower(order.shipmentSubstatus);
+  if (CANCELED_STATUSES.has(status) || PROBLEM_STATUSES.has(status)) return null;
+  if (IN_TRANSIT_STATUSES.has(status) || DELIVERED_STATUSES.has(status) || SCANNED_SUBSTATUSES.has(substatus)) return 'dispatched';
+  if (status === 'ready_to_ship' && ['printed', 'imported'].includes(order.printability?.id)) return 'ready';
+  return null;
+}
+
+export function mercadoLibrePackageKey(order) {
+  const account = order.connectionId || order.externalStoreId || 'unknown';
+  return order.shipmentId ? `${account}:shipment:${order.shipmentId}` : `${account}:order:${order.id}`;
+}
+
+export function groupMercadoLibrePackages(orders) {
+  const groups = new Map();
+  for (const order of orders) {
+    const key = mercadoLibrePackageKey(order);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(order);
+  }
+  return [...groups.values()].map((members) => {
+    const latest = members.reduce((current, order) =>
+      (order.syncedAt || '') > (current.syncedAt || '') ? order : current);
+    return {
+      ...latest,
+      orderIds: members.map((order) => order.id),
+      products: members.flatMap((order) => order.products || []),
+    };
+  });
+}
+
 export function deriveTimeline(history = [], { shipmentStatus = '', shipmentSubstatus = '' } = {}) {
   const events = Array.isArray(history) ? history : [];
   const normalized = events

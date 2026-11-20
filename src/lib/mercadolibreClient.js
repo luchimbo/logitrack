@@ -102,9 +102,9 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=zpl2`, { responseType: 'arrayBuffer' });
   }
 
-  function downloadShipmentLabelsPdf(shipmentIds) {
+  function downloadShipmentLabelsPdf(shipmentIds, { signal } = {}) {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.join(',') : String(shipmentIds || '');
-    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=pdf`, { responseType: 'arrayBuffer' });
+    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=pdf`, { responseType: 'arrayBuffer', signal });
   }
 
   async function downloadShipmentLabelsZplBatches(shipmentIds, chunkSize = 50) {
