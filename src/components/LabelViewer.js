@@ -104,11 +104,15 @@ export default function LabelViewer({ shipmentId, onClose }) {
         }
     };
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
         if (!shipmentId) return;
         const win = openPrintWindow();
         if (!win) return;
-        renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`);
+        try {
+            await renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`);
+        } catch (err) {
+            toast(err.message, "error");
+        }
     };
 
     const handlePreviewPrint = () => {

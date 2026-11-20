@@ -1,6 +1,7 @@
 "use client";
 
 import InfoDisclosure from "./InfoDisclosure";
+import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 
 import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
@@ -97,15 +98,13 @@ export default function ColectaSection({ onNavigate }) {
         const selectedIds = getSelectedIdsFrom(shipments);
         if (!selectedIds.length) return;
 
+        const win = openPrintWindow();
+        if (!win) return;
         setIsPrintingBulk(true);
         try {
-            const result = await api('/print-queue', {
-                method: 'POST',
-                body: JSON.stringify({ ids: selectedIds }),
-            });
-            toast(`${result.labels_total || selectedIds.length} etiquetas en cola de impresion`, 'success');
+            await renderPrintWindow(win, `/api/labels/pdf?ids=${encodeURIComponent(selectedIds.join(','))}`);
         } catch (err) {
-            toast(err.message || 'Error encolando etiquetas', 'error');
+            toast(err.message || 'No se pudo preparar la impresión', 'error');
         } finally {
             setIsPrintingBulk(false);
         }

@@ -586,7 +586,8 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
     if (!byConn.size) return null;
     if (byConn.size > 1) {
-      toast("La selección tiene varias cuentas; se imprime una por vez", "info");
+      toast("Seleccioná ventas de una sola cuenta para imprimir", "error");
+      return null;
     }
     const [connectionId, ids] = [...byConn.entries()][0];
     return `/api/labels/ml-pdf?orderIds=${encodeURIComponent(ids.join(","))}&connectionId=${encodeURIComponent(connectionId)}`;
@@ -616,9 +617,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           toast("Las ventas seleccionadas no tienen conexión de Mercado Libre", "error");
           return;
         }
-        renderPrintWindow(printWin, url);
-        setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-        await markPrintedAndReload(list);
+        await renderPrintWindow(printWin, url, { onConfirmPrinted: () => markPrintedAndReload(list) });
         return;
       }
 
@@ -650,9 +649,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       if (action === "import_and_print") {
         const url = buildMlPdfUrl(list);
         if (url) {
-          renderPrintWindow(printWin, url);
-          setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-          await markPrintedAndReload(list);
+          await renderPrintWindow(printWin, url, { onConfirmPrinted: () => markPrintedAndReload(list) });
         } else {
           try { printWin.close(); } catch (e) { /* noop */ }
         }
@@ -698,29 +695,33 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       byConn.get(key).push(order.id);
     }
     try {
-      await Promise.all([...byConn.entries()].map(([connectionId, orderIds]) =>
+      const responses = await Promise.all([...byConn.entries()].map(([connectionId, orderIds]) =>
         fetch("/api/admin/mercadolibre/mark-printed", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ connectionId, orderIds }),
         })
       ));
+      if (responses.some((response) => !response.ok)) throw new Error("No se pudo confirmar la impresión");
       await load({ syncMode: "0" });
     } catch (err) {
       console.error("mark-printed error", err);
+      throw err;
     }
   };
 
-  const handlePrint = (order) => {
+  const handlePrint = async (order) => {
     if (!order.connectionId) return;
     const win = openPrintWindow();
     if (!win) return;
-    renderPrintWindow(
-      win,
-      `/api/labels/ml-pdf?orderId=${encodeURIComponent(order.id)}&connectionId=${encodeURIComponent(order.connectionId)}`,
-    );
-    setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
-    markPrintedAndReload([order]);
+    setPrintingId(order.id);
+    try {
+      await renderPrintWindow(win, `/api/labels/ml-pdf?orderId=${encodeURIComponent(order.id)}&connectionId=${encodeURIComponent(order.connectionId)}`, { onConfirmPrinted: () => markPrintedAndReload([order]) });
+    } catch (err) {
+      toast(err.message || "No se pudo preparar la impresión", "error");
+    } finally {
+      setPrintingId("");
+    }
   };
 
   const handleRefresh = async (order) => {

@@ -24,6 +24,9 @@ async function buildLabelPdf(workspaceId, shipmentIds) {
     // Mantener el orden solicitado y descartar las que no existen o no tienen ZPL
     const usableIds = normalizedIds.filter((id) => String(byId.get(id)?.raw_zpl || '').trim());
 
+    if (usableIds.length !== normalizedIds.length) {
+        return { error: { body: { error: 'Algunas etiquetas no están disponibles; no se generó un PDF incompleto.' }, status: 404 } };
+    }
     if (!usableIds.length) {
         return { error: { body: { error: 'Etiqueta no disponible. No hay ZPL para imprimir.' }, status: 404 } };
     }
@@ -45,6 +48,7 @@ async function buildLabelPdf(workspaceId, shipmentIds) {
             method: 'POST',
             headers,
             body: zpl,
+            signal: AbortSignal.timeout(25000),
         });
         if (response.ok || response.status !== 415) {
             break;

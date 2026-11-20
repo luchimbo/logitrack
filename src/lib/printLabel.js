@@ -21,34 +21,62 @@ export function openPrintWindow() {
 // (mismo origen, con cookies) y dispara el diálogo de impresión al terminar de cargar.
 // Se manipula el DOM del popup directamente (mismo origen) en vez de document.write para
 // máxima compatibilidad; navegar al endpoint evita los problemas de blob: entre ventanas.
-export function renderPrintWindow(win, url) {
-    if (!win) return;
+export async function renderPrintWindow(win, url, { onConfirmPrinted } = {}) {
+    if (!win) throw new Error("No se pudo abrir la ventana de impresión");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 55000);
     try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "No se pudo preparar el PDF de etiquetas");
+        }
+        if (!(response.headers.get("content-type") || "").includes("application/pdf")) {
+            throw new Error("La respuesta no contiene un PDF de etiquetas");
+        }
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
         const doc = win.document;
-        doc.title = "Imprimir etiqueta";
+        doc.title = "Etiquetas";
         doc.body.style.margin = "0";
         doc.body.innerHTML = "";
-
+        const bar = doc.createElement("div");
+        bar.style.cssText = "padding:8px;font-family:sans-serif";
+        const link = doc.createElement("a");
+        link.href = blobUrl;
+        link.download = "etiquetas.pdf";
+        link.textContent = "Descargar PDF";
+        bar.appendChild(link);
+        if (onConfirmPrinted) {
+            const confirmButton = doc.createElement("button");
+            confirmButton.textContent = "Confirmar que se imprimieron";
+            confirmButton.style.marginLeft = "16px";
+            confirmButton.addEventListener("click", async () => {
+                confirmButton.disabled = true;
+                try {
+                    await onConfirmPrinted();
+                    confirmButton.textContent = "Impresión confirmada";
+                } catch {
+                    confirmButton.disabled = false;
+                    confirmButton.textContent = "No se pudo confirmar. Reintentar";
+                }
+            });
+            bar.appendChild(confirmButton);
+        }
         const iframe = doc.createElement("iframe");
-        iframe.style.border = "0";
-        iframe.style.width = "100%";
-        iframe.style.height = "100vh";
-        iframe.src = url;
-
-        const triggerPrint = () => {
-            try {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            } catch (e) {
-                /* el PDF igual queda visible para imprimir manualmente */
-            }
-        };
-        iframe.addEventListener("load", () => setTimeout(triggerPrint, 300));
-        doc.body.appendChild(iframe);
-        // Respaldo por si el evento load del PDF no dispara.
-        setTimeout(triggerPrint, 2500);
-    } catch (e) {
-        // Último recurso: navegar la ventana directo al PDF.
-        try { win.location.href = url; } catch (err) { /* noop */ }
+        iframe.style.cssText = "border:0;width:100%;height:90vh";
+        iframe.title = "PDF de etiquetas";
+        iframe.src = blobUrl;
+        iframe.addEventListener("load", () => {
+            try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch { /* Usar el visor de PDF. */ }
+        }, { once: true });
+        doc.body.append(bar, iframe);
+        win.addEventListener("beforeunload", () => URL.revokeObjectURL(blobUrl), { once: true });
+    } catch (error) {
+        const message = error.name === "AbortError" ? "La preparación tardó demasiado. Intentá nuevamente con menos etiquetas." : (error.message || "No se pudo preparar la impresión");
+        try { win.document.body.textContent = message; } catch { /* La ventana puede haberse cerrado. */ }
+        throw new Error(message);
+    } finally {
+        clearTimeout(timer);
     }
 }

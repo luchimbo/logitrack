@@ -57,7 +57,7 @@ async function renderSingleLabelPdf(zpl, height) {
     ];
     let response = null;
     for (const headers of attemptHeaders) {
-        response = await fetch(labelaryUrl, { method: 'POST', headers, body: zpl });
+        response = await fetch(labelaryUrl, { method: 'POST', headers, body: zpl, signal: AbortSignal.timeout(25000) });
         if (response.ok || response.status !== 415) break;
     }
     if (!response.ok) {
@@ -167,6 +167,9 @@ export async function GET(request) {
             }
         }
 
+        if (errors.length) {
+            return NextResponse.json({ error: `No se pudieron obtener ${errors.length} etiquetas; no se generó un PDF incompleto.` }, { status: 502 });
+        }
         if (!labelParts.length) {
             return NextResponse.json({
                 error: 'Mercado Libre no pudo generar la etiqueta (¿la venta sigue lista para imprimir?)',
