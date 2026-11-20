@@ -36,23 +36,32 @@ function button(label, onClick) {
     return control;
 }
 
-export function chooseLabelPrintFormat(panel) {
+export const LABEL_PRINT_FORMATS = [
+    { id: "thermal", label: "PDF térmico", detail: "Una etiqueta por página, seguidas en un solo PDF." },
+    { id: "pdf", label: "PDF para A4", detail: "Agrupa hasta cuatro etiquetas por hoja según su tamaño." },
+    { id: "zpl", label: "ZPL", detail: "Para térmicas compatibles con ZPL. Las etiquetas van en secuencia." },
+];
+
+export function chooseLabelPrintFormat(panel, { preferredFormat = "", mixedPreferences = false } = {}) {
     return new Promise((resolve) => {
         panel.dialog.addEventListener("close", () => resolve(null), { once: true });
-        const options = [
-            ["thermal", "PDF térmico", "Una etiqueta por página, seguidas en un solo PDF."],
-            ["pdf", "PDF para A4", "Agrupa hasta cuatro etiquetas por hoja según su tamaño."],
-            ["zpl", "ZPL", "Un archivo con las etiquetas en secuencia."],
-        ];
+        const options = [...LABEL_PRINT_FORMATS].sort((a, b) =>
+            Number(b.id === preferredFormat) - Number(a.id === preferredFormat));
+        if (mixedPreferences) {
+            const notice = document.createElement("p");
+            notice.textContent = "Las cuentas seleccionadas tienen preferencias distintas. Elegí un formato para todo el lote.";
+            panel.body.append(notice);
+        }
         panel.body.style.cssText = "display:grid;gap:10px;margin-top:14px";
-        for (const [format, label, description] of options) {
-            const option = button(label, () => {
+        for (const { id: format, label, detail: description } of options) {
+            const option = button(format === preferredFormat ? `${label} · predeterminado` : label, () => {
                 const status = document.createElement("p");
                 status.setAttribute("role", "status");
                 status.textContent = "Preparando etiquetas…";
                 panel.body.replaceChildren(status);
                 resolve(format);
             });
+            if (format === preferredFormat) option.classList.add("btn-primary");
             option.style.cssText = "display:grid;gap:4px;text-align:left;padding:10px 12px";
             const detail = document.createElement("span");
             detail.style.fontWeight = "400";

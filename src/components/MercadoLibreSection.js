@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
 import { classifyDispatch, groupMercadoLibrePackages, mercadoLibrePackageKey } from "@/lib/mercadolibreLogistics";
-import { chooseLabelPrintFormat, downloadLabelPdf, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
+import { LABEL_PRINT_FORMATS, chooseLabelPrintFormat, downloadLabelPdf, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 const VIEW_OPTIONS = [
@@ -27,6 +27,21 @@ const VIEW_OPTIONS = [
 
 const orderKey = mercadoLibrePackageKey;
 const mlPdfUrl = "/api/labels/ml-pdf";
+
+function printPreferenceKey(connectionId) {
+  return `geomodi:mercadolibre:print-format:${connectionId}`;
+}
+
+function getPrintPreferences(connections) {
+  try {
+    return Object.fromEntries(connections.map(({ id }) => [
+      id,
+      window.localStorage.getItem(printPreferenceKey(id)) || "",
+    ]));
+  } catch {
+    return {};
+  }
+}
 
 function labelRequest(list, format = "original") {
   return {
@@ -310,6 +325,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const canManageIntegration = ["owner", "admin"].includes(currentUser?.role);
   const [connected, setConnected] = useState(false);
   const [connections, setConnections] = useState([]);
+  const [printPreferences, setPrintPreferences] = useState({});
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [orders, setOrders] = useState([]);
   const [selectedOrderKeys, setSelectedOrderKeys] = useState([]);
@@ -416,6 +432,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setConnected(Boolean(data.connected));
       const nextConnections = Array.isArray(data.connections) ? data.connections : [];
       setConnections(nextConnections);
+      setPrintPreferences(getPrintPreferences(nextConnections));
       setSelectedConnectionId((prev) => prev && nextConnections.some((item) => String(item.id) === String(prev)) ? prev : "");
     } catch (err) {
       setError(err.message || "Error inesperado");
@@ -599,6 +616,24 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
+  const setPrintPreference = (connectionId, format) => {
+    try {
+      if (format) window.localStorage.setItem(printPreferenceKey(connectionId), format);
+      else window.localStorage.removeItem(printPreferenceKey(connectionId));
+      setPrintPreferences((previous) => ({ ...previous, [connectionId]: format }));
+    } catch {
+      toast("El navegador no pudo guardar el formato predeterminado.", "error");
+    }
+  };
+
+  const choosePrintFormat = (panel, packages) => {
+    const formats = new Set(packages.map(({ connectionId }) => printPreferences[connectionId] || ""));
+    return chooseLabelPrintFormat(panel, {
+      preferredFormat: formats.size === 1 ? [...formats][0] : "",
+      mixedPreferences: formats.size > 1,
+    });
+  };
+
   const printLabels = async (win, list, format) => {
     if (format === "zpl") {
       await downloadLabelZplFile(mlPdfUrl, labelRequest(list, "zpl"), win.signal);
@@ -629,7 +664,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (willPrint && !printWin) return;
     setBulkAction(action);
     try {
-      const format = willPrint ? await chooseLabelPrintFormat(printWin) : null;
+      const format = willPrint ? await choosePrintFormat(printWin, list) : null;
       if (willPrint && !format) return;
       if (action === "download") {
         await downloadLabelPdf(mlPdfUrl, labelRequest(list));
@@ -729,7 +764,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (!win) return;
     setPrintingId(order.id);
     try {
-      const format = await chooseLabelPrintFormat(win);
+      const format = await choosePrintFormat(win, [order]);
       if (format) await printLabels(win, [order], format);
     } catch (err) {
       if (win.closed) return;
@@ -783,6 +818,22 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Válido 72hs</span>
           </div>
         ) : null}
+        {connections.length > 0 && (
+          <div style={{ marginTop: "16px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Elegí el formato de impresión predeterminado de cada cuenta para este navegador.</p>
+            <div className="form-row" style={{ flexWrap: "wrap", gap: "12px" }}>
+              {connections.map((account) => (
+                <label key={account.id} className="form-group" style={{ minWidth: "220px" }}>
+                  <span className="form-label">Formato de {account.displayName || account.externalStoreId}</span>
+                  <select className="form-input" value={printPreferences[account.id] || ""} onChange={(event) => setPrintPreference(account.id, event.target.value)}>
+                    <option value="">Elegir al imprimir</option>
+                    {LABEL_PRINT_FORMATS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </InfoDisclosure>
 
       {connected ? (
