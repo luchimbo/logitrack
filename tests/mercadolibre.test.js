@@ -9,6 +9,7 @@ import {
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
 import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+import { extractLabelDimensionsInches } from '../src/lib/labelDimensions.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
 import { isDispatchDateValue, isLabelScheduleValue, isNonProductLabelValue } from '../src/lib/dispatchDate.js';
 
@@ -393,4 +394,12 @@ test('una fila por envío y cuenta conserva las ventas del paquete y el estado m
   assert.deepEqual(result.map((entry) => entry.orderIds), [['10', '11'], ['12'], ['13'], ['14']]);
   assert.equal(classifyDispatch(result[0]), 'dispatched');
   assert.equal(result[1].connectionId, 2);
+});
+
+test('la etiqueta larga conserva el pie desplazado y el ancho de los recuadros', () => {
+  const zpl = '^XA^LH0,90^FO0,90^GB810,2,1^FS^LH0,410^FO0,950^GB850,2,2^FS^FO650,1140^GB125,40,40^FS^XZ';
+  const full = extractLabelDimensionsInches(zpl);
+  assert.ok(full.width * 203.2 >= 850);
+  assert.ok(full.height * 203.2 >= 1590);
+  assert.deepEqual(extractLabelDimensionsInches('^XA^FO30,30^GB100,100,2^FS^XZ'), {width: 4, height: 6});
 });

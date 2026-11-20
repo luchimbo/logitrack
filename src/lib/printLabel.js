@@ -17,6 +17,45 @@ export function openPrintWindow() {
     return win;
 }
 
+export function chooseLabelPrintFormat(win) {
+    return new Promise((resolve) => {
+        const doc = win.document;
+        doc.title = "Formato de etiquetas";
+        doc.body.textContent = "";
+        const title = doc.createElement("h2");
+        title.textContent = "Elegí el formato de las etiquetas";
+        doc.body.append(title);
+        const timer = setInterval(() => {
+            if (win.closed) finish(null);
+        }, 250);
+        function finish(format) {
+            clearInterval(timer);
+            if (format) doc.body.textContent = "Preparando etiquetas…";
+            resolve(format);
+        }
+        for (const [format, label] of [["pdf", "PDF · dos por hoja A4"], ["zpl", "ZPL · en secuencia"], [null, "Cancelar"]]) {
+            const button = doc.createElement("button");
+            button.textContent = label;
+            button.style.cssText = "margin:0 8px 8px 0;padding:8px 12px";
+            button.onclick = () => {
+                finish(format);
+                if (!format) win.close();
+            };
+            doc.body.append(button);
+        }
+        doc.querySelector("button").focus();
+    });
+}
+
+export async function downloadLabelZplFile(url, requestOptions) {
+    const response = await fetch(url, { ...requestOptions, signal: AbortSignal.timeout(55000) });
+    if (!response.ok || !(response.headers.get("content-type") || "").includes("application/vnd.zebra-zpl")) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "No se pudo preparar el ZPL de etiquetas.");
+    }
+    saveLabelFile(await response.blob(), "etiquetas.zpl");
+}
+
 async function fetchLabelPdf(url, requestOptions) {
     try {
         const response = await fetch(url, { ...requestOptions, signal: AbortSignal.timeout(55000) });
@@ -37,11 +76,14 @@ async function fetchLabelPdf(url, requestOptions) {
 }
 
 export async function downloadLabelPdf(url, requestOptions) {
-    const blob = await fetchLabelPdf(url, requestOptions);
+    saveLabelFile(await fetchLabelPdf(url, requestOptions), "etiquetas-mercadolibre.pdf");
+}
+
+function saveLabelFile(blob, filename) {
     const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = blobUrl;
-    link.download = "etiquetas-mercadolibre.pdf";
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();

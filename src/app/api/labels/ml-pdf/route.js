@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { arrangeLabelsOnA4, zplToPdf } from '@/lib/labelPdfLayout';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 
@@ -21,65 +22,6 @@ async function extractZplFromMlZip(arrayBuffer) {
         if (text) labels.push(text);
     }
     return labels;
-}
-
-const DPMM = 8; // densidad de impresión de las etiquetas ML
-const DPI = DPMM * 25.4; // 203.2 dpi
-
-const LABEL_WIDTH_IN = 3.94; // 10 cm — ancho estándar de las etiquetas térmicas de ML
-const LABEL_HEIGHT_DOTS = 1200; // 15 cm a 8 dpmm
-
-// Divide un ZPL con varias etiquetas concatenadas en bloques individuales ^XA ... ^XZ y
-// descarta los bloques vacíos (ML a veces agrega un ^XA^XZ sin contenido que, si se renderiza,
-// produce una página en blanco).
-function splitZplLabels(zpl) {
-    const blocks = (zpl.match(/\^XA[\s\S]*?\^XZ/g) || []).filter((b) => /\^F[OT]\d/.test(b));
-    return blocks.length ? blocks : [zpl];
-}
-
-// Alto de UNA etiqueta en pulgadas. El ZPL de ML NO trae ^LL/^PW, así que medimos la mayor
-// coordenada Y de los campos (^FO/^FT, contemplando ^LH). Piso de 15 cm para que una etiqueta
-// normal ocupe toda la hoja 10x15; si el contenido supera los 15 cm (ej. Flex con encabezado
-// recortable), se expande para no cortar el pie.
-function labelHeightInches(zpl) {
-    const regex = /\^F[OT](\d+),(\d+)/gi;
-    let maxY = 0, m;
-    while ((m = regex.exec(zpl)) !== null) maxY = Math.max(maxY, Number(m[2]) || 0);
-    const heightDots = maxY <= LABEL_HEIGHT_DOTS ? LABEL_HEIGHT_DOTS : maxY + 80;
-    return Math.min(12, Number((heightDots / DPI).toFixed(2)));
-}
-
-async function renderSingleLabelPdf(zpl, height, signal = AbortSignal.timeout(25000)) {
-    const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/${LABEL_WIDTH_IN}x${height}/`;
-    const attemptHeaders = [
-        { Accept: 'application/pdf', 'Content-Type': 'application/x-www-form-urlencoded' },
-        { Accept: 'application/pdf', 'Content-Type': 'text/plain' },
-    ];
-    let response = null;
-    for (const headers of attemptHeaders) {
-        response = await fetch(labelaryUrl, { method: 'POST', headers, body: zpl, signal });
-        if (response.ok || response.status !== 415) break;
-    }
-    if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`Labelary: ${errorText}`);
-    }
-    return new Uint8Array(await response.arrayBuffer());
-}
-
-// Renderiza cada etiqueta a su tamaño real y las une en un PDF multipágina. Así una etiqueta
-// 10x15 ocupa una página 10x15 (sin espacio en blanco) y las Flex más altas tampoco se recortan.
-async function zplToPdf4x6(zpl, signal) {
-    const { PDFDocument } = await import('pdf-lib');
-    const labels = splitZplLabels(zpl);
-    const merged = await PDFDocument.create();
-    for (const label of labels) {
-        const bytes = await renderSingleLabelPdf(label, labelHeightInches(label), signal);
-        const src = await PDFDocument.load(bytes);
-        const pages = await merged.copyPages(src, src.getPageIndices());
-        for (const page of pages) merged.addPage(page);
-    }
-    return Buffer.from(await merged.save());
 }
 
 export async function GET(request) {
@@ -178,7 +120,7 @@ export async function GET(request) {
 
         let pdf;
         try {
-            pdf = await zplToPdf4x6(labelParts.join('\r\n'));
+            pdf = await zplToPdf(labelParts.join('\r\n'));
         } catch (err) {
             console.error('Labelary render error:', err);
             return NextResponse.json({ error: 'No se pudo generar el PDF de la etiqueta' }, { status: 502 });
@@ -203,6 +145,10 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => null);
     const packages = body?.packages;
+    const format = body?.format ?? 'original';
+    if (!['original', 'pdf', 'zpl'].includes(format)) {
+        return NextResponse.json({ error: 'Formato de etiqueta inválido.' }, { status: 400 });
+    }
     if (!Array.isArray(packages) || packages.length < 1 || packages.length > 500 ||
         packages.some((item) => !/^\d{1,20}$/.test(String(item?.shipmentId)) ||
             !Number.isSafeInteger(item?.connectionId) || item.connectionId < 1)) {
@@ -218,8 +164,6 @@ export async function POST(request) {
             byAccount.get(connectionId).add(String(shipmentId));
         }
 
-        const { PDFDocument } = await import('pdf-lib');
-        const merged = await PDFDocument.create();
         const signal = AbortSignal.timeout(42000);
 
         // Validar todas las cuentas y sus envíos antes de pedir etiquetas.
@@ -247,6 +191,45 @@ export async function POST(request) {
             return { target, shipmentIds, cached };
         }));
 
+        if (format !== 'original') {
+            const byShipment = new Map();
+            // Conservar el orden de la selección, incluso entre cuentas.
+            await Promise.all(accounts.map(async ({ target, shipmentIds, cached }) => {
+                for (const id of shipmentIds) {
+                    signal.throwIfAborted();
+                    let zpl = cached.get(id);
+                    if (!zpl) {
+                        try {
+                            const zip = await target.client.downloadShipmentLabelsZpl([id], { signal });
+                            zpl = (await extractZplFromMlZip(zip)).join('\r\n').trim();
+                        } catch {
+                            signal.throwIfAborted();
+                        }
+                    }
+                    if (!zpl || !/\^XA[\s\S]+?\^XZ/i.test(zpl)) {
+                        throw new Error(`Mercado Libre no entregó la etiqueta del envío ${id} (${target.displayName || target.externalStoreId}).`);
+                    }
+                    byShipment.set(`${target.connectionId}:${id}`, zpl);
+                }
+            }));
+            const keys = [...new Set(packages.map(({ connectionId, shipmentId }) => `${connectionId}:${shipmentId}`))];
+            const zpl = keys.map((key) => byShipment.get(key)).join('\r\n');
+            if (format === 'zpl') {
+                return new NextResponse(zpl, {
+                    headers: {
+                        'Content-Type': 'application/vnd.zebra-zpl',
+                        'Content-Disposition': 'attachment; filename="etiquetas-mercadolibre.zpl"',
+                        'Cache-Control': 'no-store',
+                    },
+                });
+            }
+            return new NextResponse(await arrangeLabelsOnA4(await zplToPdf(zpl, signal)), {
+                headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' },
+            });
+        }
+
+        const { PDFDocument } = await import('pdf-lib');
+        const merged = await PDFDocument.create();
         const documents = await Promise.all(accounts.map(async ({ target, shipmentIds, cached }) => {
             const pdfs = [];
             for (let i = 0; i < shipmentIds.length; i += 50) {
@@ -271,7 +254,7 @@ export async function POST(request) {
                             if (!zpl) {
                                 throw new Error(`Mercado Libre no entregó la etiqueta del envío ${id} (${target.displayName || target.externalStoreId}).`);
                             }
-                            pdfs.push(await PDFDocument.load(await zplToPdf4x6(zpl, signal)));
+                            pdfs.push(await PDFDocument.load(await zplToPdf(zpl, signal)));
                         }
                     }
                 }
@@ -295,6 +278,6 @@ export async function POST(request) {
         }
         console.error('Mercado Libre package PDF:', error);
         return NextResponse.json({ error: error.status === 404 || error.message?.startsWith('Mercado Libre no entregó')
-            ? error.message : 'No se pudo preparar el PDF completo de etiquetas.' }, { status: error.status || 502 });
+            ? error.message : 'No se pudo preparar el archivo completo de etiquetas.' }, { status: error.status || 502 });
     }
 }

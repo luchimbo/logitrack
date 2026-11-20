@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
 import { classifyDispatch, groupMercadoLibrePackages, mercadoLibrePackageKey } from "@/lib/mercadolibreLogistics";
-import { downloadLabelPdf, openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
+import { chooseLabelPrintFormat, downloadLabelPdf, downloadLabelZplFile, openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 
 const VIEW_OPTIONS = [
@@ -28,11 +28,12 @@ const VIEW_OPTIONS = [
 const orderKey = mercadoLibrePackageKey;
 const mlPdfUrl = "/api/labels/ml-pdf";
 
-function pdfRequest(list) {
+function labelRequest(list, format = "original") {
   return {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      format,
       packages: list.map(({ connectionId, shipmentId }) => ({ connectionId, shipmentId: String(shipmentId) })),
     }),
   };
@@ -598,6 +599,18 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
+  const printLabels = async (win, list, format) => {
+    if (format === "zpl") {
+      await downloadLabelZplFile(mlPdfUrl, labelRequest(list, "zpl"));
+      win.close();
+      return;
+    }
+    await renderPrintWindow(win, mlPdfUrl, {
+      requestOptions: labelRequest(list, "pdf"),
+      onConfirmPrinted: () => markPrintedAndReload(list),
+    });
+  };
+
   const runBulk = async (action, sourceOrders) => {
     const list = Array.isArray(sourceOrders) ? sourceOrders : [];
     if (!list.length) {
@@ -618,15 +631,14 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (willPrint && !printWin) return;
     setBulkAction(action);
     try {
+      const format = willPrint ? await chooseLabelPrintFormat(printWin) : null;
+      if (willPrint && !format) return;
       if (action === "download") {
-        await downloadLabelPdf(mlPdfUrl, pdfRequest(list));
+        await downloadLabelPdf(mlPdfUrl, labelRequest(list));
         return;
       }
       if (action === "print") {
-        await renderPrintWindow(printWin, mlPdfUrl, {
-          requestOptions: pdfRequest(list),
-          onConfirmPrinted: () => markPrintedAndReload(list),
-        });
+        await printLabels(printWin, list, format);
         return;
       }
 
@@ -654,10 +666,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       }
 
       if (action === "import_and_print") {
-        await renderPrintWindow(printWin, mlPdfUrl, {
-          requestOptions: pdfRequest(list),
-          onConfirmPrinted: () => markPrintedAndReload(list),
-        });
+        await printLabels(printWin, list, format);
       }
 
       await load({ syncMode: "0" });
@@ -721,11 +730,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     if (!win) return;
     setPrintingId(order.id);
     try {
-      await renderPrintWindow(win, mlPdfUrl, {
-        requestOptions: pdfRequest([order]),
-        onConfirmPrinted: () => markPrintedAndReload([order]),
-      });
+      const format = await chooseLabelPrintFormat(win);
+      if (format) await printLabels(win, [order], format);
     } catch (err) {
+      if (!win.closed) win.close();
       toast(err.message || "No se pudo preparar la impresión", "error");
     } finally {
       setPrintingId("");

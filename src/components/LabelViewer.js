@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { toast } from "@/lib/api";
-import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
+import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
 
 export default function LabelViewer({ shipmentId, onClose }) {
     const dialogRef = useRef(null);
@@ -109,8 +109,19 @@ export default function LabelViewer({ shipmentId, onClose }) {
         const win = openPrintWindow();
         if (!win) return;
         try {
-            await renderPrintWindow(win, `/api/labels/pdf?shipmentId=${encodeURIComponent(shipmentId)}`);
+            const format = await chooseLabelPrintFormat(win);
+            if (format === "pdf") {
+                await renderPrintWindow(win, `/api/labels/pdf?layout=a4&shipmentId=${encodeURIComponent(shipmentId)}`);
+            } else if (format === "zpl") {
+                await downloadLabelZplFile("/api/shipments/labels", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ids: [shipmentId] }),
+                });
+                win.close();
+            }
         } catch (err) {
+            if (!win.closed) win.close();
             toast(err.message, "error");
         }
     };

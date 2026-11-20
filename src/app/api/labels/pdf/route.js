@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { arrangeLabelsOnA4, zplToPdf } from '@/lib/labelPdfLayout';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { extractLabelDimensionsInches } from '@/lib/labelDimensions';
 import { normalizePrintQueueIds } from '@/lib/printQueue';
 
-async function buildLabelPdf(workspaceId, shipmentIds) {
+export const maxDuration = 60;
+
+async function buildLabelPdf(workspaceId, shipmentIds, { a4 = false } = {}) {
     const normalizedIds = normalizePrintQueueIds(shipmentIds);
     if (!normalizedIds.length) {
         return { error: { body: { error: 'No hay etiquetas seleccionadas' }, status: 400 } };
@@ -33,7 +36,11 @@ async function buildLabelPdf(workspaceId, shipmentIds) {
 
     const blocks = usableIds.map((id) => String(byId.get(id).raw_zpl).trim());
     const zpl = blocks.join('\r\n');
-    const dims = extractLabelDimensionsInches(blocks[0]);
+    if (a4) {
+        const labels = await zplToPdf(zpl, AbortSignal.timeout(42000));
+        return { pdfBuffer: await arrangeLabelsOnA4(labels) };
+    }
+    const dims = extractLabelDimensionsInches(zpl);
 
     // Sin indice de etiqueta => Labelary devuelve un PDF multipagina (una por etiqueta)
     const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/${dims.width}x${dims.height}/`;
@@ -94,7 +101,7 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Missing shipmentId/ids parameter' }, { status: 400 });
         }
 
-        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids);
+        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids, { a4: searchParams.get('layout') === 'a4' });
         if (error) {
             return NextResponse.json(error.body, { status: error.status });
         }
