@@ -22,3 +22,17 @@ test('Preview rechaza la base operativa tanto en escritura como en lectura', () 
   assert.throws(() => databaseConfig(env, {readOnly:true}), /Preview no puede usar/);
   assert.equal(databaseConfig({ ...env, DATABASE_URL: 'https://isolated.example' }).url, 'https://isolated.example');
 });
+
+test('un Preview con la base operativa compila pero no consulta esa base', async () => {
+  const { createDatabaseClient } = await import('../src/lib/db.js');
+  const created = [];
+  const create = (config) => { created.push(config); return { execute: async () => ({ rows: [] }) }; };
+  const env = { VERCEL_ENV: 'preview', DATABASE_URL: PCMIDI_DATABASE_URL, DATABASE_AUTH_TOKEN: 'rw' };
+  const client = createDatabaseClient(env, create);
+  assert.equal(created.length, 0);
+  await assert.rejects(() => client.execute('SELECT 1'), /Preview no puede usar/);
+  await assert.rejects(() => client.batch([]), /Preview no puede usar/);
+  assert.throws(() => createDatabaseClient({ ...env, VERCEL_ENV: 'production', DATABASE_URL: 'libsql://old.turso.io' }, create), /No se permite conectar a Turso/);
+  createDatabaseClient({ ...env, DATABASE_URL: 'https://isolated.example' }, create);
+  assert.equal(created[0].url, 'https://isolated.example');
+});
