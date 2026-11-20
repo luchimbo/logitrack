@@ -120,3 +120,79 @@ Verificación de producción con sesión disponible: mapa inicial, período Todo
 selección CABA, resumen de un envío local sin datos financieros y paso a Detalle
 con `zones=CABA`; el enlace CSV respeta la selección. El acceso al resumen sin
 sesión devuelve 401. No se modificaron tarifas, pagos ni asignaciones de zonas.
+
+
+## Corrección del saldo · 22/10/2026
+
+El saldo provisional usa una única base: ventas brutas conocidas más envío cobrado en Tiendanube menos cargos
+ML conocidos menos todos los costos logísticos conocidos de la selección. Una
+venta con costo de envío o cargos pendientes conserva su importe en el saldo;
+los gastos sin venta vinculada también se descuentan. El resumen del mapa
+recalcula la misma cuenta al combinar zonas, incluso las que sólo tienen gastos.
+
+Se muestra un único saldo y se explican los envíos sin costo, sin venta y con
+cargos de ML incompletos. Es un saldo con importes conocidos, no una liquidación
+final: no incluye costo de mercadería, retenciones ni comisiones de otros canales.
+El porcentaje logístico conserva su base de envíos con venta completa y costo
+conocido; la pantalla identifica esos dos importes explícitamente.
+
+Las regresiones comprueban que completar un costo sólo descuenta ese costo, que
+los cargos se descuentan una vez y que mapa y detalle concilian aunque existan
+ventas o gastos sin vincular. Esta sección describe la corrección en código;
+no confirma una publicación en producción.
+
+## Tiendanube reemplaza a Zipnova en el informe · 22/10/2026
+
+El informe financiero deja de consultar Zipnova, contar sus registros
+independientes y deducir vínculos con ventas de Mercado Libre. La integración
+operativa de Zipnova conserva etiquetas y seguimiento. Mercado Libre mantiene
+sus ventas, cargos, Flex y Colecta.
+
+Se incorporan los pedidos pagados, no cancelados y con dirección de envío de
+Tiendanube del mismo espacio. Se deduplican por tienda y pedido; se excluyen
+los importados desde Mercado Libre (`source=meli`) para no contar la venta dos
+veces. Cada pedido TN representa un registro, no una confirmación de cuántos
+paquetes físicos se enviaron.
+
+El envío de checkout no es un producto: `shipping_cost_customer` es lo cobrado
+al cliente y `shipping_cost_owner` el costo para el vendedor informado por
+Tiendanube. Se guardan por separado. Los importes ausentes quedan desconocidos;
+cero sigue siendo válido. La mercadería es el total menos el envío cobrado,
+que se muestra aparte y tiene su propia columna en el CSV. No se toma el cobro
+al cliente como prueba del costo real del transporte.
+
+El período sigue siendo por despacho confirmado. Los pedidos TN sin despacho
+quedan fuera del período y se pueden revisar con Todo. Actualizar datos recorre
+las conexiones TN del espacio por páginas, sin el límite de 500 pedidos de la
+vista operativa, para recuperar importes nuevos y estados históricos. No busca
+datos en otros espacios ni requiere reinstalar la integración.
+
+La versión del resumen precalculado y la caché del navegador cambia a 8. Los
+resúmenes incompatibles se reconstruyen antes de responder, para evitar que
+reaparezcan gastos o registros de Zipnova. Las pruebas incluyen separación de
+mercadería y cobro de envío, importes faltantes/cero, cancelaciones, duplicados,
+aislamiento por espacio, detalle y resumen y persistencia SQL de la sincronización.
+
+Referencia de campos: https://tiendanube.github.io/api-documentation/v1/resources/order
+
+Publicado en `www.geomodi.ai` mediante `npm run deploy:production`:
+`dpl_6ED1JkZ4Q1j9Rc9Y3LAM5v35kJNC`,
+`https://logitrack-fydk2trvs-lucio-tamborinis-projects.vercel.app`.
+Código: `1230c4a`, rama `codex/tiendanube-envios-finanzas-20261022`.
+Se publicaron conjuntamente la fuente TN y la conciliación del saldo provisional.
+Compilación local y remota correctas, lint sin errores y 122 pruebas aprobadas
+con `npm test -- --test-concurrency=1`. La ejecución paralela de Node en Windows
+cerraba el proceso nativo SQLite con `3221225477` después de aprobar sus casos;
+la ejecución secuencial ejecuta la misma suite completa y termina correctamente.
+Los controles HMAC, dominios de tiendas y recursos de cross-selling pasaron antes
+de promover. En el espacio de `camilopcmidi` se observaron dos cuentas ML y ninguna
+conexión activa de Tiendanube; no se cambiaron conexiones ni se repitió OAuth.
+
+Verificación posterior con Chrome Camilo: el período 01/10 al 22/10 cargó 859
+registros, ventas $180.767.500,56, cargos ML $36.880.940,78, gasto conocido
+$5.615.680,00 y saldo provisional $138.270.879,78. Respecto del resumen
+inmediatamente anterior (913 registros), desaparecieron exactamente los 54
+registros Zipnova y sus $2.373.788 de gasto, conservando ventas y cargos ML.
+El CSV contiene 859 filas, cero registros Zipnova y la columna de envío cobrado
+TN. Los totales ya difieren de la captura inicial de 887 porque durante la
+investigación se incorporaron datos de Mercado Libre adicionales.

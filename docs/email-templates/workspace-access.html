@@ -1,0 +1,25 @@
+<re-html>
+  <re-head>
+    <re-title>Tu acceso a GeoModi está listo</re-title>
+  </re-head>
+  <re-body background-color="#ffffff" padding="24px">
+    <re-preheader>Ingresá al espacio de trabajo que te asignaron.</re-preheader>
+    <re-main background-color="#ffffff">
+      <re-block padding="16px 0">
+        <re-text font-size="20px" font-weight="bold" color="#111827">Tu acceso a GeoModi está listo</re-text>
+      </re-block>
+      <re-block padding="8px 0">
+        <re-text font-size="15px" line-height="24px" color="#374151">Te asignaron acceso a un espacio de trabajo de GeoModi.</re-text>
+      </re-block>
+      <re-block padding="8px 0">
+        <re-text font-size="15px" line-height="24px" color="#374151">Entrá con el email en el que recibiste este correo. Si ya tenés cuenta, iniciá sesión. Si todavía no tenés cuenta, podrás registrarte y entrar al espacio asignado.</re-text>
+      </re-block>
+      <re-block padding="16px 0">
+        <re-button href="{{action_url}}" background-color="#111827" color="#ffffff" border-radius="4px" padding="12px 20px">Entrar a GeoModi</re-button>
+      </re-block>
+      <re-block padding="8px 0">
+        <re-text font-size="13px" line-height="21px" color="#6b7280">Este enlace vence en {{invitation.expires_in_days}} días.</re-text>
+      </re-block>
+    </re-main>
+  </re-body>
+</re-html>

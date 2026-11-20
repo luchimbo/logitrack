@@ -11,12 +11,18 @@ import LabelViewer from "./LabelViewer";
 import LoadingButton from "./LoadingButton";
 import MobileSelectionBar from "./MobileSelectionBar";
 import SectionTitle from "./SectionTitle";
+import InfoDisclosure from "./InfoDisclosure";
+
+const SHIPMENTS_PAGE_SIZE = 200;
 
 export default function Dashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
     const [data, setData] = useState(null);
     const [shipments, setShipments] = useState([]);
     const [showShipments, setShowShipments] = useState(false);
+    const [shipmentsLoaded, setShipmentsLoaded] = useState(false);
+    const [shipmentsLoading, setShipmentsLoading] = useState(false);
+    const [shipmentsError, setShipmentsError] = useState(null);
     const [shipmentFilter, setShipmentFilter] = useState('all');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -36,13 +42,13 @@ export default function Dashboard() {
     const today = getArgentinaDateString();
 
     const PERIODS = [
-        { id: 'today', label: 'Hoy', icon: '📅' },
-        { id: 'date', label: 'Fecha', icon: '🗓️' },
-        { id: 'range', label: 'Rango', icon: '🧭' },
-        { id: 'week', label: 'Semana', icon: '📆' },
-        { id: 'month', label: 'Mes', icon: '📊' },
-        { id: 'year', label: 'Año', icon: '📈' },
-        { id: 'all', label: 'Todo', icon: '🗃️' },
+        { id: 'today', label: 'Hoy' },
+        { id: 'date', label: 'Fecha' },
+        { id: 'range', label: 'Rango' },
+        { id: 'week', label: 'Semana' },
+        { id: 'month', label: 'Mes' },
+        { id: 'year', label: 'Año' },
+        { id: 'all', label: 'Todo' },
     ];
 
     useEffect(() => {
@@ -81,46 +87,24 @@ export default function Dashboard() {
     };
 
     const renderPeriodPicker = () => (
-        <div style={{ 
-            marginTop: '16px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: isMobile ? '6px' : '8px',
-            background: 'var(--bg-secondary)',
-            padding: isMobile ? '8px' : '10px',
-            borderRadius: '12px',
-            border: '1px solid var(--border)'
-        }}>
+        <div className="period-picker dashboard-period-picker" role="group" aria-label="Período de envíos">
             {PERIODS.map((p) => (
                 <button
                     key={p.id}
+                    type="button"
+                    className={`period-tab${period === p.id ? ' active' : ''}`}
+                    aria-pressed={period === p.id}
                     onClick={() => setPeriod(p.id)}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: isMobile ? '6px 10px' : '8px 12px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: period === p.id ? 'var(--accent)' : 'var(--surface)',
-                        color: period === p.id ? 'white' : 'var(--text)',
-                        fontSize: isMobile ? '12px' : '13px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        flex: isMobile ? '1 1 calc(50% - 6px)' : '0 0 auto',
-                        justifyContent: 'center',
-                        minWidth: isMobile ? '60px' : '88px'
-                    }}
                 >
-                    <span style={{ fontSize: '14px' }}>{p.icon}</span>
-                    <span>{p.label}</span>
+                    {p.label}
                 </button>
             ))}
 
             {period === 'date' && (
-                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                <div className="dashboard-period-fields">
                     <input
                         type="date"
+                        aria-label="Fecha de los envíos"
                         className="form-input"
                         style={{ 
                             width: '100%', 
@@ -147,10 +131,11 @@ export default function Dashboard() {
             )}
 
             {period === 'range' && (
-                <div style={{ display: 'grid', gap: '8px', width: '100%', marginTop: '8px' }}>
+                <div className="dashboard-period-fields">
                     <div style={{ display: 'flex', gap: '8px', width: '100%', flexDirection: isMobile ? 'column' : 'row' }}>
                         <input
                             type="date"
+                            aria-label="Desde"
                             className="form-input"
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeFrom}
@@ -159,6 +144,7 @@ export default function Dashboard() {
                         />
                         <input
                             type="date"
+                            aria-label="Hasta"
                             className="form-input"
                             style={{ flex: 1, padding: '10px', fontSize: '16px' }}
                             value={draftRangeTo}
@@ -195,14 +181,14 @@ export default function Dashboard() {
 
         setLoading(true);
         setError(null);
+        // La lista de envíos se pide aparte, solo al abrirla: con "Año" o "Todo" puede ser
+        // muy grande y no debe impedir que se muestre el resumen.
+        setShipments([]);
+        setShipmentsLoaded(false);
+        setShipmentsError(null);
         try {
-            const qs = getQueryString();
-            const [result, shipmentsData] = await Promise.all([
-                api(`/dashboard?${qs}`),
-                api(`/shipments?${qs}`)
-            ]);
+            const result = await api(`/dashboard?${getQueryString()}`);
             setData(result);
-            setShipments(Array.isArray(shipmentsData) ? shipmentsData : []);
             if (resetSelection) clearSelection();
         } catch (err) {
             setError(err.message);
@@ -211,9 +197,28 @@ export default function Dashboard() {
         }
     }, [getQueryString, isRangeIncomplete, clearSelection]);
 
+    const loadShipments = useCallback(async ({ offset = 0 } = {}) => {
+        setShipmentsLoading(true);
+        setShipmentsError(null);
+        try {
+            const rows = await api(`/shipments?${getQueryString()}&view=dashboard&limit=${SHIPMENTS_PAGE_SIZE}&offset=${offset}`);
+            const page = Array.isArray(rows) ? rows : [];
+            setShipments((prev) => offset ? [...prev, ...page] : page);
+            setShipmentsLoaded(true);
+        } catch (err) {
+            setShipmentsError(err.message);
+        } finally {
+            setShipmentsLoading(false);
+        }
+    }, [getQueryString]);
+
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        if (showShipments && data && !shipmentsLoaded && !shipmentsLoading && !shipmentsError) loadShipments();
+    }, [showShipments, data, shipmentsLoaded, shipmentsLoading, shipmentsError, loadShipments]);
 
     const periodLabel = () => {
         switch (period) {
@@ -236,10 +241,10 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos</SectionTitle>
                 {renderPeriodPicker()}
             </div>
-            <div className="spinner"></div>
+            <div className="spinner" role="status" aria-label="Cargando resumen de envíos"></div>
             </div>
         );
     }
@@ -248,10 +253,10 @@ export default function Dashboard() {
         return (
             <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos</SectionTitle>
                 {renderPeriodPicker()}
             </div>
-            <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+            <p role="alert" style={{ color: "var(--danger)" }}>No se pudo cargar el resumen. {error}</p>
         </div>
     );
 }
@@ -260,7 +265,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                    <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones del período</p>
                     {renderPeriodPicker()}
                 </div>
@@ -279,7 +284,7 @@ export default function Dashboard() {
         return (
             <div className="section active">
                 <div className="section-header">
-                    <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                    <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                     <p className="section-subtitle">Resumen de operaciones</p>
                     {renderPeriodPicker()}
                 </div>
@@ -386,7 +391,7 @@ export default function Dashboard() {
     return (
         <div className="section active">
             <div className="section-header">
-                <SectionTitle icon="dashboard">Dashboard · {periodLabel()}</SectionTitle>
+                <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
                 <p className="section-subtitle">Resumen de operaciones del período</p>
                 {renderPeriodPicker()}
             </div>
@@ -408,10 +413,9 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(400px, 1fr))", gap: "20px" }}>
+            <div className="dashboard-breakdowns">
                 {/* By Method */}
-                <div className="card">
-                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📦 Por Método</h3>
+                <InfoDisclosure className="card" title="Envíos por método" description={`${methodEntries.length} métodos de envío`}>
                     <div className="chart-bar-container">
                         {methodEntries.map(([method, count]) => (
                                 <div key={method} className="chart-bar-row">
@@ -424,11 +428,10 @@ export default function Dashboard() {
                                 </div>
                         ))}
                     </div>
-                </div>
+                </InfoDisclosure>
 
                 {/* By Carrier */}
-                <div className="card">
-                    <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🚛 Por Transportista (Solo Flex)</h3>
+                <InfoDisclosure className="card" title="Transportistas Flex" description={`${carrierEntries.length} transportistas y asignaciones`}>
                     {carrierEntries.length > 0 ? (
                         <div className="chart-bar-container">
                             {carrierEntries.map(([carrier, count]) => {
@@ -448,12 +451,11 @@ export default function Dashboard() {
                     ) : (
                         <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No hay envíos Flex en este período.</p>
                     )}
-                </div>
+                </InfoDisclosure>
 
                 {/* By Province */}
                 {provinceEntries.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📍 Top Provincias</h3>
+                    <InfoDisclosure className="card" title="Provincias" description={`${provinceEntries.length} destinos en el período`}>
                         <div className="chart-bar-container">
                             {provinceEntries.map(([prov, count]) => (
                                 <div key={prov} className="chart-bar-row">
@@ -466,12 +468,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {comparison && ['today', 'week', 'month'].includes(period) && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>📈 Comparativa</h3>
+                    <InfoDisclosure className="card" title="Comparativa" description="Evolución frente al período anterior">
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {[
                                 { label: 'Envíos', current: data.total_packages, previous: comparison.previous.total_packages, delta: comparison.delta.total_packages },
@@ -490,12 +491,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {period === 'range' && topDays.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🔥 Días con más envíos</h3>
+                    <InfoDisclosure className="card" title="Días con más envíos" description={`${topDays.length} días destacados`}>
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {topDays.map((day) => (
                                 <div key={`top-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -509,12 +509,11 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
                 {period === 'range' && lowDays.length > 0 && (
-                    <div className="card">
-                        <h3 style={{ marginBottom: "16px", fontSize: "15px", fontWeight: 700 }}>🧊 Días con menos envíos</h3>
+                    <InfoDisclosure className="card" title="Días con menos envíos" description={`${lowDays.length} días destacados`}>
                         <div style={{ display: 'grid', gap: '10px' }}>
                             {lowDays.map((day) => (
                                 <div key={`low-${day.date}`} className="mobile-card" style={{ display: 'block', marginBottom: 0 }}>
@@ -528,14 +527,16 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </InfoDisclosure>
                 )}
 
             </div>
 
-            {shipments.length > 0 && (
+            {data.total_packages > 0 && (
                 <div className="card" style={{ marginTop: '20px' }}>
                     <button
+                        type="button"
+                        aria-expanded={showShipments}
                         onClick={() => setShowShipments(v => !v)}
                         style={{
                             width: '100%',
@@ -544,20 +545,27 @@ export default function Dashboard() {
                             justifyContent: 'space-between',
                             background: 'transparent',
                             border: 'none',
-                            padding: '0',
+                            minHeight: '44px',
                             cursor: 'pointer',
                             fontSize: '15px',
                             fontWeight: 700,
                             color: 'var(--text)'
                         }}
                     >
-                        <span>📦 Envíos del período ({shipments.length})</span>
+                        <span>📦 Envíos del período ({data.total_packages})</span>
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                             {showShipments ? '▲ Ocultar' : '▼ Ver'}
                         </span>
                     </button>
 
-                    {showShipments && (
+                    {showShipments && shipmentsError ? (
+                        <p style={{ marginTop: '16px', color: 'var(--danger)', fontSize: '13px' }}>
+                            No se pudieron cargar los envíos: {shipmentsError}{' '}
+                            <button className="btn btn-ghost btn-sm" onClick={() => loadShipments()}>Reintentar</button>
+                        </p>
+                    ) : null}
+                    {showShipments && !shipmentsLoaded && !shipmentsError ? <div className="spinner" style={{ marginTop: '16px' }}></div> : null}
+                    {showShipments && shipmentsLoaded && (
                         <>
                             <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                                 <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>Filtrar por:</label>
@@ -640,7 +648,7 @@ export default function Dashboard() {
                                                             >
                                                                 Descargar
                                                             </LoadingButton>
-                                                            {s.raw_zpl ? (
+                                                            {s.has_label ? (
                                                                 <LoadingButton
                                                                     isLoading={printingQueueIds.has(s.id)}
                                                                     className="btn btn-sm"
@@ -721,7 +729,7 @@ export default function Dashboard() {
                                                 >
                                                     Descargar
                                                 </LoadingButton>
-                                                {s.raw_zpl ? (
+                                                {s.has_label ? (
                                                     <LoadingButton
                                                         isLoading={printingQueueIds.has(s.id)}
                                                         className="btn btn-sm"
@@ -743,6 +751,14 @@ export default function Dashboard() {
                                         </div>
                                     ))}
                             </div>
+                            {shipments.length < data.total_packages ? (
+                                <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <LoadingButton isLoading={shipmentsLoading} className="btn btn-ghost btn-sm" onClick={() => loadShipments({ offset: shipments.length })}>
+                                        Cargar más
+                                    </LoadingButton>
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{shipments.length} de {data.total_packages}</span>
+                                </div>
+                            ) : null}
                         </>
                     )}
                 </div>

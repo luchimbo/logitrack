@@ -64,7 +64,7 @@ export async function GET(request) {
         return new NextResponse(imageBuffer, {
             headers: {
                 'Content-Type': 'image/png',
-                'Cache-Control': 'public, max-age=86400',
+                'Cache-Control': 'private, no-store',
             },
         });
     } catch (error) {

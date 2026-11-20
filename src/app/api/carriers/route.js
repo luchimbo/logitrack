@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor, requireWorkspaceAdmin } from '@/lib/auth';
 import { createCarrierPortalPublicId } from '@/lib/carrierPortal';
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
+import { carrierConfigScope } from '@/lib/globalCarrierConfig';
 
 export async function GET(request) {
     try {
@@ -12,15 +12,15 @@ export async function GET(request) {
         if (authResult.error) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
-        await ensureGlobalCarrierConfig();
+        const scope = await carrierConfigScope(authResult.actor.workspaceId);
         const result = await db.execute({
             sql: "SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name",
-            args: [GLOBAL_CARRIER_CONFIG_SCOPE],
+            args: [scope],
         });
         return NextResponse.json(result.rows);
     } catch (error) {
         console.error("Error fetching carriers:", error);
-        return NextResponse.json({ error: "Failed to fetch carriers" }, { status: 500 });
+        return NextResponse.json({ error: "No pudimos cargar los transportistas. Reintentá en unos minutos." }, { status: 500 });
     }
 }
 
@@ -32,7 +32,7 @@ export async function POST(request) {
             return NextResponse.json(authResult.error.body, { status: authResult.error.status });
         }
         const workspaceId = authResult.actor.workspaceId;
-        await ensureGlobalCarrierConfig();
+        const scope = await carrierConfigScope(authResult.actor.workspaceId);
         const { searchParams } = new URL(request.url);
         const name = searchParams.get('name');
         const display_name = searchParams.get('display_name');
@@ -48,19 +48,19 @@ export async function POST(request) {
 
         const existing = await db.execute({
             sql: "SELECT id FROM carriers WHERE workspace_id = ? AND name = ?",
-            args: [GLOBAL_CARRIER_CONFIG_SCOPE, cleanName]
+            args: [scope, cleanName]
         });
 
         if (existing.rows.length > 0) {
             await db.execute({
                 sql: "UPDATE carriers SET display_name = ?, color = ? WHERE workspace_id = ? AND name = ?",
-                args: [cleanDisplay, cleanColor, GLOBAL_CARRIER_CONFIG_SCOPE, cleanName]
+                args: [cleanDisplay, cleanColor, scope, cleanName]
             });
             return NextResponse.json({ id: existing.rows[0].id, name: cleanName, display_name: cleanDisplay, color: cleanColor });
         } else {
             const result = await db.execute({
                 sql: "INSERT INTO carriers (workspace_id, name, display_name, color) VALUES (?, ?, ?, ?)",
-                args: [GLOBAL_CARRIER_CONFIG_SCOPE, cleanName, cleanDisplay, cleanColor]
+                args: [scope, cleanName, cleanDisplay, cleanColor]
             });
             const id = Number(result.lastInsertRowid);
             await db.execute({

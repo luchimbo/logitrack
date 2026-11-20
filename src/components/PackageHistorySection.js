@@ -4,12 +4,31 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatArgentinaDate, formatArgentinaDateTime } from "@/lib/dateUtils";
 import styles from "./PackageHistorySection.module.css";
+import InfoDisclosure from "./InfoDisclosure";
+import SectionTitle from "./SectionTitle";
 
 const EMPTY_DETAIL = { loading: false, item: null, error: null };
 
 function date(value, withTime = false) {
   if (!value) return "Sin fecha";
   return withTime ? formatArgentinaDateTime(value) : formatArgentinaDate(value);
+}
+
+const LABEL_MONTHS = { ENE: 1, JAN: 1, FEB: 2, MAR: 3, ABR: 4, APR: 4, MAY: 5, JUN: 6, JUL: 7, AGO: 8, AUG: 8, SEP: 9, SET: 9, OCT: 10, NOV: 11, DIC: 12, DEC: 12 };
+
+// Labels print the dispatch day as "20 NOV" (no year); new Date() would read it as 2001.
+function dispatchDate(item) {
+  const raw = String(item?.dispatch_date || "").trim();
+  const match = raw.match(/^(\d{1,2})\s+([A-Za-z]{3})$/);
+  if (!match) return date(item?.dispatch_date);
+  const month = LABEL_MONTHS[match[2].toUpperCase()];
+  if (!month) return raw;
+  const reference = item?.created_at ? new Date(String(item.created_at).replace(" ", "T") + (String(item.created_at).length === 19 ? "Z" : "")) : new Date();
+  let year = Number.isNaN(reference.getTime()) ? new Date().getFullYear() : reference.getFullYear();
+  const referenceMonth = Number.isNaN(reference.getTime()) ? month : reference.getMonth() + 1;
+  if (month - referenceMonth > 6) year -= 1;
+  if (referenceMonth - month > 6) year += 1;
+  return `${String(match[1]).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
 }
 
 function value(input) {
@@ -21,7 +40,7 @@ function Fact({ label, children, wide = false }) {
 }
 
 function DetailGroup({ title, children }) {
-  return <section className={styles.group}><h3>{title}</h3><dl className={styles.facts}>{children}</dl></section>;
+  return <InfoDisclosure className={styles.group} title={title}><dl className={styles.facts}>{children}</dl></InfoDisclosure>;
 }
 
 function PackageDetail({ detail }) {
@@ -36,7 +55,7 @@ function PackageDetail({ detail }) {
     <DetailGroup title="Destinatario"><Fact label="Nombre">{item.recipient_name}</Fact><Fact label="Usuario">{item.recipient_user}</Fact><Fact label="Teléfono" wide>{item.recipient_phone}</Fact></DetailGroup>
     <DetailGroup title="Entrega"><Fact label="Dirección" wide>{item.address}</Fact><Fact label="Código postal">{item.postal_code}</Fact><Fact label="Ciudad">{item.city}</Fact><Fact label="Partido">{item.partido}</Fact><Fact label="Provincia">{item.province}</Fact><Fact label="Referencia" wide>{item.reference}</Fact></DetailGroup>
     <DetailGroup title="Logística"><Fact label="Estado">{item.status}</Fact><Fact label="Método">{item.shipping_method}</Fact><Fact label="Transportista">{item.carrier}</Fact><Fact label="Asignado">{item.assigned_carrier}</Fact><Fact label="Original">{item.carrier_name}</Fact><Fact label="Código">{item.carrier_code}</Fact><Fact label="Lote">{item.batch ? `#${item.batch.id}${item.batch.date ? ` · ${date(item.batch.date)}` : ""}` : null}</Fact></DetailGroup>
-    <DetailGroup title="Fechas"><Fact label="Despacho (etiqueta)">{date(item.dispatch_date)}</Fact><Fact label="Entrega">{date(item.delivery_date)}</Fact><Fact label="Creado">{date(item.created_at, true)}</Fact><Fact label="Lote creado">{item.batch ? date(item.batch.created_at, true) : null}</Fact></DetailGroup>
+    <DetailGroup title="Fechas"><Fact label="Despacho (etiqueta)">{item.dispatch_date ? dispatchDate(item) : "Sin fecha"}</Fact><Fact label="Entrega">{date(item.delivery_date)}</Fact><Fact label="Creado">{date(item.created_at, true)}</Fact><Fact label="Lote creado">{item.batch ? date(item.batch.created_at, true) : null}</Fact></DetailGroup>
   </div>;
 }
 
@@ -101,7 +120,7 @@ export default function PackageHistorySection() {
   const shownCount = items.length;
   return <div className={`section active ${styles.page}`}>
     <section className={styles.hero}>
-      <div className={styles.heroTop}><div><p className={styles.kicker}>Operación · trazabilidad</p><h1>Historial de paquetes</h1><p>Buscá por producto, SKU, número de paquete o venta.</p></div><div className={styles.total}><strong>{total}</strong>{debouncedQuery ? "coincidencias" : "paquetes registrados"}</div></div>
+      <div className={styles.heroTop}><div><SectionTitle icon="colecta">Historial de paquetes</SectionTitle><p className="section-subtitle">Buscá por producto, SKU, número de paquete o venta.</p></div><div className={styles.total}><strong>{total}</strong>{debouncedQuery ? "coincidencias" : "paquetes registrados"}</div></div>
       <label className={styles.search}><span className={styles.searchIcon}>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Producto, SKU, tracking o venta" aria-label="Buscar paquetes" autoComplete="off" />{query ? <button className={styles.clear} onClick={() => setQuery("")} aria-label="Limpiar búsqueda">×</button> : null}</label>
     </section>
     {error ? <p className={styles.error}>{error}</p> : null}
@@ -109,7 +128,7 @@ export default function PackageHistorySection() {
       <section className={styles.results}><header className={styles.resultsHeader}><h2>Resultados</h2><span>{loading ? "Buscando…" : `${shownCount} de ${total}`}</span></header><div className={styles.resultList}>
         {loading ? <div className={styles.empty}><div className={styles.spinner} /></div> : null}
         {!loading && !items.length ? <div className={styles.empty}><div><strong>No encontramos paquetes</strong>{debouncedQuery ? "Probá con otro producto, SKU, tracking o venta." : "Todavía no hay paquetes registrados."}</div></div> : null}
-        {!loading && items.map((item) => <button key={item.id} type="button" className={`${styles.result}${selectedId === item.id ? ` ${styles.resultActive}` : ""}`} onClick={() => setSelectedId(item.id)}><div className={styles.resultTop}><div><div className={styles.product}>{item.product_name}</div>{item.sku ? <span className={styles.sku}>{item.sku}</span> : null}</div><span className={styles.status}>{item.status}</span></div><div className={styles.resultMeta}><span><b>Paquete</b>{item.tracking_number || "—"}</span><span><b>Venta</b>{item.sale_id || item.external_order_id || "—"}</span><span><b>Transportista</b>{item.carrier}</span><span><b>Despacho</b>{date(item.dispatch_date)}</span></div></button>)}
+        {!loading && items.map((item) => <button key={item.id} type="button" className={`${styles.result}${selectedId === item.id ? ` ${styles.resultActive}` : ""}`} onClick={() => setSelectedId(item.id)}><div className={styles.resultTop}><div><div className={styles.product}>{item.product_name}</div>{item.sku ? <span className={styles.sku}>{item.sku}</span> : null}</div><span className={styles.status}>{item.status}</span></div><div className={styles.resultMeta}><span><b>Paquete</b>{item.tracking_number || "—"}</span><span><b>Venta</b>{item.sale_id || item.external_order_id || "—"}</span><span><b>Transportista</b>{item.carrier}</span><span><b>Despacho</b>{item.dispatch_date ? dispatchDate(item) : "Sin fecha"}</span></div></button>)}
       </div>{nextBefore ? <footer className={styles.footer}><button className="btn btn-ghost btn-sm" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Cargando…" : "Cargar más paquetes"}</button></footer> : null}</section>
       <aside className={styles.detail}><header className={styles.detailHeader}><h2>Ficha del paquete</h2>{selectedId ? <button onClick={() => { setSelectedId(null); setDetail(EMPTY_DETAIL); }} aria-label="Cerrar ficha">×</button> : null}</header><PackageDetail detail={detail} /></aside>
     </div>

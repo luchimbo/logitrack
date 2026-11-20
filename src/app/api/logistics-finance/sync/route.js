@@ -4,8 +4,8 @@ import { ensureDb } from '@/lib/ensureDb';
 import { db } from '@/lib/db';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { syncSingleMercadoLibreOrder, syncMercadoLibreOrdersPage } from '@/lib/mercadolibreStore';
-import { syncZipnovaShipmentsPage } from '@/lib/zipnovaStore';
-import { getIntegration } from '@/lib/integrationService';
+import { listTiendanubeClientTargets } from '@/lib/tiendanubeResolver';
+import { upsertTiendanubeOrder } from '@/lib/tiendanubeStore';
 
 export const maxDuration = 300;
 export async function POST(request) {
@@ -36,15 +36,25 @@ export async function POST(request) {
       }
       return NextResponse.json({ results });
     }
-    if (body.mode === 'zipnova') {
-      const integration = await getIntegration({ workspaceId: auth.actor.workspaceId, provider: 'zipnova' }).catch(() => null);
-      if (!integration && !process.env.ZIPNOVA_API_TOKEN) return NextResponse.json({ skipped: true, done: true, synced: 0 });
-      const valid = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
-      return NextResponse.json(await syncZipnovaShipmentsPage({ workspaceId: auth.actor.workspaceId, from: valid(body.from), to: valid(body.to), page: Math.max(1, Number(body.page) || 1) }));
+    if (body.mode === 'tiendanube') {
+      const accounts = await listTiendanubeClientTargets(auth.actor.workspaceId);
+      if (!accounts.length) return NextResponse.json({ skipped: true, done: true, synced: 0 });
+      const account = accounts.find((t) => String(t.connectionId ?? '') === String(body.connectionId ?? ''));
+      if (!account?.client) return NextResponse.json({ error: 'Cuenta de Tiendanube no disponible' }, { status: 400 });
+      const page = Math.max(1, Math.trunc(Number(body.page) || 1));
+      // Scan all orders, including cancellations, so previously paid copies do not survive a refresh.
+      const orders = await account.client.listOrders({ page, perPage: 50 });
+      for (const order of orders) await upsertTiendanubeOrder(auth.actor.workspaceId, order,
+        { connectionId: account.connectionId, externalStoreId: account.externalStoreId });
+      return NextResponse.json({ synced: orders.length, nextPage: page + 1, done: orders.length < 50 });
     }
     if (body.mode === 'plan' || body.mode === 'orders') {
       const accounts = await listMercadoLibreClientTargets(auth.actor.workspaceId);
-      if (body.mode === 'plan') return NextResponse.json({ connections: accounts.filter((t) => t.client).map((t) => ({ connectionId: t.connectionId, name: t.config?.name || t.externalStoreId || String(t.connectionId) })) });
+      if (body.mode === 'plan') {
+        const tiendanube = await listTiendanubeClientTargets(auth.actor.workspaceId);
+        return NextResponse.json({ connections: accounts.filter((t) => t.client).map((t) => ({ connectionId: t.connectionId, name: t.config?.name || t.externalStoreId || String(t.connectionId) })),
+          tiendanubeConnections: tiendanube.map((t) => ({ connectionId: t.connectionId, name: t.externalStoreId })) });
+      }
       const account = accounts.find((t) => Number(t.connectionId) === Number(body.connectionId));
       if (!account?.client) return NextResponse.json({ error: 'Cuenta de Mercado Libre no disponible' }, { status: 400 });
       const page = await syncMercadoLibreOrdersPage({ workspaceId: auth.actor.workspaceId, client: account.client, connectionId: account.connectionId,

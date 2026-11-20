@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import shapes from '@/lib/financeMapShapes.json';
 import provinceShapes from '@/lib/financeProvinceShapes.json';
@@ -41,7 +43,10 @@ function frame(view, rect, [mapW, mapH]) {
 const groupKey = (g) => g.name === 'Sin dato' ? '__missing__' : g.name;
 
 const KINDS = [['flex', 'Flex'], ['colecta', 'Colecta'], ['all', 'Todo']];
-const KIND_TITLES = { flex: ['Mapa Flex', 'Solo envíos Flex, en el AMBA.'], colecta: ['Mapa Colecta', 'Solo envíos Colecta: Mercado Libre y ventas a coordinar por Zipnova.'], all: ['Mapa total', 'Flex y Colecta juntos.'] };
+const KIND_TITLES = { flex: ['Mapa Flex', 'Solo envíos Flex, en el AMBA.'], colecta: ['Mapa Colecta', 'Mercado Libre y pedidos con envío de Tiendanube.'], all: ['Mapa total', 'Flex y Colecta juntos.'] };
+
+// Long names overlap their neighbours on the country map; the full name stays in the tooltip.
+const MAP_SHORT_LABELS = { santiago_del_estero: 'Sgo. del Estero', tierra_del_fuego: 'T. del Fuego', entre_rios: 'E. Ríos', catamarca: 'Catam.', corrientes: 'Corr.' };
 
 export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, report, refreshing = false, filters, selected, onSelect, partidos = [], onPartidos = () => {}, mode = 'zone', onMode = () => {},
   provinces = [], onProvinces = () => {}, level = 'amba', onLevel = () => {}, onPeriod, onDetail }) {
@@ -138,7 +143,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     return () => { clearTimeout(first); clearInterval(timer); };
   }, [busyLoading]);
   const stage = seconds < 4 ? 'Consultando la base de datos…' : seconds < 20 ? 'Calculando ventas, cargos y costos de cada envío…' : 'Armando el resumen guardado. Esta primera vez puede tardar unos minutos; después abre rápido.';
-  const scope = report ? summary.count ? `${summary.count} envíos en la selección` : 'Sin envíos en este período' : 'Calculando el período…';
+  const scope = report ? summary.count ? `${summary.count} envíos en la selección` : 'Sin envíos en este período. Probá con otro período o conectá un canal en Canales.' : 'Calculando el período…';
   const visibleZones = groupMap.has('__missing__') ? [...MAP_ZONES, '__missing__'] : MAP_ZONES;
   const colecta = filters.method !== 'flex';
   const what = country ? 'las provincias' : byPartido ? 'los partidos' : 'las zonas';
@@ -152,7 +157,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     <div className={styles.kindHead} style={{ '--kind-color': kind === 'all' ? '#6ee7b7' : METHOD_COLORS[kind] }}><strong>{KIND_TITLES[kind][0]}</strong><span>{KIND_TITLES[kind][1]}</span>
       {report && refreshing ? <em className={styles.refreshPill} role="status"><i aria-hidden="true" />Actualizando…{report.cachedAt ? ` mostrando lo guardado a las ${new Date(report.cachedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ''}</em> : null}</div>
     <section className={styles.period} aria-label="Período del mapa">
-      <div className={styles.periodTop}><div><span className={styles.kicker}>01 · Elegí el período</span><h2>¿Qué período querés consultar?</h2></div><span className={styles.dateBasis}>Por fecha de despacho</span></div>
+      <div className={styles.periodTop}><h2>Período de despacho</h2></div>
       <div className={styles.periodControls}><div className={styles.presets}>{PRESETS.map(([key, label]) => {
         const range = periodPreset(key);
         const active = (filters.from || '') === range.from && (filters.to || '') === range.to;
@@ -165,7 +170,7 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
     <div className={styles.workspace}>
       <section className={styles.mapPanel} aria-label={`Selección de ${what} en el mapa`}>
         {kind !== 'flex' ? <nav className={styles.crumbs} aria-label="Nivel del mapa"><button type="button" aria-current={country ? 'page' : undefined} onClick={() => onLevel('argentina')}>Argentina</button><span aria-hidden="true">›</span><button type="button" aria-current={!country ? 'page' : undefined} onClick={() => onLevel('amba')}>AMBA</button></nav> : null}
-        <div className={styles.mapHeading}><div><span className={styles.kicker}>02 · Marcá {what}</span><h2>{country ? 'Tu operación en el país' : 'Tu operación en el AMBA'}</h2><p>{country ? 'Marcá una o varias provincias. Doble clic en Buenos Aires, o el botón, para ver el detalle del AMBA.' : `Podés seleccionar más de ${byPartido ? 'uno' : 'una'}. Los importes se suman solos.`}</p></div>
+        <div className={styles.mapHeading}><div><h2>{country ? 'Mapa de Argentina' : 'Mapa del AMBA'}</h2><p>{country ? 'Seleccioná una o varias provincias. Hacé doble clic en Buenos Aires o usá el botón para abrir el mapa del AMBA.' : `Seleccioná ${what} que quieras incluir en el resumen.`}</p></div>
           {!country ? <div className={styles.modeSwitch} role="group" aria-label="Tipo de selección"><button type="button" aria-pressed={!byPartido} onClick={() => onMode('zone')}>Por zona</button><button type="button" aria-pressed={byPartido} onClick={() => onMode('partido')}>Por partido</button></div> : <button type="button" className={styles.reset} onClick={() => onLevel('amba')}>Ver detalle AMBA</button>}
           <button type="button" className={styles.reset} aria-pressed={!chosen.length} onClick={() => country ? onProvinces([]) : byPartido ? onPartidos([]) : onSelect([])}>{country ? 'Todo el país' : byPartido ? 'Todos los partidos' : 'Todas las zonas'}</button></div>
         <div className={`${styles.mapCanvas} ${country ? styles.mapCanvasTall : ''}`}>
@@ -184,6 +189,8 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
               return <g key={shape.key} role="button" tabIndex={0} aria-label={`${provinceLabel(key)}: ${data?.count || 0} envíos`} aria-pressed={active} className={styles.zone} style={{ '--zone-color': fill, opacity: muted ? .3 : 1 }} onClick={pick} onDoubleClick={() => { if (AMBA_PROVINCES.includes(key)) onLevel('amba'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }} onMouseEnter={() => setHovered(key)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(key)} onBlur={() => setHovered(null)}>
                 <title>{provinceLabel(key)} · Flex {data?.flexCount || 0} · Colecta {data?.colectaCount || 0} · Ventas {money(data?.salesCents)}</title>
                 <path d={shape.path} fillRule="evenodd" className={active ? styles.selectedPath : styles.provincePath} style={{ fillOpacity: active ? undefined : intensity }} />
+                {/* Malvinas belong to Tierra del Fuego, Antártida e Islas del Atlántico Sur. */}
+                {key === 'tierra_del_fuego' ? provinceShapes.islands.map((island) => <path key={island.name} d={island.path} fillRule="evenodd" className={active ? styles.selectedPath : styles.provincePath} style={{ fillOpacity: active ? undefined : intensity }} />) : null}
               </g>;
             }) : byPartido ? shapes.shapes.map((shape) => {
               const keys = shapePartidoKeys(shape.name);
@@ -207,11 +214,12 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
               const flexN = data?.flexCount || 0, colectaN = data?.colectaCount || 0, total = flexN + colectaN;
               const [x, y] = shape.label;
               return <g key={shape.key} className={styles.provinceTag}>
-                <text x={x} y={y} className={styles.provinceLabel}>{provinceLabel(provinceKey(shape.name))}</text>
+                <text x={x} y={y} className={styles.provinceLabel}>{MAP_SHORT_LABELS[provinceKey(shape.name)] || provinceLabel(provinceKey(shape.name))}</text>
                 {!filters.method && total ? <><rect x={x - 14} y={y + 3} width={28 * flexN / total} height={3.5} rx={1} fill={METHOD_COLORS.flex} /><rect x={x - 14 + 28 * flexN / total} y={y + 3} width={28 * colectaN / total} height={3.5} rx={1} fill={METHOD_COLORS.colecta} /></> : null}
                 {total ? <text x={x} y={y + (filters.method ? 10 : 14)} className={styles.provinceCount}>{filters.method === 'flex' ? flexN : filters.method === 'colecta' ? colectaN : `${flexN} · ${colectaN}`}</text> : null}
               </g>;
             }) : null}
+            {country ? provinceShapes.islands.map(({ name, label: [x, y] }) => <text key={name} x={x} y={y} className={styles.islandLabel}>{name}</text>) : null}
             {!country && !byPartido && shapes.labels.map(({ zone, point }) => <text key={zone} x={point[0]} y={point[1]} className={styles.zoneLabel} style={{ fill: ZONE_COLORS[zone] }}>{zone}</text>)}
             {!country ? <text x={shapes.river[0]} y={shapes.river[1]} className={styles.river} transform={`rotate(-32 ${shapes.river[0]} ${shapes.river[1]})`}>RÍO DE LA PLATA</text> : null}
           </svg>
@@ -232,24 +240,32 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
         <details className={styles.mapSource}><summary>Cómo se agrupan</summary><p>En el AMBA se usan las zonas operativas de la app; La Matanza está dividida en Norte (GBA 1) y Sur (GBA 2). {colecta ? 'Con Colecta o Todo, el AMBA muestra solo los envíos de CABA y la provincia de Buenos Aires; los de Buenos Aires fuera del AMBA quedan como “Sin zona”.' : ''} En el país, cada envío va a la provincia de su dirección de entrega.</p><p>Geometrías: {shapes.attribution} (AMBA) y {provinceShapes.attribution} (provincias). La selección solo filtra la consulta.</p></details>
       </section>
       <aside className={styles.summary} aria-label="Resumen de la selección" aria-busy={loading}>
-        <div className={styles.summaryHead}><span className={styles.kicker}>03 · Tu resumen automático</span><h2>{selectionName}</h2><p role="status">{scope}</p></div>
-        <div className={styles.sales}><span>Ventas brutas pagadas</span><strong>{report ? money(summary.salesCents) : '—'}</strong><small>{summary.paidOrderCount} pedidos pagados · {summary.count - summary.salesUnavailableCount} de {summary.count} envíos con venta vinculada</small></div>
-        <div className={styles.summaryGrid}><Stat label="Gasto logístico" value={report && summary.knownCount ? money(summary.totalCents) : '—'} /><Stat label="Envíos" value={report ? summary.count : '—'} note={report && !filters.method ? <><b style={{ color: METHOD_COLORS.flex }}>Flex {summary.flexCount}</b> · <b style={{ color: METHOD_COLORS.colecta }}>Colecta {summary.colectaCount}</b></> : null} /><Stat label="Costo promedio / envío" value={money(summary.averageCents)} /><Stat label="Venta promedio / pedido" value={money(summary.averageSaleCents)} /></div>
-        <dl className={styles.costs}><div><dt>Cargos de Mercado Libre</dt><dd>{report && summary.feesCount ? money(summary.feesCents) : '—'}</dd></div><div><dt>Te queda tras cargos de ML</dt><dd>{report && summary.netCount ? money(summary.netCents) : '—'}</dd></div><div><dt>Te queda tras cargos y envío</dt><dd>{report && summary.netAfterShippingCount ? money(summary.netAfterShippingCents) : '—'}</dd></div></dl>
-        <div className={styles.ratio}><span>Gasto sobre ventas</span><strong>{percent(summary.logisticsPercent)}</strong><div className={styles.ratioTrack}><span style={{ width: `${Math.min(100, summary.logisticsPercent || 0)}%` }} /></div><small>{summary.comparableCount} envíos con ambos importes completos</small></div>
-        <dl className={styles.costs}>{filters.method !== 'colecta' ? <div><dt>Gasto Flex</dt><dd>{report && summary.knownCount ? money(summary.flexCents) : '—'}</dd></div> : null}{colecta ? <><div><dt>Gasto Colecta · Mercado Libre</dt><dd>{report && summary.knownCount ? money(summary.colectaMlCents) : '—'}</dd></div><div><dt>Gasto Colecta · Zipnova</dt><dd>{report && summary.knownCount ? money(summary.zipnovaCents) : '—'}</dd></div></> : null}</dl>
-        {colecta && (summary.zipnovaLinkedCount || summary.zipnovaUnlinkedCount || summary.customWithoutCostCount) ? <div className={styles.coverage}>Zipnova: {summary.zipnovaLinkedCount} envíos vinculados a su venta · {summary.zipnovaUnlinkedCount} sin vincular.{summary.customWithoutCostCount ? <span> {summary.customWithoutCostCount} ventas a coordinar sin envío de Zipnova.</span> : null}<small>El vínculo se deduce por comprador, monto y fecha.</small></div> : null}
-        {summary.missingCount || summary.salesMissingCount || summary.salesUnavailableCount ? <div className={styles.coverage}>{summary.missingCount} envíos sin costo · {summary.salesUnavailableCount} sin importe de venta.{summary.salesMissingCount ? <span> {summary.salesMissingCount} pedidos con venta no computable.</span> : null}<small>Los promedios usan solo los importes conocidos.</small></div> : null}
+        <div className={styles.summaryHead}><h2>{selectionName}</h2><p role="status">{scope}</p></div>
+        <div className={styles.sales}><span>Ventas de productos (pedidos pagados)</span><strong>{report ? money(summary.salesCents) : '—'}</strong><small>{summary.paidOrderCount} pedidos pagados · No incluye el envío cobrado al cliente</small></div>
+        <div className={styles.summaryGrid}><Stat label="Costo total de envíos" value={report && summary.knownCount ? money(summary.totalCents) : '—'} /><Stat label="Envíos" value={report ? summary.count : '—'} note={report && !filters.method ? <><b style={{ color: METHOD_COLORS.flex }}>Flex {summary.flexCount}</b> · <b style={{ color: METHOD_COLORS.colecta }}>Colecta {summary.colectaCount}</b></> : null} /><Stat label="Costo promedio por envío" value={money(summary.averageCents)} /><Stat label="Venta promedio por pedido" value={money(summary.averageSaleCents)} /></div>
+        <InfoDisclosure title="Comisiones y saldo" description="Cargos de Mercado Libre y saldo estimado">
+        <dl className={styles.costs}><div><dt>Comisiones y financiación de Mercado Libre</dt><dd>{report && summary.feesCount ? money(summary.feesCents) : '—'}</dd></div><div><dt>Saldo estimado tras comisiones y envíos</dt><dd>{report && summary.netAfterShippingCount ? money(summary.netAfterShippingCents) : '—'}</dd></div></dl>
+        <details className={styles.coverage}><summary>Cómo se calcula el saldo</summary><p>Ventas de productos + envío cobrado al cliente en Tiendanube − comisiones y financiación de Mercado Libre − costo de los envíos.</p><small>Es una estimación: los datos faltantes todavía no se suman ni se descuentan. No es la ganancia: falta descontar la mercadería, las retenciones y las comisiones de otros canales.</small></details>
+        </InfoDisclosure>
+        <div className={styles.ratio}><span>Costo de envío como % de ventas</span><strong>{percent(summary.logisticsPercent)}</strong><div className={styles.ratioTrack}><span style={{ width: `${Math.min(100, summary.logisticsPercent || 0)}%` }} /></div><small>{money(summary.comparableCostCents)} en envíos ÷ {money(summary.comparableSalesCents)} en productos vendidos. Se comparan los mismos {summary.comparableCount} envíos de la selección.</small></div>
+        <InfoDisclosure title="Desglose por método" description="Flex, Colecta y costos de Tiendanube">
+        <dl className={styles.costs}>{filters.method !== 'colecta' ? <div><dt style={{ color: METHOD_COLORS.flex }}>Flex · costo / ventas Flex</dt><dd>{percent(summary.flexPercent)}</dd></div> : null}{colecta ? <div><dt style={{ color: METHOD_COLORS.colecta }}>Colecta · costo / ventas Colecta</dt><dd>{percent(summary.colectaPercent)}</dd></div> : null}</dl>
+        {summary.buyerPaysCount || summary.pickupCount ? <p className={styles.coverage}>Fuera del %: {summary.buyerPaysCount ? `${summary.buyerPaysCount} envíos pagados por el comprador` : ''}{summary.buyerPaysCount && summary.pickupCount ? ' · ' : ''}{summary.pickupCount ? `${summary.pickupCount} retiros del cliente` : ''}. Sus ventas siguen en el total, pero no tienen costo de envío para comparar.</p> : null}
+        <dl className={styles.costs}>{filters.method !== 'colecta' ? <div><dt>Costo de envíos Flex</dt><dd>{report && summary.knownCount ? money(summary.flexCents) : '—'}</dd></div> : null}{colecta ? <><div><dt>Costo de envíos Colecta · Mercado Libre</dt><dd>{report && summary.knownCount ? money(summary.colectaMlCents) : '—'}</dd></div><div><dt>Costo de envío · Tiendanube</dt><dd>{summary.tiendanubeCostCount ? money(summary.tiendanubeCostCents) : '—'}</dd></div><div><dt>Envío cobrado al cliente · Tiendanube</dt><dd>{summary.shippingCollectedCount ? money(summary.shippingCollectedCents) : '—'}</dd></div></> : null}</dl>
+        {filters.method !== 'colecta' ? <p className={styles.coverage}>Flex: costo de las entregas calculado con las tarifas que configuraste.</p> : null}
+        {colecta ? <div className={styles.coverage}>Tiendanube: {summary.shippingCollectedCount || 0} pedidos con cargo de envío informado.{summary.shippingCollectedMissingCount ? <span> {summary.shippingCollectedMissingCount} sin importe de envío; actualizá los datos.</span> : null}<small>El envío cobrado al cliente se separa de la venta de mercadería. Solo se computa como costo lo informado por Tiendanube para el vendedor.</small></div> : null}
+        </InfoDisclosure>
+        {summary.missingCount || summary.salesMissingCount || summary.salesUnavailableCount || summary.feesUnavailableCount ? <div className={styles.coverage}><strong>Datos que faltan en esta selección</strong>{summary.missingCount ? <small>{summary.missingCount} envíos: falta saber cuánto costó la entrega.</small> : null}{summary.salesUnavailableCount ? <small>{summary.salesUnavailableCount} envíos: no se obtuvo el monto de los productos vendidos.</small> : null}{summary.salesMissingCount ? <small>{summary.salesMissingCount} pedidos: no se pudo calcular el total de productos vendidos. Pueden estar incluidos en los envíos anteriores.</small> : null}{summary.feesUnavailableCount ? <small>{summary.feesUnavailableCount} envíos: faltan comisiones o cargos de financiación de Mercado Libre.</small> : null}<small>Los totales suman los montos disponibles. Cada promedio usa solo los envíos o pedidos que tienen el dato necesario.</small></div> : null}
         <button type="button" className={styles.detailButton} onClick={onDetail}>Ver detalle de estos envíos <span aria-hidden="true">↗</span></button>
       </aside>
     </div>
-    <section className={styles.breakdown} aria-label="Totales del período">
+    <InfoDisclosure title="Totales del período por zona" description="Comparar ventas, comisiones y costos" className={styles.breakdown} aria-label="Totales del período">
       <div className={styles.breakdownHead}><span className={styles.kicker}>Totales del período</span><h2>{country ? 'Todas las provincias' : byPartido ? 'Todos los partidos' : 'Todas las zonas'}, lado a lado</h2></div>
-      <div className={styles.breakdownScroll}><table><thead><tr><th>{country ? 'Provincia' : byPartido ? 'Partido' : 'Zona'}</th><th>Envíos</th><th>Ventas brutas</th><th>Cargos ML</th><th>Te queda tras cargos</th><th>Gasto logístico</th><th>Te queda tras cargos y envío</th><th>Gasto / ventas</th></tr></thead>
-        <tbody>{rowsByName.map((g) => <tr key={g.name}><th scope="row">{g.label}</th><td>{g.count}</td><td>{money(g.salesCents)}</td><td>{g.feesCount ? money(g.feesCents) : '—'}</td><td>{g.netCount ? money(g.netCents) : '—'}</td><td>{g.knownCount ? money(g.totalCents) : '—'}</td><td>{g.netAfterShippingCount ? money(g.netAfterShippingCents) : '—'}</td><td>{percent(g.logisticsPercent)}</td></tr>)}</tbody>
-        <tfoot><tr><th scope="row">Total</th><td>{allSummary.count}</td><td>{money(allSummary.salesCents)}</td><td>{allSummary.feesCount ? money(allSummary.feesCents) : '—'}</td><td>{allSummary.netCount ? money(allSummary.netCents) : '—'}</td><td>{allSummary.knownCount ? money(allSummary.totalCents) : '—'}</td><td>{allSummary.netAfterShippingCount ? money(allSummary.netAfterShippingCents) : '—'}</td><td>{percent(allSummary.logisticsPercent)}</td></tr></tfoot></table></div>
-    </section>
-    <p className={styles.footnote}>Ventas de Mercado Libre del período de despacho, en ARS brutos. Los cargos de Mercado Libre son la comisión y el costo de financiación; no incluyen retenciones, devoluciones parciales ni el costo de la mercadería. Costos de envío: Flex según tus tarifas; Colecta según lo que cobra Mercado Libre, o el precio de Zipnova en las ventas a coordinar.</p>
+      <div className={styles.breakdownScroll}><table><thead><tr><th>{country ? 'Provincia' : byPartido ? 'Partido' : 'Zona'}</th><th>Envíos</th><th>Ventas brutas</th><th>Comisiones y financiación ML</th><th>Costo de envíos</th><th>Saldo estimado</th><th>Envíos / ventas (%)</th></tr></thead>
+        <tbody>{rowsByName.map((g) => <tr key={g.name}><th scope="row">{g.label}</th><td>{g.count}</td><td>{money(g.salesCents)}</td><td>{g.feesCount ? money(g.feesCents) : '—'}</td><td>{g.knownCount ? money(g.totalCents) : '—'}</td><td>{g.netAfterShippingCount ? money(g.netAfterShippingCents) : '—'}</td><td>{percent(g.logisticsPercent)}</td></tr>)}</tbody>
+        <tfoot><tr><th scope="row">Total</th><td>{allSummary.count}</td><td>{money(allSummary.salesCents)}</td><td>{allSummary.feesCount ? money(allSummary.feesCents) : '—'}</td><td>{allSummary.knownCount ? money(allSummary.totalCents) : '—'}</td><td>{allSummary.netAfterShippingCount ? money(allSummary.netAfterShippingCents) : '—'}</td><td>{percent(allSummary.logisticsPercent)}</td></tr></tfoot></table></div>
+    </InfoDisclosure>
+    <InfoDisclosure title="Cómo se calculan estos importes"><p className={styles.footnote}>Ventas de mercadería de Mercado Libre y Tiendanube del período de despacho, en ARS brutos. El cargo de envío del checkout de Tiendanube se muestra separado y no se suma otra vez a las ventas. Los cargos de Mercado Libre son la comisión y el costo de financiación; no incluyen retenciones, devoluciones parciales ni el costo de la mercadería. Costos de envío: Flex según tus tarifas; Colecta según lo que cobra Mercado Libre; Tiendanube según el costo informado en el pedido. Los importes faltantes quedan pendientes. Los pedidos de Tiendanube sin fecha de despacho no entran en el período.</p></InfoDisclosure>
   </div>;
 }
 

@@ -1,9 +1,9 @@
 // Adaptador puro: catálogo TN autenticado y configuración interna de Mostrador.
-import { obtenerSugerencias, reglaSeDispara } from "./recommendations.js";
+import { obtenerSugerencias, reglaSeDispara, descuentoRegla } from "./recommendations.js";
 import { descuentoSeguro, round2 } from "./pricing.js";
 
-export const ONLINE_SCHEMA = 1;
-export const ENGINE_VERSION = "mostrador-crossselling-1";
+export const ONLINE_SCHEMA = 2;
+export const ENGINE_VERSION = "mostrador-crossselling-2";
 const sku = (v) => String(v || "").trim().toUpperCase();
 const text = (v) => typeof v === "object" && v ? v.es || Object.values(v)[0] || "" : String(v || "");
 const positive = (n) => n !== null && n !== "" && Number.isFinite(Number(n)) && Number(n) > 0;
@@ -12,11 +12,12 @@ const id = (n) => typeof n === "string" && n.length > 0 && n.length <= 120;
 
 export function validateSnapshot(v) {
   const fail = () => { throw new Error("Configuración online inválida"); };
-  if (!v || v.schemaVersion !== ONLINE_SCHEMA || v.engineVersion !== ENGINE_VERSION || !/^\d+$/.test(v.storeId) ||
+  if (!v || !((v.schemaVersion === 1 && v.engineVersion === "mostrador-crossselling-1") || (v.schemaVersion === ONLINE_SCHEMA && v.engineVersion === ENGINE_VERSION)) || !/^\d+$/.test(v.storeId) ||
       typeof v.enabled !== "boolean" || !Array.isArray(v.ruleIds) || !v.ruleIds.every(id) ||
       !Array.isArray(v.rules) || v.rules.length > 1000 || !Array.isArray(v.products) || v.products.length > 30000 ||
       !Number.isFinite(Date.parse(v.generatedAt))) fail();
   const s = v.settings;
+  if (v.schemaVersion === 2 && (!numeric(s?.descuentoGeneralPct) || s.descuentoGeneralPct < 0 || s.descuentoGeneralPct > 100)) fail();
   if (!s || !numeric(s.descuentoMaximoPct) || s.descuentoMaximoPct < 0 || s.descuentoMaximoPct > 100 ||
       !numeric(s.margenMinimoPct) || s.margenMinimoPct < 0 || !Number.isInteger(s.maxSugerencias) || s.maxSugerencias < 1 || s.maxSugerencias > 20) fail();
   const productIds = new Set();
@@ -30,7 +31,9 @@ export function validateSnapshot(v) {
   for (const r of v.rules) {
     if (!r || !id(r.id) || ruleIds.has(r.id) || typeof r.activa !== "boolean" ||
         !["producto", "rubro", "subrubro", "nombre"].includes(r.disparador?.tipo) || typeof r.disparador.valor !== "string" ||
-        !Array.isArray(r.sugeridos) || !r.sugeridos.every(id) || !numeric(r.descuentoPct) || r.descuentoPct < 0 || r.descuentoPct > 100) fail();
+        !Array.isArray(r.sugeridos) || !r.sugeridos.every(id)) fail();
+    if (v.schemaVersion === 1 && (!numeric(r.descuentoPct) || r.descuentoPct < 0 || r.descuentoPct > 100)) fail();
+    if (v.schemaVersion === 2 && (!r.descuentosPorProducto || typeof r.descuentosPorProducto !== "object" || Array.isArray(r.descuentosPorProducto) || Object.entries(r.descuentosPorProducto).some(([key, pct]) => !r.sugeridos.includes(key) || !numeric(pct) || pct < 0 || pct > 100))) fail();
     ruleIds.add(r.id);
   }
   if (v.ruleIds.some((r) => !ruleIds.has(r))) fail();
@@ -41,7 +44,7 @@ export function buildSnapshot({ storeId, products, rules, settings, enabled = fa
   // Lista explícita de campos: no enviar credenciales, clientes, ventas ni facturación.
   return validateSnapshot({
     schemaVersion: ONLINE_SCHEMA, engineVersion: ENGINE_VERSION, storeId: String(storeId), generatedAt: now.toISOString(), enabled, ruleIds: ruleIds.map(String),
-    settings: { descuentoMaximoPct: settings.descuentoMaximoPct, margenMinimoPct: settings.margenMinimoPct, maxSugerencias: settings.maxSugerencias },
+    settings: { descuentoGeneralPct: settings.descuentoGeneralPct ?? 10, descuentoMaximoPct: settings.descuentoMaximoPct, margenMinimoPct: settings.margenMinimoPct, maxSugerencias: settings.maxSugerencias },
     products: products.filter((p) => !p.productoPrueba && sku(p.codigo)).map((p) => ({
       id: String(p.id), codigo: sku(p.codigo), nombre: p.nombre, rubro: p.rubro || "", subrubro: p.subrubro || null,
       precioFinal: Number(p.precioFinal), costo: Number(p.costo || 0), iva: Number(p.iva ?? 21), stock: p.stock == null ? null : Math.max(0, Number(p.stock)),
@@ -49,7 +52,7 @@ export function buildSnapshot({ storeId, products, rules, settings, enabled = fa
     rules: rules.map((r) => ({
       id: String(r.id), nombre: String(r.nombre || ""), activa: Boolean(r.activa),
       disparador: { tipo: r.disparador.tipo, valor: String(r.disparador.valor), excluir: String(r.disparador.excluir || "") },
-      sugeridos: r.sugeridos.map(String), descuentoPct: Number(r.descuentoPct || 0), mensaje: String(r.mensaje || ""),
+      sugeridos: r.sugeridos.map(String), descuentosPorProducto: r.descuentosPorProducto ?? Object.fromEntries(r.sugeridos.map((id) => [String(id), Number(r.descuentoPct ?? 10)])), mensaje: String(r.mensaje || ""),
     })),
   });
 }
@@ -120,7 +123,7 @@ export function discountCommands({ snapshot, revision, catalog, cart, acceptance
         if (!product || !accepted || firstRule?.id !== ruleId || !rule.sugeridos.map(String).includes(product.id) ||
             !reglaSeDispara(rule, lines, catalog.productsById, String(line.id)) || !positive(line.price) ||
             !Number.isInteger(line.quantity) || line.quantity < 1) continue;
-        const pct = descuentoSeguro({ ...product, precioFinal: Number(line.price) }, rule.descuentoPct, snapshot.settings);
+        const pct = descuentoSeguro({ ...product, precioFinal: Number(line.price) }, descuentoRegla(rule, product.id, snapshot.settings), snapshot.settings);
         const amount = round2(round2(Number(line.price) * line.quantity) * pct / 100);
         if (amount > 0) items.push({ line_item: String(line.id), discount_specs: { type: "fixed", amount: amount.toFixed(2) } });
       }
@@ -138,7 +141,11 @@ export function discountCommands({ snapshot, revision, catalog, cart, acceptance
 }
 
 export const PROMOTION_COMBINATION = Object.freeze({
-  allocation_type: "line_item", active: false, combines_with_quantity_discounts: false, combines_with_free_shipping: true,
+  allocation_type: "line_item", active: false, combines_with_quantity_discounts: true, combines_with_free_shipping: true,
   // TN agrupa cupones y medios de pago. El callback excluye carritos con cupones.
-  combines_with_cart_amount_discounts: true, combines_with_app_discounts: false, combines_with_price_discounts: true,
+  // Todo en true: esta promoción no debe desplazar los descuentos que la tienda ya ofrece.
+  combines_with_cart_amount_discounts: true, combines_with_app_discounts: true, combines_with_price_discounts: true,
 });
+
+// Opciones de combinación sin "active" ni "allocation_type": sirven para corregir una promoción ya creada.
+export const { active: _active, allocation_type: _allocation, ...PROMOTION_COMBINATION_FLAGS } = PROMOTION_COMBINATION;

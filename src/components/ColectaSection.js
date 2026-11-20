@@ -1,5 +1,8 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
+
 import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
 import { useBatch } from "./BatchContext";
@@ -11,13 +14,16 @@ import LoadingButton from "./LoadingButton";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
 import MobileSelectionBar from "./MobileSelectionBar";
 import SectionTitle from "./SectionTitle";
+import EmptyGuide from "./EmptyGuide";
+import { EMPTY_STATES, loadFailure } from "@/lib/emptyStates";
 
-export default function ColectaSection() {
+export default function ColectaSection({ onNavigate }) {
     const { getTodayQueryString, reloadBatches } = useBatch();
     const [allShipments, setAllShipments] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [reloadKey, setReloadKey] = useState(0);
     const [viewingLabelId, setViewingLabelId] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
     const [isDeletingBulk, setIsDeletingBulk] = useState(false);
@@ -41,7 +47,7 @@ export default function ColectaSection() {
             }
         }
         fetchData();
-    }, [getTodayQueryString, clearSelection]);
+    }, [getTodayQueryString, clearSelection, reloadKey]);
 
     // Deduce which sender (remitente) belongs to ATO (the account that ships
     // Arturia products); every other sender is PCM. See lib/accountDetection.js.
@@ -92,15 +98,25 @@ export default function ColectaSection() {
         const selectedIds = getSelectedIdsFrom(shipments);
         if (!selectedIds.length) return;
 
+        const win = openPrintDialog();
+        if (!win) return;
         setIsPrintingBulk(true);
         try {
-            const result = await api('/print-queue', {
-                method: 'POST',
-                body: JSON.stringify({ ids: selectedIds }),
-            });
-            toast(`${result.labels_total || selectedIds.length} etiquetas en cola de impresion`, 'success');
+            const format = await chooseLabelPrintFormat(win);
+            if (format === "pdf" || format === "thermal") {
+                await renderPrintDialog(win, `/api/labels/pdf?layout=${format === "pdf" ? "a4" : "thermal"}&ids=${encodeURIComponent(selectedIds.join(','))}`);
+            } else if (format === "zpl") {
+                await downloadLabelZplFile("/api/shipments/labels", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ids: selectedIds }),
+                }, win.signal);
+                win.close();
+            }
         } catch (err) {
-            toast(err.message || 'Error encolando etiquetas', 'error');
+            if (win.closed) return;
+            win.close();
+            toast(err.message || 'No se pudo preparar la impresión', 'error');
         } finally {
             setIsPrintingBulk(false);
         }
@@ -157,6 +173,7 @@ export default function ColectaSection() {
             <div className="section active">
                 <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
                 <div className="spinner"></div>
+                <p className="empty-state-text" role="status">Cargando colecta…</p>
             </div>
         );
     }
@@ -165,7 +182,7 @@ export default function ColectaSection() {
         return (
             <div className="section active">
                 <div className="section-header"><SectionTitle icon="colecta">Colecta</SectionTitle></div>
-                <p style={{ color: "var(--danger)" }}>Error: {error}</p>
+                <EmptyGuide error title={loadFailure("la colecta").title} text={error} onRetry={() => setReloadKey((key) => key + 1)} />
             </div>
         );
     }
@@ -180,10 +197,7 @@ export default function ColectaSection() {
                     </div>
                     {accountSelector}
                 </div>
-                <div className="empty-state">
-                    <div className="empty-state-icon">📦</div>
-                    <p className="empty-state-text">Sin envíos de colecta.</p>
-                </div>
+                <EmptyGuide title={EMPTY_STATES.colecta.title} text={EMPTY_STATES.colecta.text} actions={EMPTY_STATES.colecta.actions} onNavigate={onNavigate} />
             </div>
         );
     }
@@ -198,33 +212,29 @@ export default function ColectaSection() {
                 {accountSelector}
             </div>
 
-            <div className="stats-grid">
-                <div className="stat-card card accent"><div className="stat-value">{shipments.length}</div><div className="stat-label">Total Colecta</div></div>
-            </div>
-
-            <div className="card" style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-secondary)' }}>
-                <div className="flex-between" style={{ gap: '12px', flexWrap: 'wrap' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {selectedVisibleCount > 0 ? `${selectedVisibleCount} envíos seleccionados` : 'Seleccioná etiquetas para descargar varias en un ZPL'}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
-                            {areAllSelected(shipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
-                        </button>
-                        <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
-                            Descargar seleccionadas
-                        </LoadingButton>
-                        <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkPrintLabels} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
-                            Imprimir seleccionadas
-                        </LoadingButton>
-                        <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
-                            Eliminar seleccionadas
-                        </LoadingButton>
-                    </div>
+            <section className="card colecta-label-toolbar" aria-label="Acciones sobre etiquetas">
+                <div className="colecta-label-selection">
+                    <p role="status">
+                        {selectedVisibleCount > 0 ? `${selectedVisibleCount} de ${shipments.length} envíos seleccionados` : 'Seleccioná los envíos para preparar sus etiquetas.'}
+                    </p>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={toggleSelectAll}>
+                        {areAllSelected(shipments) ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                    </button>
                 </div>
-            </div>
+                <div className="colecta-label-actions">
+                        <LoadingButton isLoading={isPrintingBulk} className="btn btn-primary btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkPrintLabels}>
+                            Imprimir etiquetas
+                        </LoadingButton>
+                        <LoadingButton isLoading={isDownloadingBulk} className="btn btn-ghost btn-sm" disabled={!selectedVisibleCount} onClick={handleBulkDownloadLabels}>
+                            Descargar ZPL
+                        </LoadingButton>
+                        <LoadingButton isLoading={isDeletingBulk} className="btn btn-ghost btn-sm colecta-label-delete" disabled={!selectedVisibleCount} onClick={handleBulkDelete}>
+                            Eliminar envíos
+                        </LoadingButton>
+                </div>
+            </section>
 
-            <div className="card">
+            <InfoDisclosure title="Envíos de Colecta" description={`${shipments.length} envíos · abrí el listado para seleccionar etiquetas`} className="card">
                 {/* Desktop Table */}
                 <div className="table-container">
                     <table>
@@ -339,16 +349,16 @@ export default function ColectaSection() {
                         </div>
                     ))}
                 </div>
-            </div>
+            </InfoDisclosure>
 
             <MobileSelectionBar count={selectedVisibleCount} label="envíos seleccionados" onClear={clearSelection}>
-                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-sm" onClick={handleBulkDownloadLabels} style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info)' }}>
-                    Descargar etiquetas
-                </LoadingButton>
-                <LoadingButton isLoading={isPrintingBulk} className="btn btn-sm" onClick={handleBulkPrintLabels} style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)' }}>
+                <LoadingButton isLoading={isPrintingBulk} className="btn btn-primary btn-sm" onClick={handleBulkPrintLabels}>
                     Imprimir etiquetas
                 </LoadingButton>
-                <LoadingButton isLoading={isDeletingBulk} className="btn btn-sm" onClick={handleBulkDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)' }}>
+                <LoadingButton isLoading={isDownloadingBulk} className="btn btn-ghost btn-sm" onClick={handleBulkDownloadLabels}>
+                    Descargar ZPL
+                </LoadingButton>
+                <LoadingButton isLoading={isDeletingBulk} className="btn btn-ghost btn-sm colecta-label-delete" onClick={handleBulkDelete}>
                     Eliminar envíos
                 </LoadingButton>
             </MobileSelectionBar>

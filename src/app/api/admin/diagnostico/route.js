@@ -20,20 +20,13 @@ export async function GET(request) {
         // All workspaces
         const workspaces = await exec(`
             SELECT w.id, w.name, w.slug, w.created_at,
-                COUNT(DISTINCT wm.app_user_id) AS members,
-                COUNT(DISTINCT s.id) AS shipments,
-                COUNT(DISTINCT c.id) AS carriers,
-                COUNT(DISTINCT zm.id) AS zone_mappings,
-                COUNT(DISTINCT wi.id) AS integrations,
-                COUNT(DISTINCT wic.id) AS connections
-            FROM workspaces w
-            LEFT JOIN workspace_members wm ON wm.workspace_id = w.id
-            LEFT JOIN shipments s ON s.workspace_id = w.id
-            LEFT JOIN carriers c ON c.workspace_id = w.id
-            LEFT JOIN zone_mappings zm ON zm.workspace_id = w.id
-            LEFT JOIN workspace_integrations wi ON wi.workspace_id = w.id
-            LEFT JOIN workspace_integration_connections wic ON wic.workspace_id = w.id
-            GROUP BY w.id ORDER BY w.id ASC
+                (SELECT COUNT(*) FROM workspace_members m WHERE m.workspace_id=w.id) AS members,
+                (SELECT COUNT(*) FROM shipments s WHERE s.workspace_id=w.id) AS shipments,
+                (SELECT COUNT(*) FROM carriers c WHERE c.workspace_id=w.id) AS carriers,
+                (SELECT COUNT(*) FROM zone_mappings z WHERE z.workspace_id=w.id) AS zone_mappings,
+                (SELECT COUNT(*) FROM workspace_integrations i WHERE i.workspace_id=w.id) AS integrations,
+                (SELECT COUNT(*) FROM workspace_integration_connections i WHERE i.workspace_id=w.id) AS connections
+            FROM workspaces w ORDER BY w.id ASC
         `);
 
         // camilopcmidi memberships

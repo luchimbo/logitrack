@@ -1,54 +1,170 @@
-import { toast } from "@/lib/api";
+export function openPrintDialog() {
+    const dialog = document.createElement("dialog");
+    dialog.className = "label-print-dialog card";
+    dialog.setAttribute("aria-label", "Imprimir etiquetas");
+    dialog.style.cssText = "width:min(680px,calc(100% - 24px));max-height:94vh;color:var(--text);background:var(--bg-secondary);overflow:auto";
+    const header = document.createElement("div");
+    header.className = "flex-between";
+    const title = document.createElement("h2");
+    title.textContent = "Imprimir etiquetas";
+    header.append(title, button("Cerrar", () => dialog.close()));
+    const body = document.createElement("div");
+    dialog.append(header, body);
+    document.body.append(dialog);
 
-// Abre una ventana/pestaña de impresión de forma SÍNCRONA (dentro del gesto del clic).
-// Debe llamarse directamente en el handler del botón, antes de cualquier await, para que
-// el bloqueador de popups no la cancele. Devuelve la ventana (o null si fue bloqueada).
-export function openPrintWindow() {
-    const win = window.open("", "_blank");
-    if (!win) {
-        toast("El navegador bloqueó la ventana de impresión. Permití popups para este sitio.", "error");
-        return null;
-    }
-    win.document.write(
-        "<!doctype html><html><head><meta charset='utf-8'><title>Etiqueta</title></head>" +
-        "<body style='font-family:sans-serif;color:#444;padding:24px'>Generando etiqueta…</body></html>"
-    );
-    win.document.close();
-    return win;
+    const cancel = new AbortController();
+    dialog.addEventListener("close", () => {
+        cancel.abort();
+        dialog.remove();
+    }, { once: true });
+    dialog.showModal();
+    return {
+        dialog,
+        body,
+        signal: cancel.signal,
+        close: () => dialog.close(),
+        get closed() { return !dialog.open; },
+    };
 }
 
-// Carga el PDF de la etiqueta dentro de la ventana indicada usando un <iframe> al endpoint
-// (mismo origen, con cookies) y dispara el diálogo de impresión al terminar de cargar.
-// Se manipula el DOM del popup directamente (mismo origen) en vez de document.write para
-// máxima compatibilidad; navegar al endpoint evita los problemas de blob: entre ventanas.
-export function renderPrintWindow(win, url) {
-    if (!win) return;
-    try {
-        const doc = win.document;
-        doc.title = "Imprimir etiqueta";
-        doc.body.style.margin = "0";
-        doc.body.innerHTML = "";
+function button(label, onClick) {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "btn btn-sm";
+    control.textContent = label;
+    control.onclick = onClick;
+    return control;
+}
 
-        const iframe = doc.createElement("iframe");
-        iframe.style.border = "0";
-        iframe.style.width = "100%";
-        iframe.style.height = "100vh";
-        iframe.src = url;
+export const LABEL_PRINT_FORMATS = [
+    { id: "thermal", label: "PDF térmico", detail: "Una etiqueta por página, seguidas en un solo PDF." },
+    { id: "pdf", label: "PDF para A4", detail: "Agrupa hasta cuatro etiquetas por hoja según su tamaño." },
+    { id: "zpl", label: "ZPL", detail: "Para térmicas compatibles con ZPL. Las etiquetas van en secuencia." },
+];
 
-        const triggerPrint = () => {
-            try {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            } catch (e) {
-                /* el PDF igual queda visible para imprimir manualmente */
-            }
-        };
-        iframe.addEventListener("load", () => setTimeout(triggerPrint, 300));
-        doc.body.appendChild(iframe);
-        // Respaldo por si el evento load del PDF no dispara.
-        setTimeout(triggerPrint, 2500);
-    } catch (e) {
-        // Último recurso: navegar la ventana directo al PDF.
-        try { win.location.href = url; } catch (err) { /* noop */ }
+export function chooseLabelPrintFormat(panel, { preferredFormat = "", mixedPreferences = false } = {}) {
+    return new Promise((resolve) => {
+        panel.dialog.addEventListener("close", () => resolve(null), { once: true });
+        const options = [...LABEL_PRINT_FORMATS].sort((a, b) =>
+            Number(b.id === preferredFormat) - Number(a.id === preferredFormat));
+        if (mixedPreferences) {
+            const notice = document.createElement("p");
+            notice.textContent = "Las cuentas seleccionadas tienen preferencias distintas. Elegí un formato para todo el lote.";
+            panel.body.append(notice);
+        }
+        panel.body.style.cssText = "display:grid;gap:10px;margin-top:14px";
+        for (const { id: format, label, detail: description } of options) {
+            const option = button(format === preferredFormat ? `${label} · predeterminado` : label, () => {
+                const status = document.createElement("p");
+                status.setAttribute("role", "status");
+                status.textContent = "Preparando etiquetas…";
+                panel.body.replaceChildren(status);
+                resolve(format);
+            });
+            if (format === preferredFormat) option.classList.add("btn-primary");
+            option.style.cssText = "display:grid;gap:4px;text-align:left;padding:10px 12px";
+            const detail = document.createElement("span");
+            detail.style.fontWeight = "400";
+            detail.textContent = description;
+            option.append(detail);
+            panel.body.append(option);
+        }
+        panel.body.querySelector("button").focus();
+    });
+}
+
+export async function downloadLabelZplFile(url, requestOptions, cancelSignal) {
+    const deadline = AbortSignal.timeout(55000);
+    const signal = cancelSignal ? AbortSignal.any([cancelSignal, deadline]) : deadline;
+    const response = await fetch(url, { ...requestOptions, signal });
+    if (!response.ok || !(response.headers.get("content-type") || "").includes("application/vnd.zebra-zpl")) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "No se pudo preparar el ZPL de etiquetas.");
     }
+    saveLabelFile(await response.blob(), "etiquetas.zpl");
+}
+
+async function fetchLabelPdf(url, requestOptions, cancelSignal) {
+    try {
+        const deadline = AbortSignal.timeout(55000);
+        const signal = cancelSignal ? AbortSignal.any([cancelSignal, deadline]) : deadline;
+        const response = await fetch(url, { ...requestOptions, signal });
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "No se pudo preparar el PDF de etiquetas");
+        }
+        if (!(response.headers.get("content-type") || "").includes("application/pdf")) {
+            throw new Error("La respuesta no contiene un PDF de etiquetas");
+        }
+        return await response.blob();
+    } catch (error) {
+        if (["AbortError", "TimeoutError"].includes(error.name)) {
+            throw new Error("La preparación tardó demasiado. Intentá nuevamente con menos etiquetas.");
+        }
+        throw error;
+    }
+}
+
+export async function downloadLabelPdf(url, requestOptions) {
+    saveLabelFile(await fetchLabelPdf(url, requestOptions), "etiquetas-mercadolibre.pdf");
+}
+
+function saveLabelFile(blob, filename) {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+export async function renderPrintDialog(panel, url, { onConfirmPrinted, requestOptions } = {}) {
+    if (panel.closed) return;
+    const blob = await fetchLabelPdf(url, requestOptions, panel.signal);
+    if (panel.closed) return;
+    const blobUrl = URL.createObjectURL(blob);
+    panel.dialog.addEventListener("close", () => URL.revokeObjectURL(blobUrl), { once: true });
+    panel.dialog.style.width = "min(1080px,calc(100% - 24px))";
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "border:0;width:100%;height:68dvh;background:white";
+    iframe.title = "Vista previa del PDF de etiquetas";
+    iframe.src = blobUrl;
+
+    const toolbar = document.createElement("div");
+    toolbar.style.cssText = "display:flex;flex-wrap:wrap;gap:8px";
+    const print = button("Imprimir PDF", () => {
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch {
+            print.textContent = "Usá Imprimir en el visor";
+        }
+    });
+    print.disabled = true;
+    iframe.addEventListener("load", () => { print.disabled = false; }, { once: true });
+
+    const link = document.createElement("a");
+    link.className = "btn btn-sm";
+    link.href = blobUrl;
+    link.download = "etiquetas.pdf";
+    link.textContent = "Descargar PDF";
+    toolbar.append(print, link);
+    if (onConfirmPrinted) {
+        const confirm = button("Confirmar impresión", async () => {
+            confirm.disabled = true;
+            try {
+                await onConfirmPrinted();
+                confirm.textContent = "Impresión confirmada";
+            } catch {
+                confirm.disabled = false;
+                confirm.textContent = "Reintentar confirmación";
+            }
+        });
+        toolbar.append(confirm);
+    }
+    panel.body.replaceChildren(toolbar, iframe);
+    link.focus();
 }

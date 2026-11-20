@@ -61,6 +61,7 @@
 
 .provinceTag{pointer-events:none}
 .provinceCount{font-size:7px;font-weight:700;fill:currentColor;opacity:.9;text-anchor:middle}
+.islandLabel{font-size:6px;fill:currentColor;opacity:.6;pointer-events:none;text-anchor:middle;font-weight:600}
 .methodLegend{position:absolute;left:20px;bottom:60px;z-index:1;display:grid;gap:6px;max-width:210px;padding:10px 12px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--map-line);font-size:12px}
 .methodLegend span{display:flex;align-items:center;gap:8px;font-weight:600}
 .methodLegend i{width:12px;height:12px;border-radius:3px}
@@ -72,3 +73,21 @@
 .kindHead span{font-size:13px;opacity:.8}
 .refreshPill{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-style:normal;font-size:12px;opacity:.9}
 .refreshPill i{width:12px;height:12px;border-radius:50%;border:2px solid rgba(128,128,128,.4);border-top-color:var(--kind-color);animation:mapSpin .8s linear infinite}
+
+.presets button,.dates input,.method select{min-height:44px}
+.mapHint{white-space:normal;text-align:center}
+@media(max-width:500px){
+  .dates input,.method select{font-size:16px;padding-inline:6px}
+  .presets button{min-height:44px}
+  .zoom button{width:44px;height:44px}
+}
+/* Amounts scale with their own box so long figures never wrap or touch the next column. */
+.summary .sales{container-type:inline-size}
+.summary .sales>strong{white-space:nowrap;overflow-wrap:normal;font-size:clamp(20px,9.6cqi,38px)}
+.summary .summaryGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.summary .summaryGrid>div{container-type:inline-size;min-width:0}
+.summary .summaryGrid strong{white-space:nowrap;overflow-wrap:normal;font-size:clamp(13px,12cqi,22px)}
+@media(min-width:501px) and (max-width:850px){.summary .summaryGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* A dark halo keeps province names and counts readable over filled shapes and their neighbours. */
+.provinceLabel,.provinceCount{paint-order:stroke;stroke:rgba(11,15,26,.85);stroke-width:2.2px;stroke-linejoin:round}
+.provinceLabel{font-size:7px;opacity:.95}

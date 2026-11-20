@@ -32,7 +32,7 @@ test('release: Mostrador, storefront y callbacks llegan a su propia autorizació
   for (const path of [
     '/api/cross-selling/config', '/api/cross-selling/module', '/api/cross-selling/report',
     '/api/cross-selling/storefront/offers', '/api/cross-selling/storefront/accept',
-    '/api/cross-selling/storefront/seen',
+    '/api/cross-selling/storefront/seen', '/api/reviews/config', '/api/reviews/storefront', '/api/reviews/meli',
     `/api/cross-selling/offer-callback/${'a'.repeat(32)}`,
     `/api/cross-selling/demo-callback/${'a'.repeat(64)}`,
   ]) {
@@ -46,6 +46,7 @@ test('release: las APIs administrativas y rutas parecidas conservan la protecci�
   for (const path of [
     '/api/admin/tiendanube/cross-selling/status', '/api/logistics-finance',
     '/api/cross-selling/module/admin', '/api/cross-selling/storefront/unknown',
+    '/api/reviews/admin', '/api/reviews/storefront/x',
     '/api/cross-selling/offer-callback/invalid', '/api/cross-selling/demo-callback/invalid',
   ]) assert.equal((await proxy({ nextUrl: new URL(`https://www.geomodi.ai${path}`) })).status, 401, path);
 });
@@ -66,9 +67,12 @@ test('release: la distribución incluye las rutas y recursos comerciales de prod
   ]) assert.ok(readFileSync(new URL(`../${file}`, import.meta.url)).length > 0, file);
 });
 
-function deploymentFetch({ brokenModule = false, brokenOrigin = false } = {}) {
+function deploymentFetch({ brokenModule = false, brokenOrigin = false, brokenReviews = false } = {}) {
   return async (url, options) => {
     const endpoint = url.pathname.split('/').at(-1);
+    if (url.pathname.startsWith('/api/reviews/')) {
+      return Response.json({ error: brokenReviews ? 'No autorizado' : endpoint === 'config' ? 'Publicación no autorizada' : 'Solicitud no autorizada' }, { status: 401 });
+    }
     if (['config', 'module', 'report'].includes(endpoint)) {
       return Response.json({ error: endpoint === 'config' ? 'Publicación no autorizada'
         : endpoint === 'module' && brokenModule ? 'No autorizado' : 'Solicitud no autorizada' }, { status: 401 });
@@ -84,6 +88,10 @@ function deploymentFetch({ brokenModule = false, brokenOrigin = false } = {}) {
 
 test('release: el control previo a promover admite una distribución completa', async () => {
   await checkCrossSellingDeployment('https://example.vercel.app', deploymentFetch());
+});
+
+test('release: detecta las reseñas bloqueadas por Clerk antes de promover', async () => {
+  await assert.rejects(checkCrossSellingDeployment('https://example.vercel.app', deploymentFetch({ brokenReviews: true })), /Reseñas.*Clerk/);
 });
 
 test('release: el control previo a promover detecta el 401 de Clerk aunque el código HTTP sea el esperado', async () => {

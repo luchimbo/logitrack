@@ -1,5 +1,8 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+import SectionTitle from "./SectionTitle";
+
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
@@ -45,32 +48,32 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
 
   return (
     <article className="card integration-card" style={{ padding: 0, overflow: 'hidden', border: `1px solid ${isConnected ? `${accent}55` : 'var(--border)'}` }}>
-      <div style={{ padding: '18px', display: 'grid', gap: '16px' }}>
+      <div className="integration-card-body">
         <div className="integration-card-head">
           <div style={{ display: 'flex', gap: '12px', minWidth: 0 }}>
             <div style={{ width: '54px', height: '54px', flex: '0 0 54px', borderRadius: '16px', display: 'grid', placeItems: 'center', background: '#ffffff', color: accent, fontWeight: 900, border: `1px solid ${accent}35`, padding: '6px' }}>
               {providerLogo[integration.provider] ? (
                 <Image
                   src={providerLogo[integration.provider]}
-                  alt={`${integration.name} logo`}
+                  alt=""
                   width={42}
                   height={42}
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
               ) : providerIcon[integration.provider] || integration.name[0]}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 850, marginBottom: '4px' }}>{integration.name}</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.45 }}>{integration.description}</p>
+            <div className="integration-title-block">
+              <h2 className="integration-provider-title">{integration.name}</h2>
+              <span className={`integration-status${isConnected ? ' is-connected' : ''}`}>
+                {isConnected ? 'Conectado' : isComingSoon ? 'Próximamente' : 'Sin conectar'}
+              </span>
             </div>
           </div>
-          <span style={{ whiteSpace: 'nowrap', borderRadius: '999px', padding: '5px 9px', fontSize: '11px', fontWeight: 800, color: isConnected ? accent : 'var(--text-muted)', background: isConnected ? `${accent}14` : 'var(--surface)', border: `1px solid ${isConnected ? `${accent}33` : 'var(--border)'}` }}>
-            {isConnected ? `${integration.connectionCount} conectada${integration.connectionCount === 1 ? '' : 's'}` : isComingSoon ? 'Pronto' : 'Disponible'}
-          </span>
         </div>
+        <p className="integration-provider-description">{integration.description}</p>
 
         {connections.length ? (
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <InfoDisclosure title="Cuentas conectadas" description={`Conexiones: ${connections.length}`}><div style={{ display: 'grid', gap: '8px' }}>
             {connections.slice(0, 4).map((connection) => (
               <div key={`${connection.provider}-${connection.id}`} className="integration-connection-row">
                 <strong style={{ color: 'var(--text)' }}>{connection.displayName || connection.externalStoreId}</strong>
@@ -78,18 +81,17 @@ function IntegrationCard({ integration, connections, onOpenProvider }) {
               </div>
             ))}
             {connections.length > 4 ? <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>+{connections.length - 4} conexiones más</div> : null}
-          </div>
+          </div></InfoDisclosure>
         ) : null}
 
-        <button
+        {!isComingSoon && <button
           type="button"
-          className={isConnected ? 'btn btn-ghost' : 'btn btn-primary'}
-          disabled={isComingSoon}
+          className={`integration-card-action ${isConnected ? 'btn' : 'btn btn-primary'}`}
           onClick={() => onOpenProvider(integration.provider)}
-          style={{ justifyContent: 'center' }}
+          aria-label={`${isConnected ? 'Abrir' : 'Configurar'} ${integration.name}`}
         >
-          {isComingSoon ? 'Próximamente' : isConnected ? 'Abrir módulo' : 'Configurar'}
-        </button>
+          {isConnected ? 'Abrir módulo' : 'Configurar'}
+        </button>}
       </div>
     </article>
   );
@@ -132,21 +134,22 @@ export default function IntegrationsSection({ onNavigate }) {
     }
   };
 
-  if (loading) {
-    return <div className="section"><div className="spinner"></div></div>;
-  }
-
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Centro de integraciones</h2>
+        <SectionTitle icon="integrations">Centro de integraciones</SectionTitle>
         <p className="section-subtitle">Conectá canales de venta y operadores logísticos. Los módulos operativos aparecen cuando hay al menos una conexión activa.</p>
       </div>
 
-      {error ? <div className="card" style={{ color: 'var(--danger)', marginBottom: '14px' }}>{error}</div> : null}
+      {loading && <p className="card" role="status">Cargando integraciones…</p>}
+      {error && <div className="card integration-load-error">
+        <p role="alert">{error}</p>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={load}>Reintentar</button>
+      </div>}
+      {!loading && !error && !available.length && <p className="card">No hay integraciones disponibles en este espacio de trabajo.</p>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-        {available.map((integration) => (
+      <div className="integration-provider-grid">
+        {available.filter((integration) => integration.status !== 'coming_soon' || integration.connected).map((integration) => (
           <IntegrationCard
             key={integration.provider}
             integration={integration}

@@ -14,7 +14,7 @@ export function createMercadoLibreClient({ accessToken } = {}) {
 
     if (!res.ok) {
       const data = isJson ? await res.json().catch(() => ({})) : { message: await res.text().catch(() => '') };
-      throw new Error(data.error_description || data.message || data.error || `Mercado Libre error ${res.status}`);
+      throw Object.assign(new Error(data.error_description || data.message || data.error || `Mercado Libre error ${res.status}`), { status: res.status });
     }
 
     if (options.responseType === 'arrayBuffer') {
@@ -35,12 +35,35 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/orders/search?${params.toString()}`);
   }
 
+  // Publicaciones activas del vendedor (hasta 100 por página).
+  function searchSellerItems({ sellerId, offset = 0, limit = 100 } = {}) {
+    const params = new URLSearchParams({ status: 'active', offset: String(offset), limit: String(limit) });
+    return request(`/users/${sellerId}/items/search?${params.toString()}`);
+  }
+
+  // Varias publicaciones por pedido (máximo 20 ids); cada elemento trae {code, body}.
+  function getItems(ids = []) {
+    const params = new URLSearchParams({ ids: ids.join(','), attributes: 'id,title,permalink,seller_custom_field,attributes,catalog_product_id' });
+    return request(`/items?${params.toString()}`);
+  }
+
+  // Opiniones de una publicación (o de su producto de catálogo).
+  function getItemReviews(itemId, { catalogProductId = '', offset = 0, limit = 50 } = {}) {
+    const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (catalogProductId) params.set('catalog_product_id', String(catalogProductId));
+    return request(`/reviews/item/${itemId}?${params.toString()}`);
+  }
+
   function getOrder(orderId) {
     return request(`/orders/${orderId}`);
   }
 
   function getShipment(shipmentId) {
     return request(`/shipments/${shipmentId}`, { headers: { 'x-format-new': 'true' } });
+  }
+
+  function getShipmentOrders(shipmentId) {
+    return request(`/shipments/${shipmentId}/orders`, { headers: { 'x-new-domain': 'true' } });
   }
 
   function getShipmentItems(shipmentId) {
@@ -78,14 +101,14 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/shipments/${shipmentId}/history`);
   }
 
-  function downloadShipmentLabelsZpl(shipmentIds) {
+  function downloadShipmentLabelsZpl(shipmentIds, { signal } = {}) {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.join(',') : String(shipmentIds || '');
-    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=zpl2`, { responseType: 'arrayBuffer' });
+    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=zpl2`, { responseType: 'arrayBuffer', signal });
   }
 
-  function downloadShipmentLabelsPdf(shipmentIds) {
+  function downloadShipmentLabelsPdf(shipmentIds, { signal } = {}) {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.join(',') : String(shipmentIds || '');
-    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=pdf`, { responseType: 'arrayBuffer' });
+    return request(`/shipment_labels?shipment_ids=${encodeURIComponent(ids)}&response_type=pdf`, { responseType: 'arrayBuffer', signal });
   }
 
   async function downloadShipmentLabelsZplBatches(shipmentIds, chunkSize = 50) {
@@ -154,9 +177,13 @@ export function createMercadoLibreClient({ accessToken } = {}) {
   return {
     getMe,
     searchOrders,
+    searchSellerItems,
+    getItems,
+    getItemReviews,
     getOrder,
     getShipment,
     getShipmentItems,
+    getShipmentOrders,
     getShipmentLeadTime,
     getShipmentCosts,
     getShipmentDelays,

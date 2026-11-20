@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, toast } from "@/lib/api";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
+import SectionTitle from "./SectionTitle";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -10,7 +11,7 @@ function formatDate(value) {
 }
 
 export default function V2PrintJobsPage() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState(null);
   const [summary, setSummary] = useState({ total_jobs: 0, total_labels: 0, total_reprints: 0 });
@@ -25,15 +26,13 @@ export default function V2PrintJobsPage() {
       const data = await api("/v2/print-jobs?limit=100");
       setSummary(data.summary || { total_jobs: 0, total_labels: 0, total_reprints: 0 });
       setJobs(Array.isArray(data.jobs) ? data.jobs : []);
-      if (data.jobs?.length && !selectedJobId) {
-        setSelectedJobId(data.jobs[0].job_id);
-      }
+      setSelectedJobId((current) => current || data.jobs?.[0]?.job_id || null);
     } catch (err) {
-      setError(err.message || "Error cargando print jobs");
+      setError(err.message || "No se pudo cargar el historial de impresión.");
     } finally {
       setLoading(false);
     }
-  }, [selectedJobId]);
+  }, []);
 
   useEffect(() => {
     loadJobs();
@@ -45,40 +44,43 @@ export default function V2PrintJobsPage() {
       return;
     }
 
+    let cancelled = false;
     async function loadDetail() {
       setLoadingDetail(true);
       try {
         const data = await api(`/v2/print-jobs/${encodeURIComponent(selectedJobId)}`);
-        setDetail(data);
-      } catch (err) {
-        toast("Error cargando detalle del job", "error");
-        setDetail(null);
+        if (!cancelled) setDetail(data);
+      } catch {
+        if (!cancelled) {
+          toast("No se pudo cargar el detalle de la impresión.", "error");
+          setDetail(null);
+        }
       } finally {
-        setLoadingDetail(false);
+        if (!cancelled) setLoadingDetail(false);
       }
     }
 
     loadDetail();
+    return () => { cancelled = true; };
   }, [selectedJobId]);
 
   return (
     <div className="section active">
       <div className="section-header flex-between">
         <div>
-          <h1 className="section-title">🖨️ Print Jobs V2</h1>
-          <p className="section-subtitle">Historial de impresion y reimpresiones</p>
+          <SectionTitle icon="print">Historial de impresión</SectionTitle>
         </div>
-        <button className="btn btn-sm" onClick={loadJobs} disabled={loading}>
-          {loading ? "Actualizando..." : "🔄 Actualizar"}
+        <button type="button" className="btn btn-ghost btn-sm print-jobs-refresh" onClick={loadJobs} disabled={loading}>
+          {loading ? "Actualizando…" : "Actualizar"}
         </button>
       </div>
 
-      {error && <p style={{ color: "var(--danger)", marginBottom: "12px" }}>Error: {error}</p>}
+      {error && <p className="print-jobs-error" role="alert">{error}</p>}
 
       <div className="stats-grid">
         <div className="stat-card card accent">
           <div className="stat-value">{summary.total_jobs || 0}</div>
-          <div className="stat-label">Jobs</div>
+          <div className="stat-label">Trabajos de impresión</div>
         </div>
         <div className="stat-card card info">
           <div className="stat-value">{summary.total_labels || 0}</div>
@@ -90,34 +92,24 @@ export default function V2PrintJobsPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 420px) 1fr", gap: "16px", alignItems: "start" }}>
+      <div className="print-jobs-layout">
         <div className="card">
-          <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700 }}>Ultimos jobs</h3>
-          {!jobs.length && <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Sin jobs registrados.</p>}
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "65vh", overflow: "auto" }}>
+          <h2>Impresiones recientes</h2>
+          {!jobs.length && !error && <p className="print-jobs-meta" role="status">{loading ? "Cargando impresiones…" : "Todavía no hay impresiones registradas."}</p>}
+          <div className="print-jobs-list">
             {jobs.map((job) => {
               const active = selectedJobId === job.job_id;
               return (
                 <button
                   key={job.job_id}
+                  type="button"
+                  className="print-job-item"
+                  aria-pressed={active}
                   onClick={() => setSelectedJobId(job.job_id)}
-                  style={{
-                    textAlign: "left",
-                    border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
-                    background: active ? "var(--accent-soft)" : "var(--surface)",
-                    borderRadius: "var(--radius)",
-                    padding: "10px",
-                    cursor: "pointer",
-                    color: "var(--text-primary)",
-                  }}
                 >
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{job.job_id}</div>
-                  <div style={{ marginTop: "4px", fontSize: "13px", fontWeight: 700 }}>
-                    {job.labels_total} etiquetas · {job.reprints_total} reprints
-                  </div>
-                  <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                    {formatDate(job.received_at)}
-                  </div>
+                  <strong>{job.labels_total} etiquetas · {job.reprints_total} reimpresiones</strong>
+                  <span className="print-jobs-meta">{formatDate(job.received_at)}</span>
+                  <span className="print-jobs-meta">{job.job_id}</span>
                 </button>
               );
             })}
@@ -125,13 +117,13 @@ export default function V2PrintJobsPage() {
         </div>
 
         <div className="card">
-          <h3 style={{ marginBottom: "12px", fontSize: "15px", fontWeight: 700 }}>Detalle</h3>
-          {!selectedJobId && <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Selecciona un job.</p>}
-          {loadingDetail && <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Cargando detalle...</p>}
-          {!loadingDetail && detail?.job && (
+          <h2>Detalle de impresión</h2>
+          {!selectedJobId && <p className="print-jobs-meta">Seleccioná una impresión de la lista.</p>}
+          {loadingDetail && <p className="print-jobs-meta" role="status">Cargando detalle…</p>}
+          {!loadingDetail && detail?.job && detail.job.job_id === selectedJobId && (
             <>
-              <div style={{ marginBottom: "12px", fontSize: "13px", color: "var(--text-secondary)" }}>
-                <strong>Job:</strong> {detail.job.job_id}
+              <div className="print-jobs-meta print-jobs-details">
+                <strong>ID:</strong> {detail.job.job_id}
                 <br />
                 <strong>Recibido:</strong> {formatDate(detail.job.received_at)}
                 <br />
@@ -143,15 +135,15 @@ export default function V2PrintJobsPage() {
                 {detail.job.integrity?.parser_misses ? <><br /><strong>Lecturas incompletas:</strong> {detail.job.integrity.parser_misses}</> : null}
               </div>
 
-              <div className="table-container">
+              <div className="table-container print-jobs-table" role="region" aria-label="Etiquetas de la impresión" tabIndex={0}>
                 <table>
                   <thead>
                     <tr>
                       <th>#</th>
                       <th>SKU</th>
-                      <th>Tracking</th>
-                      <th>Metodo</th>
-                      <th>Reprint</th>
+                      <th>Seguimiento</th>
+                      <th>Método</th>
+                      <th>Reimpresión</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -163,7 +155,7 @@ export default function V2PrintJobsPage() {
                         <td>{item.shipping_method || "-"}</td>
                         <td>
                           {item.is_reprint ? (
-                            <span className="badge" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>Si</span>
+                            <span className="badge" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>Sí</span>
                           ) : (
                             <span className="badge" style={{ background: "var(--success-bg)", color: "var(--success)" }}>No</span>
                           )}

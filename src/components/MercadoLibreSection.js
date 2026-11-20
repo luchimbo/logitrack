@@ -1,10 +1,14 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import { toast } from "@/lib/api";
-import { openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
+import { classifyDispatch, groupMercadoLibrePackages, mercadoLibrePackageKey } from "@/lib/mercadolibreLogistics";
+import { LABEL_PRINT_FORMATS, chooseLabelPrintFormat, downloadLabelPdf, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
 import MercadoLibreShipmentMeta from "./MercadoLibreShipmentMeta";
+import SectionTitle from "./SectionTitle";
 
 const VIEW_OPTIONS = [
   { value: "", label: "Todos" },
@@ -12,8 +16,6 @@ const VIEW_OPTIONS = [
   { value: "to_dispatch", label: "Para despachar" },
   { value: "no_label", label: "Sin etiqueta lista" },
   { value: "ready", label: "Listos para preparar" },
-  { value: "flex", label: "Flex" },
-  { value: "colecta", label: "Colecta" },
   { value: "delayed", label: "Demorados" },
   { value: "imported", label: "Importados" },
   { value: "in_transit", label: "En transito" },
@@ -22,9 +24,37 @@ const VIEW_OPTIONS = [
   { value: "not_scanned", label: "Sin escanear" },
 ];
 
-function orderKey(order) {
-  return `${order.connectionId || "na"}:${order.id}`;
+const orderKey = mercadoLibrePackageKey;
+const mlPdfUrl = "/api/labels/ml-pdf";
+
+function printPreferenceKey(connectionId) {
+  return `geomodi:mercadolibre:print-format:${connectionId}`;
 }
+
+function getPrintPreferences(connections) {
+  try {
+    return Object.fromEntries(connections.map(({ id }) => [
+      id,
+      window.localStorage.getItem(printPreferenceKey(id)) || "",
+    ]));
+  } catch {
+    return {};
+  }
+}
+
+function labelRequest(list, format = "original") {
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      format,
+      packages: list.map(({ connectionId, shipmentId }) => ({ connectionId, shipmentId: String(shipmentId) })),
+    }),
+  };
+}
+
+const isToDispatch = (order) => classifyDispatch(order) === "ready";
+const isDispatched = (order) => classifyDispatch(order) === "dispatched";
 
 function formatMoney(total, currency) {
   const numeric = Number(total);
@@ -78,6 +108,7 @@ function dispatchCardRow({ label, value, color, filterValue, cardFilter, onToggl
       key={filterValue}
       type="button"
       onClick={() => onToggle(filterValue)}
+      aria-pressed={isActive}
       style={{
         display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
         fontSize: "13px", color: "var(--text-secondary)", background: isActive ? "var(--accent-soft)" : "transparent",
@@ -92,7 +123,7 @@ function dispatchCardRow({ label, value, color, filterValue, cardFilter, onToggl
 
 function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) {
   const onToggle = (value) => setCardFilter((prev) => prev === value ? null : value);
-  const active = cardFilter === kind || cardFilter === `${kind}_dispatch` || cardFilter === `${kind}_buffered`;
+  const active = cardFilter === kind || cardFilter === `${kind}_dispatch` || cardFilter === `${kind}_dispatched` || cardFilter === `${kind}_buffered`;
   return (
     <div style={{ background: "var(--bg-secondary)", border: active ? "2px solid var(--accent)" : "1px solid var(--border)", borderRadius: "var(--radius)", padding: "14px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", padding: "0 8px" }}>
@@ -108,6 +139,7 @@ function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) 
       )}
       {dispatchCardRow({ label: "Etiquetas por imprimir", value: summary.toPrint, color: "#f97316", filterValue: kind, cardFilter, onToggle })}
       {dispatchCardRow({ label: "Listas para despachar", value: summary.toDispatch, color: "#059669", filterValue: `${kind}_dispatch`, cardFilter, onToggle })}
+      {dispatchCardRow({ label: "Despachadas", value: summary.dispatched, color: "#60a5fa", filterValue: `${kind}_dispatched`, cardFilter, onToggle })}
       {summary.buffered > 0 && dispatchCardRow({ label: "En proceso (se imprimen desde las 20 h)", value: summary.buffered, color: "#a855f7", filterValue: `${kind}_buffered`, cardFilter, onToggle })}
       {summary.rescheduled > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", padding: "6px 8px" }}>
@@ -121,6 +153,7 @@ function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) 
 
 function OrderCard({
   order,
+  accountName,
   selected,
   compact,
   queued,
@@ -143,6 +176,14 @@ function OrderCard({
   const alreadyPrinted = printabilityId === "printed" || Boolean(order.labelPrintedAt);
   const canPrint = alreadyPrinted || ["printable", "imported"].includes(printabilityId) || Boolean(order.shipmentRowId);
   const printLabel = alreadyPrinted ? "Reimprimir" : "Imprimir";
+  const dispatchLabel = isDispatched(order) ? "Despachado" : isToDispatch(order) ? "Listo para despachar" : "";
+  const packageName = order.shipmentId ? `Paquete #${order.shipmentId}` : `Venta #${order.id} sin envío`;
+  const packageStatus = (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontSize: "12px" }}>
+      <strong>Cuenta: {accountName}</strong>
+      {dispatchLabel && <strong style={{ color: isDispatched(order) ? "#60a5fa" : "var(--text)" }}>{dispatchLabel}</strong>}
+    </div>
+  );
 
   if (compact) {
     return (
@@ -157,16 +198,17 @@ function OrderCard({
         borderLeft: `3px solid ${borderColor}`,
         background: selected ? "var(--accent-soft)" : "var(--surface)",
       }}>
-        <input type="checkbox" checked={selected} onChange={onToggleSelected}
+        <input type="checkbox" checked={selected} onChange={onToggleSelected} aria-label={`Seleccionar ${packageName}`}
           style={{ width: "16px", height: "16px", accentColor: "var(--accent)" }} />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: "13px" }}>#{order.id}</span>
+            <span style={{ fontWeight: 700, fontSize: "13px" }}>{packageName}</span>
             <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{logisticLabel(order)}</span>
             <span style={{ fontSize: "13px" }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</span>
             {queued && <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 700 }}>✓ En cola</span>}
           </div>
-          <MercadoLibreShipmentMeta shipment={order} compact />
+          {packageStatus}
+          <MercadoLibreShipmentMeta shipment={order} hideState={Boolean(dispatchLabel) && !isDispatched(order)} compact />
         </div>
         <div style={{ display: "flex", gap: "6px" }}>
           {!order.shipmentRowId && (
@@ -194,16 +236,17 @@ function OrderCard({
             type="checkbox"
             checked={selected}
             onChange={onToggleSelected}
-            aria-label={`Seleccionar venta ${order.id}`}
+            aria-label={`Seleccionar ${packageName}`}
             style={{ marginTop: "3px", accentColor: "var(--accent)" }}
           />
           <div style={{ minWidth: 0 }}>
-            <div className="mobile-card-title" style={{ fontSize: "20px", marginBottom: "4px" }}>Venta #{order.id}</div>
+            <div className="mobile-card-title" style={{ fontSize: "20px", marginBottom: "4px" }}>{packageName}</div>
             <div style={{ fontWeight: 650 }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</div>
             <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "2px" }}>
               {logisticLabel(order)} · Envío {order.shipmentId || "-"}
             </div>
-            <MercadoLibreShipmentMeta shipment={order} />
+            {packageStatus}
+            <MercadoLibreShipmentMeta shipment={order} hideState={Boolean(dispatchLabel) && !isDispatched(order)} />
           </div>
         </div>
         {queued && (
@@ -211,13 +254,14 @@ function OrderCard({
         )}
       </div>
 
-      <div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
-        <div><strong style={{ color: "var(--text)" }}>Total:</strong> {formatMoney(order.total, order.currency)}</div>
+      <InfoDisclosure title="Detalle de la venta" description="Importe, productos y datos de envío"><div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
+        <div><strong style={{ color: "var(--text)" }}>Ventas:</strong> {order.orderIds.join(", ")}</div>
+        {order.orderIds.length === 1 && <div><strong style={{ color: "var(--text)" }}>Total:</strong> {formatMoney(order.total, order.currency)}</div>}
         <div><strong style={{ color: "var(--text)" }}>Fecha:</strong> {order.createdAt ? formatArgentinaDate(order.createdAt) : "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Tracking:</strong> {order.trackingNumber || "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Dirección:</strong> {addressLabel(order.address) || "-"}</div>
         <div><strong style={{ color: "var(--text)" }}>Productos:</strong> {totalUnits || 0} unid. {productNames ? `· ${productNames}` : ""}</div>
-      </div>
+      </div></InfoDisclosure>
 
       <div className="mobile-card-actions">
         <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)}>
@@ -225,7 +269,7 @@ function OrderCard({
         </button>
         {canPrint ? (
           <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)} disabled={isLoading}>
-            {printing ? "Encolando..." : printLabel}
+            {printing ? "Preparando PDF…" : printLabel}
           </button>
         ) : null}
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRefresh(order)} disabled={isLoading}>
@@ -276,10 +320,12 @@ function sortByUrgency(orders) {
   });
 }
 
-export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
+export default function MercadoLibreSection({ currentUser, method, onNavigate }) {
+  const methodTitle = method === "flex" ? "Flex" : "Colecta";
   const canManageIntegration = ["owner", "admin"].includes(currentUser?.role);
   const [connected, setConnected] = useState(false);
   const [connections, setConnections] = useState([]);
+  const [printPreferences, setPrintPreferences] = useState({});
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [orders, setOrders] = useState([]);
   const [selectedOrderKeys, setSelectedOrderKeys] = useState([]);
@@ -302,13 +348,13 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
 
-  const selectedOrders = useMemo(() => {
-    const keys = new Set(selectedOrderKeys);
-    return orders.filter((order) => keys.has(orderKey(order)));
-  }, [orders, selectedOrderKeys]);
+  const packages = useMemo(() => groupMercadoLibrePackages(orders), [orders]);
+  const accountNames = useMemo(() => new Map(connections.map((account) => [
+    String(account.id), account.displayName || account.externalStoreId,
+  ])), [connections]);
 
   const todayStr = useMemo(() => getArgentinaDateString(), []);
-  const sortedOrders = useMemo(() => sortByUrgency(orders), [orders]);
+  const sortedOrders = useMemo(() => sortByUrgency(packages), [packages]);
 
   // ML agrupa el panel por la colecta/entrega del día, fecha que NO expone por API. La aproximamos
   // con una ventana reciente sobre handlingLimitDate (estimated_delivery_time.pay_before): NO se
@@ -321,8 +367,6 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     return d.toISOString().slice(0, 10);
   }, [todayStr]);
   const isToday = useCallback((o) => Boolean(o.handlingLimitDate) && o.handlingLimitDate >= recentCutoffStr, [recentCutoffStr]);
-  const isFlex = (o) => o.logisticType === "self_service";
-  const isFull = (o) => o.logisticType === "fulfillment";
   // "Listo para imprimir" real: etiqueta en ready_to_print sin imprimir/importar, del día de hoy.
   const isPrintableToday = useCallback((o) => (
     isToday(o)
@@ -330,56 +374,34 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     && String(o.shipmentSubstatus || "").toLowerCase() === "ready_to_print"
   ), [isToday]);
 
-  const printableOrders = useMemo(() => orders.filter(isPrintableToday), [orders, isPrintableToday]);
-  const printableFlexCount = useMemo(() => printableOrders.filter(isFlex).length, [printableOrders]);
-  const printableColectaCount = useMemo(() => printableOrders.filter((o) => !isFlex(o) && !isFull(o)).length, [printableOrders]);
+  const printableOrders = useMemo(() => packages.filter(isPrintableToday), [packages, isPrintableToday]);
 
-  // Ya impresa y lista para despachar hoy (sin escanear todavía). Permite reimprimir.
-  const isToDispatchToday = useCallback((o) => (
-    isToday(o)
-    && o.printability?.id === "printed"
-  ), [isToday]);
+  const dispatchSummary = useMemo(() => ({
+    total: packages.filter((order) => isToday(order) &&
+      ["ready_to_print", "ready_to_ship"].includes(order.packageState?.id) && order.printability?.id !== "printed").length,
+    toPrint: printableOrders.length,
+    toDispatch: packages.filter(isToDispatch).length,
+    dispatched: packages.filter(isDispatched).length,
+    ...(method === "flex" ? {
+      rescheduled: packages.filter((order) => isToday(order) &&
+        String(order.shipmentSubstatus || "").toLowerCase().includes("reschedul")).length,
+      buffered: packages.filter((order) => isToday(order) && order.printability?.id === "buffered").length,
+    } : {
+      canceled: packages.filter((order) => isToday(order) && order.packageState?.id === "canceled").length,
+    }),
+  }), [packages, printableOrders.length, isToday, method]);
 
-  // Cards estilo panel ML (Colecta/Flex), acotadas al día de hoy.
-  const dispatchSummary = useMemo(() => {
-    const pendingToday = (o) => isToday(o) && ["ready_to_print", "ready_to_ship"].includes(o.packageState?.id) && o.printability?.id !== "printed";
-    const isResched = (o) => String(o.shipmentSubstatus || "").toLowerCase().includes("reschedul");
-    const flexPending = orders.filter((o) => isFlex(o) && pendingToday(o));
-    const colectaPending = orders.filter((o) => !isFlex(o) && !isFull(o) && pendingToday(o));
-    return {
-      flex: {
-        total: flexPending.length,
-        toPrint: flexPending.filter(isPrintableToday).length,
-        toDispatch: orders.filter((o) => isFlex(o) && isToDispatchToday(o)).length,
-        rescheduled: orders.filter((o) => isFlex(o) && isToday(o) && isResched(o)).length,
-        buffered: orders.filter((o) => isFlex(o) && isToday(o) && o.printability?.id === "buffered").length,
-      },
-      colecta: {
-        total: colectaPending.length,
-        toPrint: colectaPending.filter(isPrintableToday).length,
-        toDispatch: orders.filter((o) => !isFlex(o) && !isFull(o) && isToDispatchToday(o)).length,
-        canceled: orders.filter((o) => !isFlex(o) && !isFull(o) && isToday(o) && o.packageState?.id === "canceled").length,
-      },
-    };
-  }, [orders, isToday, isPrintableToday, isToDispatchToday]);
-
-  // Filtro client-side al clickear una card: por imprimir hoy, o para despachar hoy, de ese método.
   const visibleOrders = useMemo(() => {
-    const method = (o, flex) => flex ? isFlex(o) : (!isFlex(o) && !isFull(o));
-    if (cardFilter === "colecta") return sortedOrders.filter((o) => method(o, false) && isPrintableToday(o));
-    if (cardFilter === "flex") return sortedOrders.filter((o) => method(o, true) && isPrintableToday(o));
-    if (cardFilter === "colecta_dispatch") return sortedOrders.filter((o) => method(o, false) && isToDispatchToday(o));
-    if (cardFilter === "flex_dispatch") return sortedOrders.filter((o) => method(o, true) && isToDispatchToday(o));
-    if (cardFilter === "flex_buffered") return sortedOrders.filter((o) => method(o, true) && isToday(o) && o.printability?.id === "buffered");
+    if (cardFilter === method) return sortedOrders.filter(isPrintableToday);
+    if (cardFilter === `${method}_dispatch`) return sortedOrders.filter(isToDispatch);
+    if (cardFilter === `${method}_dispatched`) return sortedOrders.filter(isDispatched);
+    if (cardFilter === "flex_buffered") return sortedOrders.filter((order) => isToday(order) && order.printability?.id === "buffered");
     return sortedOrders;
-  }, [sortedOrders, cardFilter, isPrintableToday, isToDispatchToday, isToday]);
+  }, [sortedOrders, cardFilter, isPrintableToday, isToday, method]);
+  const selectedOrders = visibleOrders.filter((order) => selectedOrderKeys.includes(orderKey(order)));
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
-
-  useEffect(() => {
-    if (onBadgeUpdate) onBadgeUpdate("mercadolibre", printableOrders.length);
-  }, [printableOrders.length, onBadgeUpdate]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -389,6 +411,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setConnected(Boolean(data.connected));
       const nextConnections = Array.isArray(data.connections) ? data.connections : [];
       setConnections(nextConnections);
+      setPrintPreferences(getPrintPreferences(nextConnections));
       setSelectedConnectionId((prev) => prev && nextConnections.some((item) => String(item.id) === String(prev)) ? prev : "");
     } catch (err) {
       setError(err.message || "Error inesperado");
@@ -401,7 +424,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     setError("");
     setWarning("");
     try {
-      const params = new URLSearchParams({ sync: syncMode, view });
+      const params = new URLSearchParams({ sync: syncMode, view, method });
       if (q) params.set("q", q);
       if (selectedConnectionId) params.set("connection_id", selectedConnectionId);
       const res = await fetch(`/api/admin/mercadolibre?${params.toString()}`);
@@ -430,9 +453,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setLoading(false);
       setSyncing(false);
     }
-  }, [search, selectedConnectionId, view]);
+  }, [search, selectedConnectionId, view, method]);
 
   useEffect(() => {
+    if (method) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("meli_connected") === "1") {
       setWarning("Integracion con Mercado Libre conectada correctamente.");
@@ -444,7 +468,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setError(decodeURIComponent(meliError));
       window.history.replaceState({}, "", window.location.pathname + "?tab=mercadolibre");
     }
-  }, [loadStatus]);
+  }, [loadStatus, method]);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
@@ -453,7 +477,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const autoSyncedRef = useRef(new Set());
   const autoRefreshRef = useRef(false);
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !method) return;
     let cancelled = false;
     (async () => {
       const data = await load({ syncMode: "0" });
@@ -468,12 +492,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [connected, selectedConnectionId, view, load]);
+  }, [connected, selectedConnectionId, view, load, method]);
 
   // Mantiene el panel cercano a ML aunque el webhook tarde o no llegue: refresca cache cada
   // 2 minutos y fuerza sync si la ultima sincronizacion supera 5 minutos.
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !method) return;
     let cancelled = false;
     const refresh = async () => {
       if (cancelled || autoRefreshRef.current || document.visibilityState !== "visible") return;
@@ -498,7 +522,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [connected, load]);
+  }, [connected, load, method]);
 
   const toggleOrderSelection = (order) => {
     const key = orderKey(order);
@@ -558,65 +582,77 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!selectedConnectionId) return;
+  const handleDisconnect = async (connectionId) => {
+    if (!connectionId) return;
     if (!confirm("Seguro que queres desconectar esta cuenta Mercado Libre?")) return;
     try {
-      const res = await fetch(`/api/admin/mercadolibre/connect?connection_id=${encodeURIComponent(selectedConnectionId)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/mercadolibre/connect?connection_id=${encodeURIComponent(connectionId)}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo desconectar");
       toast("Cuenta Mercado Libre desconectada", "success");
+      window.dispatchEvent(new Event("integrations-changed"));
       await loadStatus();
     } catch (err) {
       setError(err.message || "Error inesperado");
     }
   };
 
-  // Construye la URL de impresión ML-PDF para una lista de órdenes. ML-PDF requiere una sola
-  // conexión por pedido; si la selección abarca varias cuentas, imprime la primera y avisa.
-  const buildMlPdfUrl = (list) => {
-    const byConn = new Map();
-    for (const order of list) {
-      if (!order.connectionId) continue;
-      const key = String(order.connectionId);
-      if (!byConn.has(key)) byConn.set(key, []);
-      byConn.get(key).push(order.id);
+  const setPrintPreference = (connectionId, format) => {
+    try {
+      if (format) window.localStorage.setItem(printPreferenceKey(connectionId), format);
+      else window.localStorage.removeItem(printPreferenceKey(connectionId));
+      setPrintPreferences((previous) => ({ ...previous, [connectionId]: format }));
+    } catch {
+      toast("El navegador no pudo guardar el formato predeterminado.", "error");
     }
-    if (!byConn.size) return null;
-    if (byConn.size > 1) {
-      toast("La selección tiene varias cuentas; se imprime una por vez", "info");
+  };
+
+  const choosePrintFormat = (panel, packages) => {
+    const formats = new Set(packages.map(({ connectionId }) => printPreferences[connectionId] || ""));
+    return chooseLabelPrintFormat(panel, {
+      preferredFormat: formats.size === 1 ? [...formats][0] : "",
+      mixedPreferences: formats.size > 1,
+    });
+  };
+
+  const printLabels = async (win, list, format) => {
+    if (format === "zpl") {
+      await downloadLabelZplFile(mlPdfUrl, labelRequest(list, "zpl"), win.signal);
+      win.close();
+      return;
     }
-    const [connectionId, ids] = [...byConn.entries()][0];
-    return `/api/labels/ml-pdf?orderIds=${encodeURIComponent(ids.join(","))}&connectionId=${encodeURIComponent(connectionId)}`;
+    await renderPrintDialog(win, mlPdfUrl, {
+      requestOptions: labelRequest(list, format),
+      onConfirmPrinted: () => markPrintedAndReload(list),
+    });
   };
 
   const runBulk = async (action, sourceOrders) => {
     const list = Array.isArray(sourceOrders) ? sourceOrders : [];
     if (!list.length) {
-      toast("No hay ventas seleccionadas", "error");
+      toast("No hay paquetes seleccionados", "error");
+      return;
+    }
+    if (action !== "import" && list.some((order) => !order.connectionId || !order.shipmentId)) {
+      toast("Seleccioná paquetes con una cuenta y un envío asignados.", "error");
       return;
     }
     const willPrint = action === "print" || action === "import_and_print";
     if (willPrint && list.length > 5) {
-      if (!confirm(`¿Imprimir etiquetas de ${list.length} ventas?`)) return;
+      if (!confirm(`¿Imprimir etiquetas de ${list.length} paquetes?`)) return;
     }
-    // Abrir la ventana de impresión de forma síncrona (dentro del gesto del clic) para que
-    // el bloqueador de popups no la cancele tras los await siguientes.
-    const printWin = willPrint ? openPrintWindow() : null;
+    const printWin = willPrint ? openPrintDialog() : null;
     if (willPrint && !printWin) return;
     setBulkAction(action);
     try {
-      // "print" puro: pedir el PDF directo a Mercado Libre (no requiere importar el ZPL).
+      const format = willPrint ? await choosePrintFormat(printWin, list) : null;
+      if (willPrint && !format) return;
+      if (action === "download") {
+        await downloadLabelPdf(mlPdfUrl, labelRequest(list));
+        return;
+      }
       if (action === "print") {
-        const url = buildMlPdfUrl(list);
-        if (!url) {
-          try { printWin.close(); } catch (e) { /* noop */ }
-          toast("Las ventas seleccionadas no tienen conexión de Mercado Libre", "error");
-          return;
-        }
-        renderPrintWindow(printWin, url);
-        setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-        await markPrintedAndReload(list);
+        await printLabels(printWin, list, format);
         return;
       }
 
@@ -643,22 +679,14 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
         setWarning(`${message}. No se pudo importar ninguna etiqueta. Verificá que las ventas tengan etiqueta disponible en Mercado Libre.`);
       }
 
-      // import_and_print: ya importamos a la operación; ahora imprimimos pidiendo el PDF
-      // directo a Mercado Libre (no depende del ZPL importado).
       if (action === "import_and_print") {
-        const url = buildMlPdfUrl(list);
-        if (url) {
-          renderPrintWindow(printWin, url);
-          setQueuedOrderKeys((prev) => new Set([...prev, ...list.map(orderKey)]));
-          await markPrintedAndReload(list);
-        } else {
-          try { printWin.close(); } catch (e) { /* noop */ }
-        }
+        await printLabels(printWin, list, format);
       }
 
       await load({ syncMode: "0" });
     } catch (err) {
-      if (printWin) { try { printWin.close(); } catch (e) { /* noop */ } }
+      if (printWin?.closed) return;
+      printWin?.close();
       toast(err.message || "Error al procesar etiquetas", "error");
     } finally {
       setBulkAction("");
@@ -693,32 +721,39 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       if (!order.connectionId) continue;
       const key = String(order.connectionId);
       if (!byConn.has(key)) byConn.set(key, []);
-      byConn.get(key).push(order.id);
+      byConn.get(key).push(...order.orderIds);
     }
     try {
-      await Promise.all([...byConn.entries()].map(([connectionId, orderIds]) =>
+      const responses = await Promise.all([...byConn.entries()].map(([connectionId, orderIds]) =>
         fetch("/api/admin/mercadolibre/mark-printed", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ connectionId, orderIds }),
         })
       ));
+      if (responses.some((response) => !response.ok)) throw new Error("No se pudo confirmar la impresión");
       await load({ syncMode: "0" });
     } catch (err) {
       console.error("mark-printed error", err);
+      throw err;
     }
   };
 
-  const handlePrint = (order) => {
+  const handlePrint = async (order) => {
     if (!order.connectionId) return;
-    const win = openPrintWindow();
+    const win = openPrintDialog();
     if (!win) return;
-    renderPrintWindow(
-      win,
-      `/api/labels/ml-pdf?orderId=${encodeURIComponent(order.id)}&connectionId=${encodeURIComponent(order.connectionId)}`,
-    );
-    setQueuedOrderKeys((prev) => new Set([...prev, orderKey(order)]));
-    markPrintedAndReload([order]);
+    setPrintingId(order.id);
+    try {
+      const format = await choosePrintFormat(win, [order]);
+      if (format) await printLabels(win, [order], format);
+    } catch (err) {
+      if (win.closed) return;
+      win.close();
+      toast(err.message || "No se pudo preparar la impresión", "error");
+    } finally {
+      setPrintingId("");
+    }
   };
 
   const handleRefresh = async (order) => {
@@ -744,14 +779,14 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   return (
     <section className="section">
       <div className="section-header">
-        <h2 className="section-title">Mercado Libre</h2>
-        <p className="section-subtitle">Ventas pagadas, etiquetas ZPL, corte y seguimiento operativo.</p>
+        <SectionTitle icon={method || "integrations"}>{method ? `${methodTitle} de Mercado Libre` : "Mercado Libre"}</SectionTitle>
+        <p className="section-subtitle">{method ? "Prepará etiquetas y consultá el estado de cada paquete." : "Administrá tus cuentas y elegí el formato de impresión."}</p>
       </div>
 
       {error ? <div className="card" style={{ marginBottom: "10px", color: "var(--danger)" }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: "10px", color: "var(--warning, #c2410c)" }}>{warning}</div> : null}
 
-      <div className="card" style={{ marginBottom: "16px" }}>
+      {!method && <InfoDisclosure title="Cuentas de Mercado Libre" description="Administrar conexiones" defaultOpen className="card" style={{ marginBottom: "16px" }}>
         <div className="form-row" style={{ alignItems: "end", flexWrap: "wrap", gap: "10px" }}>
           {canManageIntegration ? <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>{connecting ? "Conectando..." : "Conectar cuenta Mercado Libre"}</button> : null}
           {canManageIntegration ? <button type="button" className="btn btn-ghost" onClick={handleGenerateInvite} disabled={generatingInvite}>{generatingInvite ? "Generando..." : "Generar link de invitación"}</button> : null}
@@ -764,33 +799,51 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Válido 72hs</span>
           </div>
         ) : null}
-      </div>
-
-      {connected ? (
-        <>
-          {/* Cards estilo panel Mercado Libre: Colecta (programada) y Flex (por enviar) */}
-          {orders.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px", marginBottom: "16px" }}>
-              <DispatchCard
-                kind="colecta"
-                tag="PROGRAMADA"
-                title="Colecta"
-                summary={dispatchSummary.colecta}
-                cardFilter={cardFilter}
-                setCardFilter={setCardFilter}
-              />
-              <DispatchCard
-                kind="flex"
-                tag="POR ENVIAR"
-                title="Flex"
-                summary={dispatchSummary.flex}
-                cardFilter={cardFilter}
-                setCardFilter={setCardFilter}
-              />
+        {connections.length > 0 && (
+          <div style={{ marginTop: "16px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Elegí el formato de impresión predeterminado de cada cuenta para este navegador.</p>
+            <div className="form-row" style={{ flexWrap: "wrap", gap: "12px" }}>
+              {connections.map((account) => (
+                <div key={account.id} className="form-group" style={{ minWidth: "220px" }}>
+                  <label>
+                    <span className="form-label">Formato de {account.displayName || account.externalStoreId}</span>
+                    <select className="form-input" value={printPreferences[account.id] || ""} onChange={(event) => setPrintPreference(account.id, event.target.value)}>
+                      <option value="">Elegir al imprimir</option>
+                      {LABEL_PRINT_FORMATS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                  </label>
+                  {canManageIntegration && <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDisconnect(account.id)}>Desconectar</button>}
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
+      </InfoDisclosure>}
 
-          <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
+      {!method && connected && (
+        <div className="card">
+          <p>Encontrá los paquetes y las etiquetas en la sección de cada tipo de envío.</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate("flex")}>Ir a Flex</button>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate("colecta")}>Ir a Colecta</button>
+          </div>
+        </div>
+      )}
+
+      {method && (connected ? (
+        <>
+          <DispatchCard
+            kind={method}
+            tag={method === "flex" ? "POR ENVIAR" : "PROGRAMADA"}
+            title={methodTitle}
+            summary={dispatchSummary}
+            cardFilter={cardFilter}
+            setCardFilter={setCardFilter}
+          />
+
+          <p style={{ color: "var(--text-muted)", fontSize: "12px", margin: "8px 0 16px" }}>Despachadas incluye envíos en tránsito y entregados. Los contadores se basan en las ventas cargadas según los filtros.</p>
+
+          <InfoDisclosure title="Búsqueda y filtros" description="Cuenta, vista y búsqueda de ventas" className="card" style={{ marginBottom: "16px", padding: "14px" }}>
             <div className="form-row">
               <div className="form-group" style={{ minWidth: "230px" }}>
                 <label className="form-label">Cuenta</label>
@@ -811,19 +864,16 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
               </div>
               <button type="button" className="btn btn-ghost" onClick={() => load({ syncMode: "0" })}>Buscar</button>
               <button type="button" className="btn btn-primary" onClick={() => load({ syncMode: "force" })} disabled={syncing}>{syncing ? "Sincronizando..." : "Sincronizar"}</button>
-              {selectedConnectionId ? <button type="button" className="btn btn-ghost" onClick={handleDisconnect}>Desconectar</button> : null}
             </div>
             <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
               <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                 {lastSyncedAt ? `Ultima actualizacion ${formatArgentinaDateTime(lastSyncedAt)}` : "Sin ventas sincronizadas todavia"}
-                {" · "}
-                <span>Impresion por cola: <code>imprimir-cola-v2.bat</code>.</span>
               </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCompact((v) => !v)} style={{ fontSize: "12px" }}>
                 {compact ? "Vista detallada" : "Vista compacta"}
               </button>
             </div>
-          </div>
+          </InfoDisclosure>
 
           <div className="card" style={{ marginBottom: "16px", padding: "14px", background: "var(--bg-secondary)" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -842,10 +892,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
               )}
               <div className="flex-between" style={{ gap: "12px", flexWrap: "wrap" }}>
                 <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                  {selectedVisibleCount > 0 ? `${selectedVisibleCount} ventas seleccionadas` : `${visibleOrders.length} ventas visibles`}
+                  {loading && !visibleOrders.length ? "Cargando paquetes…" : selectedVisibleCount > 0 ? `${selectedVisibleCount} ${selectedVisibleCount === 1 ? "paquete seleccionado" : "paquetes seleccionados"}` : `${visibleOrders.length} ${visibleOrders.length === 1 ? "paquete visible" : "paquetes visibles"}`}
                   {cardFilter ? (
                     <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "8px", fontSize: "12px" }} onClick={() => setCardFilter(null)}>
-                      ✕ Quitar filtro {cardFilter.startsWith("flex") ? "Flex" : "Colecta"}
+                      ✕ Quitar filtro {cardFilter.startsWith("flex") ? "Flex" : "Colecta"} · {cardFilter.endsWith("_dispatched") ? "Despachadas" : cardFilter.endsWith("_dispatch") ? "Listas para despachar" : cardFilter.endsWith("_buffered") ? "En proceso" : "Etiquetas por imprimir"}
                     </button>
                   ) : null}
                 </div>
@@ -856,8 +906,11 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                   <button type="button" className="btn btn-sm" onClick={() => runBulk("import", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
                     {bulkAction === "import" ? "Importando..." : "Importar seleccionadas"}
                   </button>
+                  <button type="button" className="btn btn-sm" onClick={() => runBulk("download", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
+                    {bulkAction === "download" ? "Preparando PDF…" : "Descargar PDF"}
+                  </button>
                   <button type="button" className="btn btn-sm" onClick={() => runBulk("print", selectedOrders)} disabled={!selectedVisibleCount || Boolean(bulkAction)}>
-                    {bulkAction === "print" ? "Encolando..." : "Imprimir seleccionadas"}
+                    {bulkAction === "print" ? "Preparando PDF…" : "Imprimir seleccionadas"}
                   </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => runBulk("import_and_print", visibleOrders)} disabled={!visibleOrders.length || Boolean(bulkAction)}>
                     {bulkAction === "import_and_print" ? "Procesando..." : "Importar e imprimir visibles"}
@@ -875,6 +928,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                   <OrderCard
                     key={key}
                     order={order}
+                    accountName={accountNames.get(String(order.connectionId)) || order.externalStoreId || "Cuenta sin identificar"}
                     compact={compact}
                     queued={queuedOrderKeys.has(key)}
                     selected={selectedOrderKeys.includes(key)}
@@ -890,13 +944,16 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
                   />
                 );
               })}
-              {!orders.length ? <div className="card" style={{ color: "var(--text-muted)" }}>No hay ventas Mercado Libre para mostrar.</div> : null}
+              {!visibleOrders.length && <div className="card" style={{ color: "var(--text-muted)" }}>No hay paquetes con los filtros actuales.</div>}
             </div>
           )}
         </>
       ) : (
-        <div className="card" style={{ color: "var(--text-muted)" }}>Conecta una cuenta Mercado Libre para sincronizar ventas pagadas.</div>
-      )}
+        <div className="card">
+          <p>Conectá una cuenta para ver los paquetes de Mercado Libre en esta sección.</p>
+          <button type="button" className="btn btn-sm" onClick={() => onNavigate("mercadolibre")}>Ir a cuentas de Mercado Libre</button>
+        </div>
+      ))}
     </section>
   );
 }

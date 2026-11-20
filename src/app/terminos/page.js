@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import PublicAccountLink from "@/components/PublicAccountLink";
 import styles from "../legal.module.css";
 
 const permissions = [["read_orders", "Leer pedidos para mostrarlos en GeoModi."], ["write_fulfillment_orders", "Actualizar estados de despacho cuando el usuario lo solicita."], ["Webhooks", "Recibir cambios de pedidos sin consultar la API constantemente."]];
@@ -8,7 +9,7 @@ export const metadata = { title: "Términos y condiciones | GeoModi", descriptio
 export default function TermsPage() {
   return (
     <main className={styles.page}><div className={styles.shell}>
-      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority /></Link><nav className={styles.nav} aria-label="Navegación principal"><Link href="/#funciones">Funciones</Link><Link href="/#integraciones">Integraciones</Link><Link href="/#faq">FAQ</Link><Link href="/privacidad">Privacidad</Link><Link href="/terminos">Términos</Link><Link href="/soporte">Soporte</Link></nav><Link className={styles.topLink} href="/login">Entrar</Link></header>
+      <header className={styles.topbar}><Link className={styles.brand} href="/"><Image src="/logoGeoModi.png" alt="GeoModi" width={148} height={44} priority /></Link><nav className={styles.nav} aria-label="Navegación principal"><Link href="/#funciones">Funciones</Link><Link href="/#integraciones">Integraciones</Link><Link href="/#faq">FAQ</Link><Link href="/privacidad">Privacidad</Link><Link href="/terminos">Términos</Link><Link href="/soporte">Soporte</Link></nav><PublicAccountLink className={styles.topLink} /></header>
       <section className={styles.hero}><span className={styles.label}>Términos</span><h1>Términos y condiciones</h1><p>Estos términos regulan el uso de GeoModi como herramienta SaaS para ordenar pedidos, etiquetas, picking, integraciones y despacho.</p></section>
       <section className={styles.grid}>
         <article className={styles.card}><h2>Titular y contacto</h2><p>GeoModi es una plataforma orientada a operaciones de e-commerce, preparación logística, picking y despacho.</p><p>Contacto legal y soporte: soporte@geomodi.com.</p></article>

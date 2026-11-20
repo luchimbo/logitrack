@@ -1,5 +1,7 @@
 "use client";
 
+import InfoDisclosure from "./InfoDisclosure";
+
 import { useState, useEffect } from "react";
 import { api, toast } from "@/lib/api";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -58,7 +60,7 @@ const PARTIDOS = [
 const ZONE_COLORS = {
     capital: '#ff69b4',
     gba1: '#20b2aa',
-    gba2: '#00008b',
+    gba2: '#4f7cff',
     gba3: '#ff0000',
 };
 
@@ -66,7 +68,7 @@ const ZONE_GROUPS = [
     { id: 'capital', label: 'CAPITAL' },
     { id: 'gba1', label: 'GBA 1' },
     { id: 'gba2', label: 'GBA 2' },
-    { id: 'gba3', label: 'GBA 3 OPCIONAL' }
+    { id: 'gba3', label: 'GBA 3' }
 ];
 
 export default function ZoneConfig() {
@@ -281,12 +283,13 @@ export default function ZoneConfig() {
                 <p className="section-subtitle">Asigná transportistas a cada partido del AMBA</p>
             </div>
 
-            <div className="card mb-lg">
-                <h3 style={{ marginBottom: "16px", fontSize: "16px", fontWeight: 700 }}>🚛 Transportistas Flex Activos</h3>
+            <InfoDisclosure title="Transportistas Flex activos" description={`${carriers.length} transportistas · alta y configuración`} className="card mb-lg">
+
                 <div className="form-row mb-md">
                     <div className="form-group">
-                        <label className="form-label">Identificador / Usuario</label>
+                        <label className="form-label" htmlFor="flex-carrier-identifier">Identificador del transportista</label>
                         <input
+                            id="flex-carrier-identifier"
                             type="text"
                             className="form-input"
                             placeholder="ej: moto_juan"
@@ -295,8 +298,9 @@ export default function ZoneConfig() {
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Nombre para mostrar</label>
+                        <label className="form-label" htmlFor="flex-carrier-name">Nombre para mostrar</label>
                         <input
+                            id="flex-carrier-name"
                             type="text"
                             className="form-input"
                             placeholder="ej: Juan"
@@ -305,8 +309,9 @@ export default function ZoneConfig() {
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Color (Opcional)</label>
+                        <label className="form-label" htmlFor="flex-carrier-color">Color (opcional)</label>
                         <input
+                            id="flex-carrier-color"
                             type="color"
                             className="form-input"
                             value={newCarrier.color}
@@ -315,7 +320,7 @@ export default function ZoneConfig() {
                         />
                     </div>
                     <button className="btn btn-primary" onClick={handleAddCarrier} disabled={savingCarrier} style={{ height: "40px", alignSelf: "flex-end", marginBottom: "4px" }}>
-                        {savingCarrier ? 'Guardando...' : '+ Agregar'}
+                        {savingCarrier ? 'Guardando…' : 'Agregar transportista'}
                     </button>
                 </div>
 
@@ -332,10 +337,10 @@ export default function ZoneConfig() {
                         ))
                     )}
                 </div>
-            </div>
+            </InfoDisclosure>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
-                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>📍 Asignación de Partidos</h3>
+                <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>Asignación por partido</h2>
                 <button
                     className="btn btn-sm"
                     style={{ color: "var(--danger)", background: "var(--danger-bg)", border: "1px solid var(--danger)", padding: "6px 14px", fontSize: "12px", fontWeight: 700, borderRadius: "8px", cursor: "pointer" }}
@@ -343,7 +348,7 @@ export default function ZoneConfig() {
                     onClick={handleClearAllZones}
                     title="Quitar todas las zonas asignadas"
                 >
-                    {clearingAll ? 'Liberando...' : `🗑️ Quitar todas (${zones.length})`}
+                    {clearingAll ? 'Quitando asignaciones…' : `Quitar asignaciones (${zones.length})`}
                 </button>
             </div>
 
@@ -353,21 +358,15 @@ export default function ZoneConfig() {
                     const groupPartidos = PARTIDOS.filter(p => p.zone === group.id);
 
                     return (
-                        <div key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}`, padding: 0 }}>
-                            <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", background: "var(--surface-hover)" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                                    <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: groupColor }}>{group.label}</h4>
-                                    <span className="badge" style={{ background: `${groupColor}20`, color: groupColor }}>{groupPartidos.length} zonas</span>
-                                </div>
-
-                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                    <select className="form-select" id={`group-select-${group.id}`} style={{ fontSize: "12px", flex: 1 }}>
+                        <InfoDisclosure title={group.label} description={`${groupPartidos.length} ${groupPartidos.length === 1 ? "zona" : "zonas"} · asignación de transportistas`} key={group.id} className="card" style={{ borderTop: `4px solid ${groupColor}` }}>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                    <select className="form-select" id={`group-select-${group.id}`} aria-label={`Transportista para todos los partidos de ${group.label}`} style={{ flex: 1 }}>
                                         <option value="">— Asignar a todos —</option>
                                         {carriers.map(c => <option key={c.name} value={c.name}>{c.display_name || c.name}</option>)}
                                     </select>
                                     <button className="btn btn-primary btn-sm" disabled={savingGroup === group.id} onClick={() => handleAssignGroup(group.id)} style={{ padding: "6px 12px", fontSize: "12px" }}>{savingGroup === group.id ? 'Aplicando...' : 'Aplicar'}</button>
                                 </div>
-                            </div>
+
 
                             <div style={{ padding: "16px" }}>
                                 {groupPartidos.map(p => {
@@ -404,7 +403,7 @@ export default function ZoneConfig() {
                                     );
                                 })}
                             </div>
-                        </div>
+                        </InfoDisclosure>
                     );
                 })}
             </div>

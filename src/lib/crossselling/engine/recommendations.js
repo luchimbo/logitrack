@@ -15,6 +15,20 @@ import { coincideNombre } from "./reglas.js";
 
 const comparable = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
+export function descuentoRegla(regla, productId, settings) {
+  if (regla.descuentosPorProducto && Object.hasOwn(regla.descuentosPorProducto, String(productId))) return regla.descuentosPorProducto[String(productId)];
+  return regla.descuentosPorProducto ? (settings.descuentoGeneralPct ?? 10) : (regla.descuentoPct ?? settings.descuentoGeneralPct ?? 10);
+}
+
+export function migrarReglas(reglas, general = 10) {
+  return reglas.map((regla) => {
+    if (regla.descuentosPorProducto) return regla;
+    const { descuentoPct, ...resto } = regla;
+    const pct = descuentoPct ?? general;
+    return { ...resto, descuentosPorProducto: Object.fromEntries(pct === general ? [] : regla.sugeridos.map((id) => [String(id), pct])) };
+  });
+}
+
 function coincide(disparador, p) {
   const valor = comparable(disparador.valor);
   if (disparador.tipo === "nombre") return coincideNombre(disparador, p);
@@ -45,7 +59,7 @@ export function obtenerSugerencias(lines, productsById, reglas, settings) {
       if (enCarrito.has(key) || vistas.has(key)) continue;
       const p = productsById.get(key);
       if (!p || p.productoPrueba || p.stock === 0) continue;
-      const pct = descuentoSeguro(p, regla.descuentoPct, settings);
+      const pct = descuentoSeguro(p, descuentoRegla(regla, key, settings), settings);
       vistas.set(key, {
         productId: p.id,
         nombre: p.nombre,

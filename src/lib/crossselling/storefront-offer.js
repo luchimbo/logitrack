@@ -92,11 +92,12 @@ export function storefrontOffers(snapshot, catalog, items, rawCatalog = []) {
 
 // Valida una aceptación contra el carrito que TN envió al callback (no el del navegador).
 export function buildAcceptance({ snapshot, catalog, callbackCart, cartId, triggerLineId, accessoryVariant, now = Date.now() }) {
-  const fail = (m) => { throw Object.assign(new Error(m), { status: 409 }); };
+  const fail = (m, code) => { throw Object.assign(new Error(m), { status: 409 }, code ? { code } : {}); };
   if (!digits(cartId) || !digits(triggerLineId) || !digits(accessoryVariant)) fail('Datos de carrito inválidos');
   const products = callbackCart?.products || [];
   const trigger = products.find((p) => String(p.id) === String(triggerLineId));
-  if (!trigger) fail('El producto principal todavía no figura en el carrito');
+  // El último carrito que envió TN es anterior al principal: mismo caso que un carrito sin confirmar.
+  if (!trigger) fail('El producto principal todavía no figura en el carrito', 'cart_pending');
   const items = products.map((p) => ({ lineId: String(p.id), variantId: String(p.variantId), quantity: p.quantity }));
   const offer = storefrontOffers(snapshot, catalog, items).find((o) => o.variantId === String(accessoryVariant));
   if (!offer || offer.triggerLineId !== String(triggerLineId)) fail('La oferta ya no está disponible para este carrito');

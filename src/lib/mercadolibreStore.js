@@ -1,11 +1,12 @@
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { assignCarrier } from '@/lib/zoneMapper';
+import { assignFlexCarrier } from '@/lib/flexCarrierAssignment';
 import { parseZplFile, resolvePartidoFromGeo } from '@/lib/zplParser';
 import { getArgentinaDateString } from '@/lib/dateUtils';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 import { persistShipmentFinance, enqueueMercadoLibreRetry } from '@/lib/financeSync';
-import { preserveMercadoLibreDetails } from '@/lib/logisticsFinance';
+import { preserveMercadoLibreDetails, orderClosure } from '@/lib/logisticsFinance';
 
 function json(value, fallback) {
   try {
@@ -113,7 +114,7 @@ function getAddress(shipment = {}) {
 }
 
 function getShippingMethod(shipment = {}) {
-  const type = String(shipment.logistic?.type || '').toLowerCase();
+  const type = String(shipment?.logistic?.type || '').toLowerCase();
   if (type === 'self_service') return 'flex';
   return 'colecta';
 }
@@ -165,6 +166,7 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
   const prior = await db.execute({ sql: 'SELECT * FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=? AND order_id=? LIMIT 1', args: [workspaceId, Number(connectionId), orderId] });
   const old = prior.rows[0];
   payload = preserveMercadoLibreDetails(payload, old);
+  const closure = orderClosure(originalPayload, payload);
   const normalized = normalizeOrder({ ...payload, siteId });
   if (!normalized.orderId) return;
   const resolvedConnectionId = connectionId ? Number(connectionId) : null;
@@ -214,9 +216,10 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
         status = ?, tags_json = ?, total = ?, currency = ?, buyer_id = ?, buyer_nickname = ?, recipient_name = ?, recipient_phone = ?,
         address_json = ?, products_json = ?, shipment_status = ?, shipment_substatus = ?, logistic_mode = ?, logistic_type = ?, shipping_method = ?,
         tracking_number = ?, lead_time_json = ?, delays_json = ?, carrier_json = ?, history_json = ?, raw_order_json = ?, raw_shipment_json = ?,
-        created_at_external = ?, updated_at_external = ?, synced_at = CURRENT_TIMESTAMP
+        created_at_external = ?, updated_at_external = ?, synced_at = CURRENT_TIMESTAMP,
+        closed_at = CASE ? WHEN 'set' THEN COALESCE(closed_at, CURRENT_TIMESTAMP) WHEN 'clear' THEN NULL ELSE closed_at END
         WHERE id = ?`,
-      args: [...values, Number(existing.rows[0].id)],
+      args: [...values, closure, Number(existing.rows[0].id)],
     });
     await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
     return;
@@ -228,9 +231,10 @@ export async function upsertMercadoLibreOrder(workspaceId, payload, { connection
       status, tags_json, total, currency, buyer_id, buyer_nickname, recipient_name, recipient_phone,
       address_json, products_json, shipment_status, shipment_substatus, logistic_mode, logistic_type, shipping_method,
       tracking_number, lead_time_json, delays_json, carrier_json, history_json, raw_order_json, raw_shipment_json,
-      created_at_external, updated_at_external, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    args: values,
+      created_at_external, updated_at_external, synced_at, closed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+      CASE ? WHEN 'set' THEN CURRENT_TIMESTAMP END)`,
+    args: [...values, closure],
   });
   await persistShipmentFinance(workspaceId, originalPayload, resolvedConnectionId);
 }
@@ -312,8 +316,18 @@ export async function syncMercadoLibreOrdersPage({ workspaceId, client, connecti
   if (!externalStoreId) throw new Error('Seller ID de Mercado Libre no disponible');
   const payload = await client.searchOrders({ sellerId: externalStoreId, offset, limit, dateFrom, dateTo });
   const orders = Array.isArray(payload?.results) ? payload.results : [];
-  let synced = 0, failed = 0;
+  let synced = 0, failed = 0, skipped = 0;
+  // Closed orders (delivered or cancelled, full detail already stored) are not fetched again unless ML says they changed.
+  const closed = new Map();
+  const ids = orders.map((o) => String(o?.id || '')).filter(Boolean);
+  if (ids.length) {
+    const rows = await db.execute({ sql: `SELECT order_id, updated_at_external FROM mercadolibre_orders WHERE workspace_id=? AND integration_connection_id=?
+      AND closed_at IS NOT NULL AND order_id IN (${ids.map(() => '?').join(',')})`, args: [workspaceId, Number(connectionId), ...ids] });
+    for (const row of rows.rows) closed.set(String(row.order_id), String(row.updated_at_external || ''));
+  }
   await mapWithConcurrency(orders, async (orderSummary) => {
+    const updatedAt = String(orderSummary?.last_updated || orderSummary?.date_last_updated || '');
+    if (updatedAt && closed.get(String(orderSummary?.id)) === updatedAt) { skipped++; return; }
     try {
       const full = await fetchFullOrder(client, orderSummary, siteId, { light: true });
       await upsertMercadoLibreOrder(workspaceId, full, { connectionId, externalStoreId, siteId });
@@ -324,10 +338,10 @@ export async function syncMercadoLibreOrdersPage({ workspaceId, client, connecti
       await enqueueMercadoLibreRetry({ workspaceId, connectionId, orderId: orderSummary?.id, error: error.message });
     }
   }, 6);
-  return { synced, failed, total: Number(payload?.paging?.total) || null, nextOffset: offset + orders.length, done: orders.length < limit };
+  return { synced, skipped, failed, total: Number(payload?.paging?.total) || null, nextOffset: offset + orders.length, done: orders.length < limit };
 }
 
-export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5 } = {}) {
+export async function syncMercadoLibreOrders({ workspaceId, client, connectionId, externalStoreId, siteId = 'MLA', q = '', light = false, maxPages = 5, concurrency = 1 } = {}) {
   await ensureDb();
   const sellerId = externalStoreId;
   if (!sellerId) throw new Error('Seller ID de Mercado Libre no disponible');
@@ -355,10 +369,11 @@ export async function syncMercadoLibreOrders({ workspaceId, client, connectionId
   while (pages < maxPages) {
     const payload = await client.searchOrders({ sellerId, offset, limit, q });
     const orders = Array.isArray(payload?.results) ? payload.results : [];
-    for (const orderSummary of orders) {
+    // Limit parallel work to avoid serial network latency without flooding ML.
+    await mapWithConcurrency(orders, async (orderSummary) => {
       const ok = await processOne(orderSummary);
       if (!ok) failed.push(orderSummary);
-    }
+    }, Math.max(1, Math.min(4, Math.floor(Number(concurrency)) || 1)));
     if (orders.length < limit) break;
     offset += limit;
     pages++;
@@ -431,7 +446,7 @@ export async function listLiveMercadoLibrePrintableOrders({ client, externalStor
 // Etiqueta Flex "En proceso": ML la retiene hasta lead_time.buffering.date (20 h del día previo).
 const BUFFERED_PENDING_SQL = `(LOWER(COALESCE(mo.shipment_substatus, '')) IN ('buffered','buffering') OR COALESCE(julianday(json_extract(mo.lead_time_json, '$.buffering.date')), 0) > julianday('now'))`;
 
-export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', limit = 500 } = {}) {
+export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', method = '', orderIds = [], limit = 500 } = {}) {
   await ensureDb();
   const conditions = ['mo.workspace_id = ?'];
   const args = [workspaceId];
@@ -442,6 +457,19 @@ export async function listStoredMercadoLibreOrders({ workspaceId, connectionId =
   if (q) {
     conditions.push('(mo.order_id LIKE ? OR mo.shipment_id LIKE ? OR mo.recipient_name LIKE ? OR mo.tracking_number LIKE ?)');
     args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  if (orderIds.length) {
+    conditions.push(`mo.order_id IN (${orderIds.map(() => '?').join(', ')})`);
+    args.push(...orderIds);
+  }
+  const logisticType = "LOWER(TRIM(COALESCE(mo.logistic_type, '')))";
+  const shippingMethod = "LOWER(TRIM(COALESCE(mo.shipping_method, '')))";
+  const flex = `(${logisticType} = 'self_service' OR ${shippingMethod} = 'flex')`;
+  if (method === 'flex') {
+    conditions.push(`${logisticType} != 'fulfillment' AND ${flex}`);
+  } else if (method === 'colecta') {
+    conditions.push(`NOT ${flex} AND ${logisticType} != 'fulfillment' AND
+      (${logisticType} IN ('cross_docking', 'drop_off', 'xd_drop_off') OR ${shippingMethod} = 'colecta')`);
   }
   if (view === 'ready') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship'`);
   if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print') AND NOT ${BUFFERED_PENDING_SQL}))`);
@@ -546,8 +574,8 @@ async function saveImportedMercadoLibreShipment({ workspaceId, order, shipment, 
     }
     if (!shipment.city) shipment.city = order.address?.city?.name || '';
     if (!shipment.province) shipment.province = order.address?.state?.name || '';
-  }
-  if (shipment.partido) {
+    await assignFlexCarrier(shipment, { workspaceId, mlAddress: order.address });
+  } else if (shipment.partido) {
     shipment.assigned_carrier = await assignCarrier(shipment.partido, workspaceId);
   }
 

@@ -16,6 +16,10 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || '';
     const view = searchParams.get('view') || '';
+    const method = searchParams.get('method') || '';
+    if (method && !['flex', 'colecta'].includes(method)) {
+      return NextResponse.json({ error: 'Método de envío inválido' }, { status: 400 });
+    }
     const syncMode = searchParams.get('sync') || '0';
     const connectionId = searchParams.get('connection_id') || '';
     const workspaceId = authResult.actor.workspaceId;
@@ -32,7 +36,7 @@ export async function GET(request) {
           client: target.client,
           externalStoreId: target.externalStoreId,
           maxPages: 5,
-        })));
+        }).then((orders) => orders.map((order) => ({ ...order, account: target.displayName || target.externalStoreId })))));
         liveOrders = perAccount.flat();
         didSync = true;
         syncedCount = liveOrders.length;
@@ -73,7 +77,7 @@ export async function GET(request) {
       }
     }
 
-    const orders = await listStoredMercadoLibreOrders({ workspaceId, connectionId, q, view });
+    const orders = await listStoredMercadoLibreOrders({ workspaceId, connectionId, q, view, method });
     const meta = await getMercadoLibreSyncMeta({ workspaceId, connectionId });
     return NextResponse.json({ orders, liveOrders, warning, didSync, syncedCount, totalOrders: meta.totalOrders || 0, lastSyncedAt: meta.lastSyncedAt || '' });
   } catch (error) {

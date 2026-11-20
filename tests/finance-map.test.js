@@ -113,3 +113,35 @@ test('province filter matches the map selection, including unknown provinces', (
   const rows = [{ province: 'cordoba' }, { province: 'santa_fe' }, { province: '' }];
   assert.equal(filterRecords(rows, { provinces: 'cordoba,__missing__' }).length, 2);
 });
+
+
+test('map balance reconciles selected zones including unlinked costs and incomplete sales', () => {
+  const rows = [
+    {zone:'CABA',salesCents:100000,feesCents:20000,netCents:80000,amountCents:null},
+    {zone:'GBA 1',salesCents:null,feesCents:null,amountCents:5000},
+    {zone:'GBA 2',salesCents:50000,feesCents:null,amountCents:1000},
+  ];
+  const groups=groupRecords(rows,'zone');
+  const all=combineZoneSummaries(groups);
+  const direct=summarize(rows);
+  for(const key of ['netCents','netAfterShippingCents','feesUnavailableCount']) assert.equal(all[key],direct[key],key);
+  assert.equal(all.netAfterShippingCents,124000);
+  assert.equal(combineZoneSummaries(groups,['CABA','GBA 1']).netAfterShippingCents,75000);
+  assert.equal(combineZoneSummaries(groups,['GBA 1']).netAfterShippingCents,null);
+  assert.equal(combineZoneSummaries(groups,['Sin zona']).netAfterShippingCents,null);
+});
+
+
+test('Tiendanube checkout shipping enters the balance once, separate from merchandise and expense', () => {
+  const rows = [
+    {zone:'CABA',salesCents:100000,feesCents:20000,amountCents:5000},
+    {zone:'GBA 1',source:'tiendanube',salesCents:90000,shippingCollectedCents:10000,feesCents:null,amountCents:12000},
+  ];
+  const direct=summarize(rows);
+  const map=combineZoneSummaries(groupRecords(rows,'zone'));
+  assert.equal(direct.netCents,180000);
+  assert.equal(direct.netAfterShippingCents,163000);
+  assert.equal(direct.feesUnavailableCount,0);
+  assert.equal(map.netAfterShippingCents,direct.netAfterShippingCents);
+  assert.equal(combineZoneSummaries(groupRecords(rows,'zone'),['GBA 1']).netAfterShippingCents,88000);
+});

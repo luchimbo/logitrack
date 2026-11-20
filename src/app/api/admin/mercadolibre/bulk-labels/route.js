@@ -24,15 +24,15 @@ function skip(order, reason) {
 
 async function loadSelectedOrders({ workspaceId, targets, orderIds, view }) {
   const selected = [];
-  const orderIdSet = new Set(orderIds);
   for (const target of targets) {
     const orders = await listStoredMercadoLibreOrders({
       workspaceId,
       connectionId: target.connectionId,
-      view: orderIdSet.size ? '' : view,
+      view: orderIds.length ? '' : view,
+      orderIds,
       limit: 500,
     });
-    selected.push(...(orderIdSet.size ? orders.filter((order) => orderIdSet.has(String(order.id))) : orders));
+    selected.push(...orders);
   }
   return selected;
 }
@@ -53,6 +53,9 @@ export async function POST(request) {
     const connectionId = String(body?.connectionId || '').trim();
     const view = String(body?.view || '').trim();
     const orderIds = normalizeOrderIds(body?.orderIds);
+    if (orderIds.length > 500) {
+      return NextResponse.json({ error: 'Seleccioná hasta 500 ventas por operación.' }, { status: 400 });
+    }
 
     const targets = await listMercadoLibreClientTargets(workspaceId, { connectionId });
     if (!targets.length) throw new Error('Mercado Libre no esta conectado para este workspace');

@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { ensureDb } from "./ensureDb";
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from "./globalCarrierConfig";
+import { carrierConfigScope } from "./globalCarrierConfig";
 
 export function normalizeName(name) {
     if (!name) return "";
@@ -27,14 +27,14 @@ function canonicalPartido(normName) {
     return s;
 }
 
-export async function assignCarrier(partido) {
+export async function assignCarrier(partido, workspaceId) {
     if (!partido) return null;
     await ensureDb();
-    await ensureGlobalCarrierConfig();
+    const scope = await carrierConfigScope(workspaceId);
     const normPartido = canonicalPartido(normalizeName(partido));
     const result = await db.execute({
         sql: "SELECT carrier_name FROM zone_mappings WHERE workspace_id = ? AND partido = ? ORDER BY id",
-        args: [GLOBAL_CARRIER_CONFIG_SCOPE, normPartido]
+        args: [scope, normPartido]
     });
     if (result.rows.length > 0) {
         return result.rows[0].carrier_name;
@@ -42,12 +42,12 @@ export async function assignCarrier(partido) {
     return null;
 }
 
-export async function getAllZones() {
+export async function getAllZones(workspaceId) {
     await ensureDb();
-    await ensureGlobalCarrierConfig();
+    const scope = await carrierConfigScope(workspaceId);
     const result = await db.execute({
         sql: "SELECT id, partido, carrier_name, workspace_id FROM zone_mappings WHERE workspace_id = ? ORDER BY partido, id",
-        args: [GLOBAL_CARRIER_CONFIG_SCOPE],
+        args: [scope],
     });
     return result.rows;
 }

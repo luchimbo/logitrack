@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/support(.*)",
   "/login(.*)",
   "/sign-up(.*)",
+  "/workspace-access",
   "/transportista(.*)",
   "/api/public/carrier-portals(.*)",
   "/api/integrations/shopify/callback(.*)",
@@ -21,7 +22,6 @@ const isPublicRoute = createRouteMatcher([
   "/api/integrations/zipnova/callback(.*)",
   "/api/webhooks/shopify(.*)",
   "/api/webhooks/tiendanube(.*)",
-  "/api/webhooks/mercadolibre(.*)",
   "/connect/mercadolibre(.*)",
   "/api/connect/mercadolibre(.*)",
   "/api/v2/print-jobs/intake(.*)",
@@ -52,6 +52,10 @@ export default function proxy(req, event) {
   // Esta única ruta verifica HMAC por tienda en su handler. No requiere sesión
   // ni consultas a Clerk para la comunicación entre servidores.
   if (req.nextUrl.pathname === "/api/cross-selling/config") return NextResponse.next();
+  // El webhook de Mercado Libre llega de servidor a servidor y valida el aviso en su handler.
+  if (req.nextUrl.pathname === "/api/webhooks/mercadolibre") return NextResponse.next();
+  // El cron diario de Mercado Libre se autentica con CRON_SECRET en su handler; Vercel Cron no tiene sesión de Clerk.
+  if (req.nextUrl.pathname === "/api/cron/mercadolibre-sync" || req.nextUrl.pathname === "/api/cron/mercadolibre-upkeep") return NextResponse.next();
   // Mostrador usa HMAC por tienda; estas rutas validan la firma en sus handlers.
   if (req.nextUrl.pathname === "/api/cross-selling/module") return NextResponse.next();
   if (req.nextUrl.pathname === "/api/cross-selling/report") return NextResponse.next();
@@ -59,6 +63,8 @@ export default function proxy(req, event) {
   // Módulo «Completá tu equipo» de la demo: firma en la URL o validación de origen y carrito en el handler.
   if (/^\/api\/cross-selling\/offer-callback\/[a-f0-9]{32}$/.test(req.nextUrl.pathname)) return NextResponse.next();
   if (/^\/api\/cross-selling\/storefront\/(offers|accept|seen)$/.test(req.nextUrl.pathname)) return NextResponse.next();
+  // Reseñas: Mostrador publica con HMAC por tienda; la tienda lee con validación de origen en el handler.
+  if (req.nextUrl.pathname === "/api/reviews/config" || req.nextUrl.pathname === "/api/reviews/storefront" || req.nextUrl.pathname === "/api/reviews/meli") return NextResponse.next();
   return clerkGuard(req, event);
 }
 

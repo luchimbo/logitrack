@@ -1,0 +1,40 @@
+GeoModi - Paquete de impresion V2
+=================================
+
+Para instalar en la PC de impresion:
+
+1. Copiar esta carpeta completa a la PC.
+   Recomendado: C:\GeoModi-Impresion-V2
+
+2. Instalar Node.js LTS si la PC no lo tiene.
+   El .bat lo va a avisar con un error claro si falta Node.
+
+3. Revisar v2\print-agent\config.json:
+   - printerPath: nombre compartido real de la Zebra en esa PC.
+   - syncUrl: endpoint de GeoModi.
+   - syncToken: token del agente.
+   - workspaceKey: workspace correcto.
+
+4. Si no sabes el printerPath correcto, ejecutar diagnostico-impresora-v2.bat.
+
+5. Para imprimir y cargar en GeoModi:
+   Arrastrar archivos .txt o .zpl sobre imprimir-v2.bat.
+
+6. Para solo cargar data en GeoModi sin imprimir:
+   Arrastrar archivos .txt o .zpl sobre subir-etiquetas-v2.bat.
+
+Resultado esperado:
+
+- La etiqueta se imprime.
+- La consola muestra "Sync OK".
+- En GeoModi aparecen las etiquetas en Datos de Hoy.
+- Si una etiqueta ya fue impresa/cargada antes, el .bat cancela y no deja seguir.
+
+Importante:
+
+- No uses un .bat suelto con COPY /B. Eso imprime, pero no manda datos a GeoModi.
+- Si este paquete falla, el .bat no ejecuta fallback legacy. Es intencional para evitar impresiones sin carga de datos.
+- subir-etiquetas-v2.bat nunca imprime; solo carga data y tambien bloquea duplicados.
+- Los logs quedan en v2\print-agent\data\last_run.log.
+- El error "No se encuentra el nombre de red especificado" significa que printerPath no existe como recurso compartido.
+- Para imprimir ZPL crudo, la Zebra debe estar compartida en Windows y printerPath debe apuntar al ShareName, por ejemplo \\127.0.0.1\Zebra.

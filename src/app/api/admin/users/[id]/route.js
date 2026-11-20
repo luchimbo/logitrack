@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireGlobalAdmin } from '@/lib/auth';
-import { ensureGlobalCarrierConfig, GLOBAL_CARRIER_CONFIG_SCOPE } from '@/lib/globalCarrierConfig';
+import { carrierConfigScope } from '@/lib/globalCarrierConfig';
 
 export async function GET(request, { params }) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
     if (authResult.error) {
       return NextResponse.json(authResult.error.body, { status: authResult.error.status });
     }
-    await ensureGlobalCarrierConfig();
+
 
     const { id } = await params;
     const userResult = await db.execute({
@@ -39,6 +39,7 @@ export async function GET(request, { params }) {
 
     const user = userResult.rows[0];
     const workspaceId = user.workspace_id;
+    const scope = workspaceId ? await carrierConfigScope(workspaceId) : -1;
 
     const [
       totalShipments,
@@ -73,7 +74,7 @@ export async function GET(request, { params }) {
               ORDER BY s.shipping_method ASC, total_quantity DESC`,
         args: [workspaceId, workspaceId],
       }),
-      db.execute({ sql: 'SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name', args: [GLOBAL_CARRIER_CONFIG_SCOPE] }),
+      db.execute({ sql: 'SELECT id, name, display_name, color FROM carriers WHERE workspace_id = ? ORDER BY name', args: [scope] }),
       db.execute({
         sql: `SELECT id, date, filenames, total_packages, created_at
               FROM daily_batches

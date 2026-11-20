@@ -1,3 +1,4 @@
+import { productionDatabaseConfig } from './database-env.mjs';
 // Inserta un "paquete inventado" en producción (workspace 1 = GeoModi / camilopcmidi)
 // para probar el flujo completo pagina -> cola -> agente --watch -> impresora.
 //
@@ -5,22 +6,7 @@
 //   node scripts/seed-test-label.mjs          -> inserta y muestra el id
 //   node scripts/seed-test-label.mjs --clean  -> borra todos los paquetes de prueba
 import { createClient } from "@libsql/client";
-import fs from "fs";
-
-const env = Object.fromEntries(
-  fs.readFileSync(".env.local", "utf8")
-    .split("\n")
-    .filter((l) => l.includes("="))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")];
-    })
-);
-
-const db = createClient({
-  url: env.TURSO_DATABASE_URL_PROD,
-  authToken: env.TURSO_AUTH_TOKEN_PROD,
-});
+const db = createClient(productionDatabaseConfig({ readOnly: false }));
 
 const WORKSPACE_ID = 1; // camilopcmidi -> GeoModi
 const TEST_SKU = "PRUEBA-TEST";

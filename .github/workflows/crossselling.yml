@@ -1,8 +1,11 @@
-name: Cross-selling regression checks
+name: Verificaciones de GeoModi
 on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_c2FuZGJveC5pbnZhbGlkJA
+      CLERK_SECRET_KEY: sk_test_sandbox
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -11,3 +14,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run lint
+      - run: npm run build

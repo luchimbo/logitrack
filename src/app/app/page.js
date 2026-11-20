@@ -9,6 +9,7 @@ import { buildAppNavigation, buildMobileNavigation, resolveAppTab } from "@/lib/
 import AppSectionRenderer from "@/components/AppSectionRenderer";
 import AppShell from "@/components/AppShell";
 import OnboardingTour from "@/components/OnboardingTour";
+import { useSettlementJobs } from "@/hooks/useSettlementJobs";
 
 export default function AppHome() {
   const { signOut } = useClerk();
@@ -19,47 +20,12 @@ export default function AppHome() {
     return new URLSearchParams(window.location.search).get("tab") || "operationToday";
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [navBadges, setNavBadges] = useState({});
   const scrollPositions = useRef(new Map());
 
-  const handleBadgeUpdate = useCallback((key, count) => {
-    setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
-  }, []);
-  const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
+  const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, setShowOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
-  const workspaceSlug = currentUser?.workspaceSlug;
-
-  // Auto-polling for Google Sheets shipments (GeoModi only)
-  // Syncs every 5 minutes and updates the sidebar badge automatically
-  useEffect(() => {
-    if (workspaceSlug !== 'legacy') return;
-
-    const syncAndUpdateBadge = async () => {
-      try {
-        // First sync from Google Sheets to get latest entries
-        await fetch('/api/cron/sheets-sync', { method: 'GET' });
-        // Then fetch badge count
-        const res = await fetch('/api/shipments/sheet?status=pending');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.pendingCount !== undefined) {
-            handleBadgeUpdate('sheetSync', data.pendingCount);
-          }
-        }
-      } catch (e) {
-        // Silent fail - don't disrupt the user
-      }
-    };
-
-    // Run immediately on load
-    syncAndUpdateBadge();
-
-    // Then every 5 minutes
-    const interval = setInterval(syncAndUpdateBadge, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [workspaceSlug, handleBadgeUpdate]);
-
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
+  useSettlementJobs(Boolean(currentUser?.workspaceId) && canManageWorkspace);
   const canManageUsers = canManageWorkspace;
 
   const handleLogout = async () => {
@@ -133,11 +99,21 @@ export default function AppHome() {
 
   if (!authChecked) {
     return (
-      <main className="main-content" style={{ marginLeft: 0 }}>
-        <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-          <div className="spinner"></div>
+      // Show the app's outline while the account loads instead of a blank screen with a spinner.
+      <div className="app-skeleton" role="status" aria-label="Cargando GeoModi">
+        <aside className="app-skeleton-sidebar" aria-hidden="true">
+          <span className="skeleton-block" style={{ width: 120, height: 22 }} />
+          {[0, 1, 2, 3, 4].map((i) => <span key={i} className="skeleton-block" style={{ height: 34 }} />)}
+        </aside>
+        <div className="app-skeleton-main" aria-hidden="true">
+          <div className="app-skeleton-topbar"><span className="skeleton-block" style={{ width: 160, height: 18 }} /></div>
+          <div className="app-skeleton-content">
+            <span className="skeleton-block" style={{ width: '40%', height: 30 }} />
+            <div className="app-skeleton-cards"><span className="skeleton-block" /><span className="skeleton-block" /></div>
+            <span className="skeleton-block" style={{ height: 64 }} />
+          </div>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -181,11 +157,10 @@ export default function AppHome() {
 
   return (
     <>
-      {showOnboarding && <OnboardingTour activeTab={effectiveActiveTab} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
+      {showOnboarding && <OnboardingTour activeTab={effectiveActiveTab} canManage={Boolean(canManageWorkspace)} onClose={handleOnboardingClose} onNavigate={handleNavClick} />}
       <AppShell
         activeTab={effectiveActiveTab}
         currentUser={currentUser}
-        navBadges={navBadges}
         navGroups={navGroups}
         mobileNavigation={mobileNavigation}
         onCloseSidebar={closeMobileNavigation}
@@ -199,8 +174,9 @@ export default function AppHome() {
           activeTab={effectiveActiveTab}
           canManageUsers={canManageUsers}
           currentUser={currentUser}
-          onBadgeUpdate={handleBadgeUpdate}
+          mercadoLibreConnected={connectedProviders.includes("mercadolibre")}
           onNavigate={handleNavClick}
+          onReplayTour={() => setShowOnboarding(true)}
         />
       </AppShell>
     </>

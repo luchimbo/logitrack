@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
+import { arrangeLabelsOnA4, zplToPdf } from '@/lib/labelPdfLayout';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { extractLabelDimensionsInches } from '@/lib/labelDimensions';
 import { normalizePrintQueueIds } from '@/lib/printQueue';
 
-async function buildLabelPdf(workspaceId, shipmentIds) {
+export const maxDuration = 60;
+
+async function buildLabelPdf(workspaceId, shipmentIds, { layout = '' } = {}) {
     const normalizedIds = normalizePrintQueueIds(shipmentIds);
     if (!normalizedIds.length) {
         return { error: { body: { error: 'No hay etiquetas seleccionadas' }, status: 400 } };
@@ -24,13 +27,20 @@ async function buildLabelPdf(workspaceId, shipmentIds) {
     // Mantener el orden solicitado y descartar las que no existen o no tienen ZPL
     const usableIds = normalizedIds.filter((id) => String(byId.get(id)?.raw_zpl || '').trim());
 
+    if (usableIds.length !== normalizedIds.length) {
+        return { error: { body: { error: 'Algunas etiquetas no están disponibles; no se generó un PDF incompleto.' }, status: 404 } };
+    }
     if (!usableIds.length) {
         return { error: { body: { error: 'Etiqueta no disponible. No hay ZPL para imprimir.' }, status: 404 } };
     }
 
     const blocks = usableIds.map((id) => String(byId.get(id).raw_zpl).trim());
     const zpl = blocks.join('\r\n');
-    const dims = extractLabelDimensionsInches(blocks[0]);
+    if (layout === 'a4' || layout === 'thermal') {
+        const labels = await zplToPdf(zpl, AbortSignal.timeout(42000));
+        return { pdfBuffer: layout === 'a4' ? await arrangeLabelsOnA4(labels) : labels };
+    }
+    const dims = extractLabelDimensionsInches(zpl);
 
     // Sin indice de etiqueta => Labelary devuelve un PDF multipagina (una por etiqueta)
     const labelaryUrl = `https://api.labelary.com/v1/printers/8dpmm/labels/${dims.width}x${dims.height}/`;
@@ -45,6 +55,7 @@ async function buildLabelPdf(workspaceId, shipmentIds) {
             method: 'POST',
             headers,
             body: zpl,
+            signal: AbortSignal.timeout(25000),
         });
         if (response.ok || response.status !== 415) {
             break;
@@ -90,7 +101,7 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Missing shipmentId/ids parameter' }, { status: 400 });
         }
 
-        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids);
+        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids, { layout: searchParams.get('layout') });
         if (error) {
             return NextResponse.json(error.body, { status: error.status });
         }

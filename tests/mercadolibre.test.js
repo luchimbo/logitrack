@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 
 import { createMercadoLibreClient } from '../src/lib/mercadolibreClient.js';
 import {
+  classifyDispatch,
+  groupMercadoLibrePackages,
   deriveCutoffDetail,
   deriveMercadoLibreLogistics,
 } from '../src/lib/mercadolibreLogistics.js';
-import { getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from '../src/lib/operationMetrics.js';
+import { extractLabelDimensionsInches } from '../src/lib/labelDimensions.js';
 import { parseZplFile } from '../src/lib/zplParser.js';
 import { isDispatchDateValue, isLabelScheduleValue, isNonProductLabelValue } from '../src/lib/dispatchDate.js';
 
@@ -172,6 +175,19 @@ test('operation card ignores the local label import state', () => {
   ]);
 
   assert.deepEqual(metrics, { total: 2, flex: 1, colecta: 1 });
+});
+
+test('operation card counts drop-off shipments as Colecta and splits them by account', () => {
+  const orders = [
+    { shipmentId: 's-1', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'xd_drop_off', account: 'PCMIDI' },
+    { shipmentId: 's-2', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'cross_docking', account: 'PCMIDI' },
+    { shipmentId: 's-3', shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'ready_to_print', logisticType: 'self_service', account: 'OTRA' },
+  ];
+  assert.deepEqual(getMercadoLibrePackingMetrics(orders), { total: 3, flex: 1, colecta: 2 });
+  assert.deepEqual(getMercadoLibrePackingBreakdown(orders), {
+    flex: [{ account: 'OTRA', count: 1 }],
+    colecta: [{ account: 'PCMIDI', count: 2 }],
+  });
 });
 
 test('ready_to_ship + ready_to_print is printable', () => {
@@ -352,4 +368,38 @@ test('label download batches use at most 50 shipment ids', async (t) => {
   assert.equal(calls.length, 2);
   assert.ok(calls[0].includes(encodeURIComponent(ids.slice(0, 50).join(','))));
   assert.ok(calls[1].includes(encodeURIComponent(ids.slice(50).join(','))));
+});
+
+
+test('separa paquetes listos de despachados usando estados logísticos', () => {
+  const ready = { shipmentStatus: 'ready_to_ship', shipmentSubstatus: 'printed', printability: { id: 'printed' } };
+  assert.equal(classifyDispatch(ready), 'ready');
+  assert.equal(classifyDispatch({ ...ready, printability: { id: 'imported' } }), 'ready');
+  assert.equal(classifyDispatch({ ...ready, printability: { id: 'printable' } }), null);
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'shipped' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'delivered' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentSubstatus: 'picked_up' }), 'dispatched');
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'cancelled', shipmentSubstatus: 'picked_up' }), null);
+  assert.equal(classifyDispatch({ ...ready, shipmentStatus: 'not_delivered' }), null);
+});
+
+test('una fila por envío y cuenta conserva las ventas del paquete y el estado más reciente', () => {
+  const result = groupMercadoLibrePackages([
+    { id: '10', connectionId: 1, shipmentId: '20', syncedAt: '2026-11-19', shipmentStatus: 'ready_to_ship' },
+    { id: '11', connectionId: 1, shipmentId: '20', syncedAt: '2026-11-20', shipmentStatus: 'shipped' },
+    { id: '12', connectionId: 2, shipmentId: '20', shipmentStatus: 'delivered' },
+    { id: '13', connectionId: 2 },
+    { id: '14', connectionId: 2 },
+  ]);
+  assert.deepEqual(result.map((entry) => entry.orderIds), [['10', '11'], ['12'], ['13'], ['14']]);
+  assert.equal(classifyDispatch(result[0]), 'dispatched');
+  assert.equal(result[1].connectionId, 2);
+});
+
+test('la etiqueta larga conserva el pie desplazado y el ancho de los recuadros', () => {
+  const zpl = '^XA^LH0,90^FO0,90^GB810,2,1^FS^LH0,410^FO0,950^GB850,2,2^FS^FO650,1140^GB125,40,40^FS^XZ';
+  const full = extractLabelDimensionsInches(zpl);
+  assert.ok(full.width * 203.2 >= 850);
+  assert.ok(full.height * 203.2 >= 1590);
+  assert.deepEqual(extractLabelDimensionsInches('^XA^FO30,30^GB100,100,2^FS^XZ'), {width: 4, height: 6});
 });
