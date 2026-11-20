@@ -8,7 +8,7 @@ import { normalizePrintQueueIds } from '@/lib/printQueue';
 
 export const maxDuration = 60;
 
-async function buildLabelPdf(workspaceId, shipmentIds, { a4 = false } = {}) {
+async function buildLabelPdf(workspaceId, shipmentIds, { layout = '' } = {}) {
     const normalizedIds = normalizePrintQueueIds(shipmentIds);
     if (!normalizedIds.length) {
         return { error: { body: { error: 'No hay etiquetas seleccionadas' }, status: 400 } };
@@ -36,9 +36,9 @@ async function buildLabelPdf(workspaceId, shipmentIds, { a4 = false } = {}) {
 
     const blocks = usableIds.map((id) => String(byId.get(id).raw_zpl).trim());
     const zpl = blocks.join('\r\n');
-    if (a4) {
+    if (layout === 'a4' || layout === 'thermal') {
         const labels = await zplToPdf(zpl, AbortSignal.timeout(42000));
-        return { pdfBuffer: await arrangeLabelsOnA4(labels) };
+        return { pdfBuffer: layout === 'a4' ? await arrangeLabelsOnA4(labels) : labels };
     }
     const dims = extractLabelDimensionsInches(zpl);
 
@@ -101,7 +101,7 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Missing shipmentId/ids parameter' }, { status: 400 });
         }
 
-        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids, { a4: searchParams.get('layout') === 'a4' });
+        const { pdfBuffer, error } = await buildLabelPdf(workspaceId, ids, { layout: searchParams.get('layout') });
         if (error) {
             return NextResponse.json(error.body, { status: error.status });
         }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { toast } from "@/lib/api";
-import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
+import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
 
 export default function LabelViewer({ shipmentId, onClose }) {
     const dialogRef = useRef(null);
@@ -55,6 +55,7 @@ export default function LabelViewer({ shipmentId, onClose }) {
         const dialog = dialogRef.current;
         dialog?.focus();
         const handleKeyDown = (event) => {
+            if (document.querySelector(".label-print-dialog[open]")) return;
             if (event.key === "Escape") {
                 onClose();
                 return;
@@ -106,42 +107,25 @@ export default function LabelViewer({ shipmentId, onClose }) {
 
     const handlePrint = async () => {
         if (!shipmentId) return;
-        const win = openPrintWindow();
+        const win = openPrintDialog();
         if (!win) return;
         try {
             const format = await chooseLabelPrintFormat(win);
-            if (format === "pdf") {
-                await renderPrintWindow(win, `/api/labels/pdf?layout=a4&shipmentId=${encodeURIComponent(shipmentId)}`);
+            if (format === "pdf" || format === "thermal") {
+                await renderPrintDialog(win, `/api/labels/pdf?layout=${format === "pdf" ? "a4" : "thermal"}&shipmentId=${encodeURIComponent(shipmentId)}`);
             } else if (format === "zpl") {
                 await downloadLabelZplFile("/api/shipments/labels", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ ids: [shipmentId] }),
-                });
+                }, win.signal);
                 win.close();
             }
         } catch (err) {
-            if (!win.closed) win.close();
+            if (win.closed) return;
+            win.close();
             toast(err.message, "error");
         }
-    };
-
-    const handlePreviewPrint = () => {
-        if (!imageUrl) return;
-        const printWindow = window.open("", "_blank");
-        if (!printWindow) {
-            toast("No se pudo abrir la ventana de impresión", "error");
-            return;
-        }
-        printWindow.document.write(`
-            <html>
-                <head><title>Etiqueta ${shipmentId}</title></head>
-                <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;">
-                    <img src="${imageUrl}" style="max-width:100%;max-height:100%;" onload="window.print();" />
-                </body>
-            </html>
-        `);
-        printWindow.document.close();
     };
 
     if (!shipmentId) return null;
@@ -175,9 +159,6 @@ export default function LabelViewer({ shipmentId, onClose }) {
                     <div style={{ display: "flex", gap: "8px" }}>
                         <button className="btn btn-sm" onClick={handleDownload} disabled={!imageUrl}>
                             Descargar ZPL
-                        </button>
-                        <button className="btn btn-sm" onClick={handlePreviewPrint} disabled={!imageUrl}>
-                            Imprimir vista
                         </button>
                         <button className="btn btn-primary btn-sm" onClick={handlePrint} disabled={printing || !shipmentId}>
                             Imprimir

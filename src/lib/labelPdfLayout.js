@@ -1,26 +1,51 @@
 import { PDFDocument, PageSizes } from 'pdf-lib';
 import { extractLabelDimensionsInches } from './labelDimensions.js';
 
+const margin = 9;
+const gap = 10;
+const minimumScale = 0.88;
+
+function chooseA4Layout(pages) {
+    const [width, height] = PageSizes.A4;
+    const grids = [
+        { size: [width, height], columns: 2, rows: 2 },
+        { size: [height, width], columns: 3, rows: 1 },
+        { size: [width, height], columns: 2, rows: 1 },
+        { size: [width, height], columns: 1, rows: 1 },
+    ];
+    const layouts = grids.map((grid) => {
+        const [w, h] = grid.size;
+        const cellWidth = (w - 2 * margin - (grid.columns - 1) * gap) / grid.columns;
+        const cellHeight = (h - 2 * margin - (grid.rows - 1) * gap) / grid.rows;
+        const count = Math.min(pages.length, grid.columns * grid.rows);
+        const scale = Math.min(1, ...pages.slice(0, count).map((page) =>
+            Math.min(cellWidth / page.getWidth(), cellHeight / page.getHeight())));
+        return { ...grid, cellWidth, cellHeight, count, scale };
+    });
+    return layouts.filter((layout) => layout.scale >= minimumScale || layout.columns * layout.rows === 1)
+        .sort((a, b) => b.count - a.count || b.scale - a.scale)[0];
+}
+
 export async function arrangeLabelsOnA4(bytes) {
     const source = await PDFDocument.load(bytes);
     const output = await PDFDocument.create();
-    const [width, height] = PageSizes.A4;
-    const margin = 9;
-    const gap = 10;
-    const columnWidth = (width - 2 * margin - gap) / 2;
+    const pages = source.getPages();
 
-    for (let i = 0; i < source.getPageCount(); i += 2) {
-        const sheet = output.addPage(PageSizes.A4);
-        for (let column = 0; column < 2 && i + column < source.getPageCount(); column++) {
-            const label = await output.embedPage(source.getPage(i + column));
-            const scale = Math.min(1, columnWidth / label.width, (height - 2 * margin) / label.height);
-            const size = label.scale(scale);
+    for (let i = 0; i < pages.length;) {
+        const layout = chooseA4Layout(pages.slice(i, i + 4));
+        const sheet = output.addPage(layout.size);
+        for (let slot = 0; slot < layout.count; slot++) {
+            const label = await output.embedPage(pages[i + slot]);
+            const size = label.scale(layout.scale);
+            const column = slot % layout.columns;
+            const row = Math.floor(slot / layout.columns);
             sheet.drawPage(label, {
                 ...size,
-                x: margin + column * (columnWidth + gap) + (columnWidth - size.width) / 2,
-                y: height - margin - size.height,
+                x: margin + column * (layout.cellWidth + gap) + (layout.cellWidth - size.width) / 2,
+                y: sheet.getHeight() - margin - row * (layout.cellHeight + gap) - size.height,
             });
         }
+        i += layout.count;
     }
     return Buffer.from(await output.save());
 }

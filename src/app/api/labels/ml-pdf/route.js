@@ -146,7 +146,7 @@ export async function POST(request) {
     const body = await request.json().catch(() => null);
     const packages = body?.packages;
     const format = body?.format ?? 'original';
-    if (!['original', 'pdf', 'zpl'].includes(format)) {
+    if (!['original', 'pdf', 'thermal', 'zpl'].includes(format)) {
         return NextResponse.json({ error: 'Formato de etiqueta inválido.' }, { status: 400 });
     }
     if (!Array.isArray(packages) || packages.length < 1 || packages.length > 500 ||
@@ -223,7 +223,8 @@ export async function POST(request) {
                     },
                 });
             }
-            return new NextResponse(await arrangeLabelsOnA4(await zplToPdf(zpl, signal)), {
+            const pdf = await zplToPdf(zpl, signal);
+            return new NextResponse(format === 'pdf' ? await arrangeLabelsOnA4(pdf) : pdf, {
                 headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' },
             });
         }

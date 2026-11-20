@@ -1,7 +1,7 @@
 "use client";
 
 import InfoDisclosure from "./InfoDisclosure";
-import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintWindow, renderPrintWindow } from "@/lib/printLabel";
+import { chooseLabelPrintFormat, downloadLabelZplFile, openPrintDialog, renderPrintDialog } from "@/lib/printLabel";
 
 import { useState, useEffect, useMemo } from "react";
 import { api, toast } from "@/lib/api";
@@ -98,23 +98,24 @@ export default function ColectaSection({ onNavigate }) {
         const selectedIds = getSelectedIdsFrom(shipments);
         if (!selectedIds.length) return;
 
-        const win = openPrintWindow();
+        const win = openPrintDialog();
         if (!win) return;
         setIsPrintingBulk(true);
         try {
             const format = await chooseLabelPrintFormat(win);
-            if (format === "pdf") {
-                await renderPrintWindow(win, `/api/labels/pdf?layout=a4&ids=${encodeURIComponent(selectedIds.join(','))}`);
+            if (format === "pdf" || format === "thermal") {
+                await renderPrintDialog(win, `/api/labels/pdf?layout=${format === "pdf" ? "a4" : "thermal"}&ids=${encodeURIComponent(selectedIds.join(','))}`);
             } else if (format === "zpl") {
                 await downloadLabelZplFile("/api/shipments/labels", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ ids: selectedIds }),
-                });
+                }, win.signal);
                 win.close();
             }
         } catch (err) {
-            if (!win.closed) win.close();
+            if (win.closed) return;
+            win.close();
             toast(err.message || 'No se pudo preparar la impresión', 'error');
         } finally {
             setIsPrintingBulk(false);
