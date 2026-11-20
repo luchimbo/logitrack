@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
 
 const loading = () => <div className="section-loading" role="status" aria-live="polite"><div className="spinner" /><span>Cargando sección…</span></div>;
 const AdminOverviewSection = dynamic(() => import("@/components/AdminOverviewSection"), { loading });
@@ -21,13 +22,39 @@ const OperationToday = dynamic(() => import("@/components/OperationToday"), { lo
 const PackageHistorySection = dynamic(() => import("@/components/PackageHistorySection"), { loading });
 const LogisticsFinance = dynamic(() => import("@/components/LogisticsFinance"), { loading });
 
-export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, onBadgeUpdate, onNavigate, onReplayTour }) {
+function ShippingSection({ method, currentUser, mercadoLibreConnected, onNavigate }) {
+  const [selectedView, setSelectedView] = useState(null);
+  const flex = method === "flex";
+  const operationsLabel = flex ? "Transportistas" : "Envíos incorporados";
+  const showMercadoLibre = currentUser && (selectedView ?? (mercadoLibreConnected ? "mercadolibre" : "operations")) === "mercadolibre";
+
+  return (
+    <>
+      <nav aria-label={`Vistas de ${flex ? "Flex" : "Colecta"}`} style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+        {currentUser && (
+          <button type="button" className={`btn btn-sm ${showMercadoLibre ? "btn-primary" : ""}`} aria-pressed={Boolean(showMercadoLibre)} onClick={() => setSelectedView("mercadolibre")}>
+            Paquetes de Mercado Libre
+          </button>
+        )}
+        <button type="button" className={`btn btn-sm ${showMercadoLibre ? "" : "btn-primary"}`} aria-pressed={!showMercadoLibre} onClick={() => setSelectedView("operations")}>
+          {operationsLabel}
+        </button>
+      </nav>
+      {showMercadoLibre ? (
+        <MercadoLibreSection method={method} currentUser={currentUser} onNavigate={onNavigate} />
+      ) : flex ? <FlexSection onNavigate={onNavigate} /> : <ColectaSection onNavigate={onNavigate} />}
+    </>
+  );
+}
+
+export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, mercadoLibreConnected, onNavigate, onReplayTour }) {
   switch (activeTab) {
     case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} onReplayTour={onReplayTour} />;
     case "upload": return <UploadSection />;
     case "pickingList": return <PickingList />;
-    case "flex": return <FlexSection onNavigate={onNavigate} />;
-    case "colecta": return <ColectaSection onNavigate={onNavigate} />;
+    case "flex":
+    case "colecta":
+      return <ShippingSection key={`${currentUser?.workspaceId}:${activeTab}`} method={activeTab} currentUser={currentUser} mercadoLibreConnected={mercadoLibreConnected} onNavigate={onNavigate} />;
     case "workspaceSetup": return canManageUsers ? <WorkspaceSetupSection /> : <div>No autorizado</div>;
     case "zoneConfig": return <ZoneConfig />;
     case "dashboard": return <Dashboard />;
@@ -39,7 +66,7 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "zipnova": return currentUser ? <ZipnovaSection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "tiendanube": return currentUser ? <TiendanubeSection currentUser={currentUser} /> : <div>No autorizado</div>;
     case "shopify": return currentUser ? <ShopifySection currentUser={currentUser} /> : <div>No autorizado</div>;
-    case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} onBadgeUpdate={onBadgeUpdate} /> : <div>No autorizado</div>;
+    case "mercadolibre": return currentUser ? <MercadoLibreSection currentUser={currentUser} onNavigate={onNavigate} /> : <div>No autorizado</div>;
     case "userManagement": return canManageUsers ? <UserManagementSection currentUser={currentUser} /> : <div>No autorizado</div>;
     default: return <div>Página no encontrada</div>;
   }

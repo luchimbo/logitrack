@@ -446,7 +446,7 @@ export async function listLiveMercadoLibrePrintableOrders({ client, externalStor
 // Etiqueta Flex "En proceso": ML la retiene hasta lead_time.buffering.date (20 h del día previo).
 const BUFFERED_PENDING_SQL = `(LOWER(COALESCE(mo.shipment_substatus, '')) IN ('buffered','buffering') OR COALESCE(julianday(json_extract(mo.lead_time_json, '$.buffering.date')), 0) > julianday('now'))`;
 
-export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', limit = 500 } = {}) {
+export async function listStoredMercadoLibreOrders({ workspaceId, connectionId = '', q = '', view = '', method = '', orderIds = [], limit = 500 } = {}) {
   await ensureDb();
   const conditions = ['mo.workspace_id = ?'];
   const args = [workspaceId];
@@ -457,6 +457,19 @@ export async function listStoredMercadoLibreOrders({ workspaceId, connectionId =
   if (q) {
     conditions.push('(mo.order_id LIKE ? OR mo.shipment_id LIKE ? OR mo.recipient_name LIKE ? OR mo.tracking_number LIKE ?)');
     args.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  if (orderIds.length) {
+    conditions.push(`mo.order_id IN (${orderIds.map(() => '?').join(', ')})`);
+    args.push(...orderIds);
+  }
+  const logisticType = "LOWER(TRIM(COALESCE(mo.logistic_type, '')))";
+  const shippingMethod = "LOWER(TRIM(COALESCE(mo.shipping_method, '')))";
+  const flex = `(${logisticType} = 'self_service' OR ${shippingMethod} = 'flex')`;
+  if (method === 'flex') {
+    conditions.push(`${logisticType} != 'fulfillment' AND ${flex}`);
+  } else if (method === 'colecta') {
+    conditions.push(`NOT ${flex} AND ${logisticType} != 'fulfillment' AND
+      (${logisticType} IN ('cross_docking', 'drop_off', 'xd_drop_off') OR ${shippingMethod} = 'colecta')`);
   }
   if (view === 'ready') conditions.push(`LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship'`);
   if (view === 'printable') conditions.push(`mo.label_printed_at IS NULL AND (mo.label_imported_at IS NOT NULL OR (LOWER(COALESCE(mo.shipment_status, '')) = 'ready_to_ship' AND LOWER(COALESCE(mo.shipment_substatus, '')) IN ('', 'ready_to_print') AND NOT ${BUFFERED_PENDING_SQL}))`);

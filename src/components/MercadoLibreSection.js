@@ -16,8 +16,6 @@ const VIEW_OPTIONS = [
   { value: "to_dispatch", label: "Para despachar" },
   { value: "no_label", label: "Sin etiqueta lista" },
   { value: "ready", label: "Listos para preparar" },
-  { value: "flex", label: "Flex" },
-  { value: "colecta", label: "Colecta" },
   { value: "delayed", label: "Demorados" },
   { value: "imported", label: "Importados" },
   { value: "in_transit", label: "En transito" },
@@ -322,7 +320,8 @@ function sortByUrgency(orders) {
   });
 }
 
-export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
+export default function MercadoLibreSection({ currentUser, method, onNavigate }) {
+  const methodTitle = method === "flex" ? "Flex" : "Colecta";
   const canManageIntegration = ["owner", "admin"].includes(currentUser?.role);
   const [connected, setConnected] = useState(false);
   const [connections, setConnections] = useState([]);
@@ -368,8 +367,6 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     return d.toISOString().slice(0, 10);
   }, [todayStr]);
   const isToday = useCallback((o) => Boolean(o.handlingLimitDate) && o.handlingLimitDate >= recentCutoffStr, [recentCutoffStr]);
-  const isFlex = (o) => o.logisticType === "self_service";
-  const isFull = (o) => o.logisticType === "fulfillment";
   // "Listo para imprimir" real: etiqueta en ready_to_print sin imprimir/importar, del día de hoy.
   const isPrintableToday = useCallback((o) => (
     isToday(o)
@@ -379,51 +376,32 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
 
   const printableOrders = useMemo(() => packages.filter(isPrintableToday), [packages, isPrintableToday]);
 
-  // Cards estilo panel ML (Colecta/Flex), acotadas al día de hoy.
-  const dispatchSummary = useMemo(() => {
-    const pendingToday = (o) => isToday(o) && ["ready_to_print", "ready_to_ship"].includes(o.packageState?.id) && o.printability?.id !== "printed";
-    const isResched = (o) => String(o.shipmentSubstatus || "").toLowerCase().includes("reschedul");
-    const flexPending = packages.filter((o) => isFlex(o) && pendingToday(o));
-    const colectaPending = packages.filter((o) => !isFlex(o) && !isFull(o) && pendingToday(o));
-    return {
-      flex: {
-        total: flexPending.length,
-        toPrint: packages.filter((o) => isFlex(o) && isPrintableToday(o)).length,
-        toDispatch: packages.filter((o) => isFlex(o) && isToDispatch(o)).length,
-        dispatched: packages.filter((o) => isFlex(o) && isDispatched(o)).length,
-        rescheduled: packages.filter((o) => isFlex(o) && isToday(o) && isResched(o)).length,
-        buffered: packages.filter((o) => isFlex(o) && isToday(o) && o.printability?.id === "buffered").length,
-      },
-      colecta: {
-        total: colectaPending.length,
-        toPrint: packages.filter((o) => !isFlex(o) && !isFull(o) && isPrintableToday(o)).length,
-        toDispatch: packages.filter((o) => !isFlex(o) && !isFull(o) && isToDispatch(o)).length,
-        dispatched: packages.filter((o) => !isFlex(o) && !isFull(o) && isDispatched(o)).length,
-        canceled: packages.filter((o) => !isFlex(o) && !isFull(o) && isToday(o) && o.packageState?.id === "canceled").length,
-      },
-    };
-  }, [packages, isToday, isPrintableToday]);
+  const dispatchSummary = useMemo(() => ({
+    total: packages.filter((order) => isToday(order) &&
+      ["ready_to_print", "ready_to_ship"].includes(order.packageState?.id) && order.printability?.id !== "printed").length,
+    toPrint: printableOrders.length,
+    toDispatch: packages.filter(isToDispatch).length,
+    dispatched: packages.filter(isDispatched).length,
+    ...(method === "flex" ? {
+      rescheduled: packages.filter((order) => isToday(order) &&
+        String(order.shipmentSubstatus || "").toLowerCase().includes("reschedul")).length,
+      buffered: packages.filter((order) => isToday(order) && order.printability?.id === "buffered").length,
+    } : {
+      canceled: packages.filter((order) => isToday(order) && order.packageState?.id === "canceled").length,
+    }),
+  }), [packages, printableOrders.length, isToday, method]);
 
-  // Filtro client-side al clickear una card: por imprimir hoy, o para despachar hoy, de ese método.
   const visibleOrders = useMemo(() => {
-    const method = (o, flex) => flex ? isFlex(o) : (!isFlex(o) && !isFull(o));
-    if (cardFilter === "colecta") return sortedOrders.filter((o) => method(o, false) && isPrintableToday(o));
-    if (cardFilter === "flex") return sortedOrders.filter((o) => method(o, true) && isPrintableToday(o));
-    if (cardFilter === "colecta_dispatch") return sortedOrders.filter((o) => method(o, false) && isToDispatch(o));
-    if (cardFilter === "flex_dispatch") return sortedOrders.filter((o) => method(o, true) && isToDispatch(o));
-    if (cardFilter === "colecta_dispatched") return sortedOrders.filter((o) => method(o, false) && isDispatched(o));
-    if (cardFilter === "flex_dispatched") return sortedOrders.filter((o) => method(o, true) && isDispatched(o));
-    if (cardFilter === "flex_buffered") return sortedOrders.filter((o) => method(o, true) && isToday(o) && o.printability?.id === "buffered");
+    if (cardFilter === method) return sortedOrders.filter(isPrintableToday);
+    if (cardFilter === `${method}_dispatch`) return sortedOrders.filter(isToDispatch);
+    if (cardFilter === `${method}_dispatched`) return sortedOrders.filter(isDispatched);
+    if (cardFilter === "flex_buffered") return sortedOrders.filter((order) => isToday(order) && order.printability?.id === "buffered");
     return sortedOrders;
-  }, [sortedOrders, cardFilter, isPrintableToday, isToday]);
+  }, [sortedOrders, cardFilter, isPrintableToday, isToday, method]);
   const selectedOrders = visibleOrders.filter((order) => selectedOrderKeys.includes(orderKey(order)));
   const selectedVisibleCount = selectedOrders.length;
   const allVisibleSelected = visibleOrders.length > 0 && visibleOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
   const allPrintableSelected = printableOrders.length > 0 && printableOrders.every((order) => selectedOrderKeys.includes(orderKey(order)));
-
-  useEffect(() => {
-    if (onBadgeUpdate) onBadgeUpdate("mercadolibre", printableOrders.length);
-  }, [printableOrders.length, onBadgeUpdate]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -446,7 +424,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     setError("");
     setWarning("");
     try {
-      const params = new URLSearchParams({ sync: syncMode, view });
+      const params = new URLSearchParams({ sync: syncMode, view, method });
       if (q) params.set("q", q);
       if (selectedConnectionId) params.set("connection_id", selectedConnectionId);
       const res = await fetch(`/api/admin/mercadolibre?${params.toString()}`);
@@ -475,9 +453,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setLoading(false);
       setSyncing(false);
     }
-  }, [search, selectedConnectionId, view]);
+  }, [search, selectedConnectionId, view, method]);
 
   useEffect(() => {
+    if (method) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("meli_connected") === "1") {
       setWarning("Integracion con Mercado Libre conectada correctamente.");
@@ -489,7 +468,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       setError(decodeURIComponent(meliError));
       window.history.replaceState({}, "", window.location.pathname + "?tab=mercadolibre");
     }
-  }, [loadStatus]);
+  }, [loadStatus, method]);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
@@ -498,7 +477,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   const autoSyncedRef = useRef(new Set());
   const autoRefreshRef = useRef(false);
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !method) return;
     let cancelled = false;
     (async () => {
       const data = await load({ syncMode: "0" });
@@ -513,12 +492,12 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [connected, selectedConnectionId, view, load]);
+  }, [connected, selectedConnectionId, view, load, method]);
 
   // Mantiene el panel cercano a ML aunque el webhook tarde o no llegue: refresca cache cada
   // 2 minutos y fuerza sync si la ultima sincronizacion supera 5 minutos.
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !method) return;
     let cancelled = false;
     const refresh = async () => {
       if (cancelled || autoRefreshRef.current || document.visibilityState !== "visible") return;
@@ -543,7 +522,7 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [connected, load]);
+  }, [connected, load, method]);
 
   const toggleOrderSelection = (order) => {
     const key = orderKey(order);
@@ -603,14 +582,15 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!selectedConnectionId) return;
+  const handleDisconnect = async (connectionId) => {
+    if (!connectionId) return;
     if (!confirm("Seguro que queres desconectar esta cuenta Mercado Libre?")) return;
     try {
-      const res = await fetch(`/api/admin/mercadolibre/connect?connection_id=${encodeURIComponent(selectedConnectionId)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/mercadolibre/connect?connection_id=${encodeURIComponent(connectionId)}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo desconectar");
       toast("Cuenta Mercado Libre desconectada", "success");
+      window.dispatchEvent(new Event("integrations-changed"));
       await loadStatus();
     } catch (err) {
       setError(err.message || "Error inesperado");
@@ -799,14 +779,14 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
   return (
     <section className="section">
       <div className="section-header">
-        <SectionTitle icon="integrations">Mercado Libre</SectionTitle>
-        <p className="section-subtitle">Ventas pagadas, etiquetas ZPL, corte y seguimiento operativo.</p>
+        <SectionTitle icon={method || "integrations"}>{method ? `${methodTitle} de Mercado Libre` : "Mercado Libre"}</SectionTitle>
+        <p className="section-subtitle">{method ? "Prepará etiquetas y consultá el estado de cada paquete." : "Administrá tus cuentas y elegí el formato de impresión."}</p>
       </div>
 
       {error ? <div className="card" style={{ marginBottom: "10px", color: "var(--danger)" }}>{error}</div> : null}
       {warning ? <div className="card" style={{ marginBottom: "10px", color: "var(--warning, #c2410c)" }}>{warning}</div> : null}
 
-      <InfoDisclosure title="Cuentas de Mercado Libre" description="Administrar conexiones" defaultOpen={!connected} className="card" style={{ marginBottom: "16px" }}>
+      {!method && <InfoDisclosure title="Cuentas de Mercado Libre" description="Administrar conexiones" defaultOpen className="card" style={{ marginBottom: "16px" }}>
         <div className="form-row" style={{ alignItems: "end", flexWrap: "wrap", gap: "10px" }}>
           {canManageIntegration ? <button type="button" className="btn btn-primary" onClick={handleConnect} disabled={connecting}>{connecting ? "Conectando..." : "Conectar cuenta Mercado Libre"}</button> : null}
           {canManageIntegration ? <button type="button" className="btn btn-ghost" onClick={handleGenerateInvite} disabled={generatingInvite}>{generatingInvite ? "Generando..." : "Generar link de invitación"}</button> : null}
@@ -824,44 +804,44 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
             <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Elegí el formato de impresión predeterminado de cada cuenta para este navegador.</p>
             <div className="form-row" style={{ flexWrap: "wrap", gap: "12px" }}>
               {connections.map((account) => (
-                <label key={account.id} className="form-group" style={{ minWidth: "220px" }}>
-                  <span className="form-label">Formato de {account.displayName || account.externalStoreId}</span>
-                  <select className="form-input" value={printPreferences[account.id] || ""} onChange={(event) => setPrintPreference(account.id, event.target.value)}>
-                    <option value="">Elegir al imprimir</option>
-                    {LABEL_PRINT_FORMATS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
-                  </select>
-                </label>
+                <div key={account.id} className="form-group" style={{ minWidth: "220px" }}>
+                  <label>
+                    <span className="form-label">Formato de {account.displayName || account.externalStoreId}</span>
+                    <select className="form-input" value={printPreferences[account.id] || ""} onChange={(event) => setPrintPreference(account.id, event.target.value)}>
+                      <option value="">Elegir al imprimir</option>
+                      {LABEL_PRINT_FORMATS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+                    </select>
+                  </label>
+                  {canManageIntegration && <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDisconnect(account.id)}>Desconectar</button>}
+                </div>
               ))}
             </div>
           </div>
         )}
-      </InfoDisclosure>
+      </InfoDisclosure>}
 
-      {connected ? (
+      {!method && connected && (
+        <div className="card">
+          <p>Encontrá los paquetes y las etiquetas en la sección de cada tipo de envío.</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate("flex")}>Ir a Flex</button>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate("colecta")}>Ir a Colecta</button>
+          </div>
+        </div>
+      )}
+
+      {method && (connected ? (
         <>
-          {/* Cards estilo panel Mercado Libre: Colecta (programada) y Flex (por enviar) */}
-          {orders.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px", marginBottom: "16px" }}>
-              <DispatchCard
-                kind="colecta"
-                tag="PROGRAMADA"
-                title="Colecta"
-                summary={dispatchSummary.colecta}
-                cardFilter={cardFilter}
-                setCardFilter={setCardFilter}
-              />
-              <DispatchCard
-                kind="flex"
-                tag="POR ENVIAR"
-                title="Flex"
-                summary={dispatchSummary.flex}
-                cardFilter={cardFilter}
-                setCardFilter={setCardFilter}
-              />
-            </div>
-          )}
+          <DispatchCard
+            kind={method}
+            tag={method === "flex" ? "POR ENVIAR" : "PROGRAMADA"}
+            title={methodTitle}
+            summary={dispatchSummary}
+            cardFilter={cardFilter}
+            setCardFilter={setCardFilter}
+          />
 
-          <p style={{ color: "var(--text-muted)", fontSize: "12px", margin: "-4px 0 16px" }}>Despachadas incluye envíos en tránsito y entregados. Los contadores se basan en las ventas cargadas según los filtros.</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "12px", margin: "8px 0 16px" }}>Despachadas incluye envíos en tránsito y entregados. Los contadores se basan en las ventas cargadas según los filtros.</p>
 
           <InfoDisclosure title="Búsqueda y filtros" description="Cuenta, vista y búsqueda de ventas" className="card" style={{ marginBottom: "16px", padding: "14px" }}>
             <div className="form-row">
@@ -884,13 +864,10 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
               </div>
               <button type="button" className="btn btn-ghost" onClick={() => load({ syncMode: "0" })}>Buscar</button>
               <button type="button" className="btn btn-primary" onClick={() => load({ syncMode: "force" })} disabled={syncing}>{syncing ? "Sincronizando..." : "Sincronizar"}</button>
-              {selectedConnectionId ? <button type="button" className="btn btn-ghost" onClick={handleDisconnect}>Desconectar</button> : null}
             </div>
             <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
               <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                 {lastSyncedAt ? `Ultima actualizacion ${formatArgentinaDateTime(lastSyncedAt)}` : "Sin ventas sincronizadas todavia"}
-                {" · "}
-                <span>Impresion por cola: <code>imprimir-cola-v2.bat</code>.</span>
               </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCompact((v) => !v)} style={{ fontSize: "12px" }}>
                 {compact ? "Vista detallada" : "Vista compacta"}
@@ -972,8 +949,11 @@ export default function MercadoLibreSection({ currentUser, onBadgeUpdate }) {
           )}
         </>
       ) : (
-        <div className="card" style={{ color: "var(--text-muted)" }}>Conecta una cuenta Mercado Libre para sincronizar ventas pagadas.</div>
-      )}
+        <div className="card">
+          <p>Conectá una cuenta para ver los paquetes de Mercado Libre en esta sección.</p>
+          <button type="button" className="btn btn-sm" onClick={() => onNavigate("mercadolibre")}>Ir a cuentas de Mercado Libre</button>
+        </div>
+      ))}
     </section>
   );
 }

@@ -20,12 +20,8 @@ export default function AppHome() {
     return new URLSearchParams(window.location.search).get("tab") || "operationToday";
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [navBadges, setNavBadges] = useState({});
   const scrollPositions = useRef(new Map());
 
-  const handleBadgeUpdate = useCallback((key, count) => {
-    setNavBadges((prev) => count > 0 ? { ...prev, [key]: count } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
-  }, []);
   const { currentUser, setCurrentUser, authChecked, authError, authErrorCode, showOnboarding, setShowOnboarding, markOnboardingClosed } = useCurrentUser({ isLoaded, isSignedIn, router });
   const connectedProviders = useConnectedProviders(currentUser);
   const canManageWorkspace = currentUser?.isGlobalAdmin || ["owner", "admin"].includes(currentUser?.role);
@@ -165,7 +161,6 @@ export default function AppHome() {
       <AppShell
         activeTab={effectiveActiveTab}
         currentUser={currentUser}
-        navBadges={navBadges}
         navGroups={navGroups}
         mobileNavigation={mobileNavigation}
         onCloseSidebar={closeMobileNavigation}
@@ -179,7 +174,7 @@ export default function AppHome() {
           activeTab={effectiveActiveTab}
           canManageUsers={canManageUsers}
           currentUser={currentUser}
-          onBadgeUpdate={handleBadgeUpdate}
+          mercadoLibreConnected={connectedProviders.includes("mercadolibre")}
           onNavigate={handleNavClick}
           onReplayTour={() => setShowOnboarding(true)}
         />
