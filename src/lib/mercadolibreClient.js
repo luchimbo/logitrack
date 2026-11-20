@@ -62,6 +62,10 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/shipments/${shipmentId}`, { headers: { 'x-format-new': 'true' } });
   }
 
+  function getShipmentOrders(shipmentId) {
+    return request(`/shipments/${shipmentId}/orders`, { headers: { 'x-new-domain': 'true' } });
+  }
+
   function getShipmentItems(shipmentId) {
     return request(`/shipments/${shipmentId}/items`);
   }
@@ -179,6 +183,7 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     getOrder,
     getShipment,
     getShipmentItems,
+    getShipmentOrders,
     getShipmentLeadTime,
     getShipmentCosts,
     getShipmentDelays,
