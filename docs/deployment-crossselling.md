@@ -195,3 +195,8 @@ Publicado con `npm run deploy:production` a `dpl_FVwuWbQ7Rv2DJXVqYTY1Zh9gMTft` (
 ### Mejoras para comercios nuevos (19/11/2026)
 
 Publicado con `npm run deploy:production` a `dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt` (código `a88d679`): avisos visibles, errores de red claros, recorrido inicial unificado con «Primeros pasos», estados vacíos con acciones en Flex y Colecta, y corrección del test intermitente de finanzas. Tests (213) y build aprobados antes; controles HMAC y dominios aprobados antes y después de promover. No se revisó visualmente en producción.
+
+### Seguimiento automático · 20/11/2026, 09:14 Argentina
+
+- Logs de producción de la última hora sin filtro de rama. Upkeep respondió HTTP 200 a las 08:43:46 (ck298-1795175026163-2683d4799401) en dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt, sin mensajes de runtime ni resultados por cuenta. Sync no figura en la ventana consultada.
+- La API confirma ambos cron habilitados a las 11:00 y 11:20 UTC. Panel gráfico no inspeccionado. Sigue pendiente verificar el resultado por cuenta de upkeep.
