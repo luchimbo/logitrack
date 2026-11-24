@@ -120,7 +120,8 @@ export function createFinanceRepository(db) {
         WHERE s.workspace_id=? AND s.shipping_method IN ('flex','colecta')
           AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_row_id=s.id)
           AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.external_shipment_id AND mo.shipment_id<>'')
-          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')`, [workspaceId], 's.id'),
+          AND NOT EXISTS (SELECT 1 FROM mercadolibre_orders mo WHERE mo.workspace_id=s.workspace_id AND mo.shipment_id=s.tracking_number AND mo.shipment_id<>'')
+          AND (COALESCE(s.province,'')<>'' OR COALESCE(s.partido,'')<>'' OR COALESCE(s.recipient_name,'')<>'' OR COALESCE(s.assigned_carrier,'')<>'')`, [workspaceId], 's.id'),
       // Paid Mercado Libre sales with shipping "a coordinar": no ML shipment exists for them.
       identity ? Promise.resolve({ rows: [] }) : readFinancePages(connection, `SELECT mo.id, mo.integration_connection_id, mo.order_id, mo.pack_id,
         mo.user_id, mo.external_store_id, mo.status, mo.currency, mo.total, mo.recipient_name, mo.buyer_nickname, mo.synced_at,

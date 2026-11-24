@@ -166,7 +166,6 @@ export default function FinanceMapDashboard({ kind = 'all', onKind = () => {}, r
         <div className={styles.methodSwitch} role="group" aria-label="Mapa de envíos">{KINDS.map(([value, label]) => <button key={value} type="button" aria-pressed={kind === value} style={kind === value ? { background: value === 'all' ? `linear-gradient(90deg, ${METHOD_COLORS.flex}, ${METHOD_COLORS.colecta})` : METHOD_COLORS[value] } : undefined} onClick={() => onKind(value)}>{label}</button>)}</div>
 </div>
     </section>
-    {report && report.options?.noDispatchCount ? <p className={styles.coverage} role="note">{report.options.noDispatchCount} envíos todavía no tienen fecha de despacho confirmada, por eso no entran en ningún período.{report.syncTargets?.length ? ' Tocá “Actualizar datos” arriba para completarlos.' : ''}{report.dispatchMonths?.length ? ` Envíos con fecha de despacho por mes: ${report.dispatchMonths.map((m) => `${m.month.split('-').reverse().join('/')}: ${m.count}`).join(' · ')}.` : ''}</p> : null}
     <div className={styles.workspace}>
       <section className={styles.mapPanel} aria-label={`Selección de ${what} en el mapa`}>
         {kind !== 'flex' ? <nav className={styles.crumbs} aria-label="Nivel del mapa"><button type="button" aria-current={country ? 'page' : undefined} onClick={() => onLevel('argentina')}>Argentina</button><span aria-hidden="true">›</span><button type="button" aria-current={!country ? 'page' : undefined} onClick={() => onLevel('amba')}>AMBA</button></nav> : null}

@@ -25,7 +25,7 @@ const LogisticsFinance = dynamic(() => import("@/components/LogisticsFinance"), 
 function ShippingSection({ method, currentUser, mercadoLibreConnected, onNavigate }) {
   const [selectedView, setSelectedView] = useState(null);
   const flex = method === "flex";
-  const operationsLabel = flex ? "Transportistas" : "Envíos incorporados";
+  const operationsLabel = flex ? "Transportistas" : "Envíos de hoy";
   const showMercadoLibre = currentUser && (selectedView ?? (mercadoLibreConnected ? "mercadolibre" : "operations")) === "mercadolibre";
 
   return (
