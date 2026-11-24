@@ -72,7 +72,7 @@ export default function CarrierPortalClient({ publicId }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!secret) return undefined;
-    const interval = window.setInterval(() => { if (document.visibilityState === "visible") load({ silent: true }); }, 2_000);
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") load({ silent: true }); }, 20_000);
     return () => window.clearInterval(interval);
   }, [load, secret]);
   useEffect(() => { const sync = () => load({ silent: true }); window.addEventListener("focus", sync); window.addEventListener("online", sync); return () => { window.removeEventListener("focus", sync); window.removeEventListener("online", sync); }; }, [load]);

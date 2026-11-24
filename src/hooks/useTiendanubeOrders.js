@@ -182,8 +182,8 @@ export function useTiendanubeOrders() {
     if (!connected || !hasLoadedOrders) return undefined;
 
     const interval = setInterval(() => {
-      load({ syncMode: '0', silent: true });
-    }, 20000);
+      if (document.visibilityState === 'visible') load({ syncMode: '0', silent: true });
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [connected, hasLoadedOrders, load]);

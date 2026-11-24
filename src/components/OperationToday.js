@@ -7,7 +7,7 @@ import { formatArgentinaDateTime } from "@/lib/dateUtils";
 import { getMercadoLibrePackingBreakdown, getMercadoLibrePackingMetrics } from "@/lib/operationMetrics";
 
 const CACHE_TTL_MS = 60_000;
-const DISPLAY_REFRESH_INTERVAL_MS = 15_000;
+const DISPLAY_REFRESH_INTERVAL_MS = 60_000;
 const operationCaches = new Map();
 
 export default function OperationToday({ currentUser, onNavigate, onReplayTour }) {
