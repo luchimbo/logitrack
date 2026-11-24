@@ -42,8 +42,8 @@ export function createMercadoLibreClient({ accessToken } = {}) {
   }
 
   // Varias publicaciones por pedido (máximo 20 ids); cada elemento trae {code, body}.
-  function getItems(ids = []) {
-    const params = new URLSearchParams({ ids: ids.join(','), attributes: 'id,title,permalink,seller_custom_field,attributes,catalog_product_id' });
+  function getItems(ids = [], attributes = 'id,title,permalink,seller_custom_field,attributes,catalog_product_id') {
+    const params = new URLSearchParams({ ids: ids.join(','), attributes });
     return request(`/items?${params.toString()}`);
   }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import InfoDisclosure from "./InfoDisclosure";
+import Image from "next/image";
+import styles from "./MercadoLibrePackage.module.css";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
@@ -151,6 +153,40 @@ function DispatchCard({ kind, tag, title, summary, cardFilter, setCardFilter }) 
   );
 }
 
+function PackageProducts({ order }) {
+  if (!order.products?.length) return <p className={styles.secondary}>Mercado Libre no informó productos para este paquete.</p>;
+  return (
+    <ul className={styles.products} aria-label="Productos del paquete">
+      {order.products.map((product, index) => {
+        const variants = (Array.isArray(product.variationAttributes) ? product.variationAttributes : [])
+          .filter((attribute) => attribute?.value_name)
+          .map((attribute) => `${attribute.name || attribute.id}: ${attribute.value_name}`);
+        const source = product.itemId && order.connectionId
+          ? `/api/admin/mercadolibre/product-image?item=${encodeURIComponent(product.itemId)}&connection=${encodeURIComponent(order.connectionId)}`
+          : null;
+        return (
+          <li className={styles.product} key={`${product.orderId || order.id}:${product.itemId || "item"}:${index}`}>
+            {source && (
+              <Image className={styles.thumbnail} src={source} alt="" width={46} height={46} unoptimized referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.hidden = true; }} />
+            )}
+            <div className={styles.productName}>
+              <strong>{product.name}</strong>
+              {variants.length > 0 && <small>{variants.join(" · ")}</small>}
+              {order.orderIds?.length > 1 && <small>Venta #{product.orderId}</small>}
+            </div>
+            <div className={styles.productFacts}>
+              {product.unitPrice != null && product.unitPrice !== "" && <span>{formatMoney(product.unitPrice, product.currency || order.currency)} <small>por unidad</small></span>}
+              <span>{product.quantity} {Number(product.quantity) === 1 ? "unidad" : "unidades"}</span>
+              {product.sku && <span>SKU <strong>{product.sku}</strong></span>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function OrderCard({
   order,
   accountName,
@@ -167,9 +203,6 @@ function OrderCard({
   historyOpen,
   onToggleHistory,
 }) {
-  const products = Array.isArray(order.products) ? order.products : [];
-  const totalUnits = products.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-  const productNames = products.map((item) => item.name).filter(Boolean).slice(0, 2).join(" · ");
   const isLoading = importing || printing || refreshing;
   const borderColor = STATE_BORDER[order.packageState?.id] || "#cbd5e1";
   const printabilityId = order.printability?.id;
@@ -178,95 +211,60 @@ function OrderCard({
   const printLabel = alreadyPrinted ? "Reimprimir" : "Imprimir";
   const dispatchLabel = isDispatched(order) ? "Despachado" : isToDispatch(order) ? "Listo para despachar" : "";
   const packageName = order.shipmentId ? `Paquete #${order.shipmentId}` : `Venta #${order.id} sin envío`;
-  const packageStatus = (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontSize: "12px" }}>
-      <strong>Cuenta: {accountName}</strong>
-      {dispatchLabel && <strong style={{ color: isDispatched(order) ? "#60a5fa" : "var(--text)" }}>{dispatchLabel}</strong>}
-    </div>
-  );
-
-  if (compact) {
-    return (
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "20px 1fr auto",
-        gap: "10px",
-        alignItems: "center",
-        padding: "10px 14px",
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border)",
-        borderLeft: `3px solid ${borderColor}`,
-        background: selected ? "var(--accent-soft)" : "var(--surface)",
-      }}>
-        <input type="checkbox" checked={selected} onChange={onToggleSelected} aria-label={`Seleccionar ${packageName}`}
-          style={{ width: "16px", height: "16px", accentColor: "var(--accent)" }} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: "13px" }}>{packageName}</span>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{logisticLabel(order)}</span>
-            <span style={{ fontSize: "13px" }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</span>
-            {queued && <span style={{ fontSize: "11px", color: "var(--success)", fontWeight: 700 }}>✓ En cola</span>}
-          </div>
-          {packageStatus}
-          <MercadoLibreShipmentMeta shipment={order} hideState={Boolean(dispatchLabel) && !isDispatched(order)} compact />
-        </div>
-        <div style={{ display: "flex", gap: "6px" }}>
-          {!order.shipmentRowId && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)}
-              disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)} style={{ fontSize: "11px", padding: "4px 8px" }}>
-              {importing ? "..." : "Importar"}
-            </button>
-          )}
-          {canPrint && (
-            <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)}
-              disabled={isLoading} style={{ fontSize: "11px", padding: "4px 8px" }}>
-              {printing ? "..." : printLabel}
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const rescheduled = order.packageState?.id === "rescheduled";
+  const state = order.packageState;
+  const terminal = ["delivered", "canceled", "problem"].includes(state?.id);
+  const primaryStatus = rescheduled || terminal || state?.id === "delayed"
+    ? state.label
+    : (isDispatched(order) && order.currentSubstatusLabel) || dispatchLabel || state?.label || "Estado sin confirmar";
+  const canImport = Boolean(order.shipmentId) && !["not_ready", "buffered", "error"].includes(printabilityId);
+  const buyer = order.buyerNickname || order.recipientName;
+  const sales = order.orderIds?.length ? order.orderIds : [order.id];
+  const productCount = (order.products || []).reduce((sum, product) => sum + (Number(product.quantity) || 0), 0);
+  const saleLink = order.siteId === "MLA" && /^\d+$/.test(String(order.id))
+    ? `https://www.mercadolibre.com.ar/ventas/${order.id}/detalle`
+    : null;
+  const deliveryDay = getArgentinaDateString(order.estimatedDeliveryAt);
+  const showDeliveryEstimate = !terminal && deliveryDay &&
+    (!rescheduled || deliveryDay >= getArgentinaDateString());
 
   return (
-    <div className="mobile-card" style={{ display: "block", padding: "18px", borderLeft: `4px solid ${borderColor}` }}>
-      <div className="flex-between" style={{ alignItems: "flex-start", gap: "12px" }}>
-        <div style={{ display: "flex", gap: "10px", minWidth: 0 }}>
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            aria-label={`Seleccionar ${packageName}`}
-            style={{ marginTop: "3px", accentColor: "var(--accent)" }}
-          />
-          <div style={{ minWidth: 0 }}>
-            <div className="mobile-card-title" style={{ fontSize: "20px", marginBottom: "4px" }}>{packageName}</div>
-            <div style={{ fontWeight: 650 }}>{order.recipientName || order.buyerNickname || "Sin destinatario"}</div>
-            <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "2px" }}>
-              {logisticLabel(order)} · Envío {order.shipmentId || "-"}
-            </div>
-            {packageStatus}
-            <MercadoLibreShipmentMeta shipment={order} hideState={Boolean(dispatchLabel) && !isDispatched(order)} />
-          </div>
+    <article className={styles.card} data-compact={compact || undefined} style={{ borderLeftColor: borderColor }}>
+      <header className={styles.header}>
+        <input type="checkbox" checked={selected} onChange={onToggleSelected} aria-label={`Seleccionar ${packageName}`} />
+        <div className={styles.identifiers}>
+          <strong>{packageName}</strong>
+          <span>{sales.length === 1 ? "Venta" : "Ventas"} {sales.map((id) => `#${id}`).join(", ")}</span>
+          {order.createdAt && <span>{formatArgentinaDateTime(order.createdAt)}</span>}
+          <span>{logisticLabel(order)} · {accountName}</span>
         </div>
-        {queued && (
-          <span style={{ fontSize: "12px", color: "var(--success)", fontWeight: 700, whiteSpace: "nowrap" }}>✓ En cola</span>
-        )}
+        {buyer && <span className={styles.buyer}>{buyer}</span>}
+      </header>
+
+      <div className={styles.status}>
+        <strong style={{ color: rescheduled ? order.packageState.color : "var(--text)" }}>{primaryStatus}</strong>
+        {showDeliveryEstimate && <span className={styles.secondary}>Entrega estimada: {formatArgentinaDate(order.estimatedDeliveryAt)}</span>}
+        {rescheduled && !showDeliveryEstimate && <span className={styles.secondary}>La nueva fecha de entrega todavía no está disponible en GeoModi.</span>}
+        {!compact && <MercadoLibreShipmentMeta shipment={order} hideState />}
+        {queued && <span className={styles.secondary}>En cola</span>}
       </div>
 
-      <InfoDisclosure title="Detalle de la venta" description="Importe, productos y datos de envío"><div style={{ display: "grid", gap: "8px", marginTop: "14px", color: "var(--text-muted)", fontSize: "13px" }}>
-        <div><strong style={{ color: "var(--text)" }}>Ventas:</strong> {order.orderIds.join(", ")}</div>
-        {order.orderIds.length === 1 && <div><strong style={{ color: "var(--text)" }}>Total:</strong> {formatMoney(order.total, order.currency)}</div>}
-        <div><strong style={{ color: "var(--text)" }}>Fecha:</strong> {order.createdAt ? formatArgentinaDate(order.createdAt) : "-"}</div>
-        <div><strong style={{ color: "var(--text)" }}>Tracking:</strong> {order.trackingNumber || "-"}</div>
-        <div><strong style={{ color: "var(--text)" }}>Dirección:</strong> {addressLabel(order.address) || "-"}</div>
-        <div><strong style={{ color: "var(--text)" }}>Productos:</strong> {totalUnits || 0} unid. {productNames ? `· ${productNames}` : ""}</div>
-      </div></InfoDisclosure>
+      <InfoDisclosure className={styles.details} title={`Productos y datos del envío${productCount ? ` · ${productCount} ${productCount === 1 ? "unidad" : "unidades"}` : ""}`}>
+          <PackageProducts order={order} />
+          <div className={styles.shippingDetails}>
+            {sales.length === 1 && order.total !== "" && order.total != null && <div><strong>Total:</strong> {formatMoney(order.total, order.currency)}</div>}
+            {order.recipientName && <div><strong>Destinatario:</strong> {order.recipientName}</div>}
+            {addressLabel(order.address) && <div><strong>Dirección:</strong> {addressLabel(order.address)}</div>}
+            {order.trackingNumber && <div><strong>Seguimiento:</strong> {order.trackingNumber}</div>}
+          </div>
+      </InfoDisclosure>
 
-      <div className="mobile-card-actions">
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => onImport(order)} disabled={isLoading || !order.shipmentId || ["not_ready", "buffered"].includes(order.printability?.id)}>
-          {importing ? "Importando..." : order.labelImportedAt ? "Reimportar etiqueta" : "Importar ZPL"}
-        </button>
+      <div className={styles.actions}>
+        {canImport && (!compact || !order.shipmentRowId) && (
+          <button type="button" className="btn btn-sm" onClick={() => onImport(order)} disabled={isLoading}>
+            {importing ? "Importando…" : order.labelImportedAt ? "Reimportar etiqueta" : "Importar ZPL"}
+          </button>
+        )}
         {canPrint ? (
           <button type="button" className="btn btn-success btn-sm" onClick={() => onPrint(order)} disabled={isLoading}>
             {printing ? "Preparando PDF…" : printLabel}
@@ -278,11 +276,12 @@ function OrderCard({
         <button type="button" className="btn btn-ghost btn-sm" onClick={onToggleHistory}>
           {historyOpen ? "Ocultar historial" : "Ver historial"}
         </button>
-        {order.shipmentRowId ? <span style={{ color: "var(--success)", fontSize: "12px", alignSelf: "center" }}>Operación #{order.shipmentRowId}</span> : null}
+        {saleLink && <a className="btn btn-ghost btn-sm" href={saleLink} target="_blank" rel="noreferrer">Ver en Mercado Libre</a>}
+        {!compact && order.shipmentRowId ? <span className={styles.secondary}>Operación #{order.shipmentRowId}</span> : null}
       </div>
 
       {historyOpen ? <Timeline events={order.timeline || []} /> : null}
-    </div>
+    </article>
   );
 }
 
@@ -292,6 +291,7 @@ const STATE_BORDER = {
   in_transit: "#22c55e",
   delivered: "#22c55e",
   delayed: "#ef4444",
+  rescheduled: "#f97316",
   canceled: "#94a3b8",
   problem: "#ef4444",
   preparing: "#60a5fa",
@@ -320,11 +320,15 @@ function sortByUrgency(orders) {
   });
 }
 
+// Caché en memoria (stale-while-revalidate): al volver a la pantalla se muestra lo último
+// conocido al instante y se actualiza por detrás, sin spinner.
+const mlCache = new Map();
+
 export default function MercadoLibreSection({ currentUser, method, onNavigate }) {
   const methodTitle = method === "flex" ? "Flex" : "Colecta";
   const canManageIntegration = ["owner", "admin"].includes(currentUser?.role);
-  const [connected, setConnected] = useState(false);
-  const [connections, setConnections] = useState([]);
+  const [connected, setConnected] = useState(() => Boolean(mlCache.get("status")?.connected));
+  const [connections, setConnections] = useState(() => mlCache.get("status")?.connections || []);
   const [printPreferences, setPrintPreferences] = useState({});
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [orders, setOrders] = useState([]);
@@ -408,6 +412,7 @@ export default function MercadoLibreSection({ currentUser, method, onNavigate })
       const res = await fetch("/api/admin/mercadolibre/status");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo consultar Mercado Libre");
+      mlCache.set("status", data);
       setConnected(Boolean(data.connected));
       const nextConnections = Array.isArray(data.connections) ? data.connections : [];
       setConnections(nextConnections);
@@ -419,7 +424,10 @@ export default function MercadoLibreSection({ currentUser, method, onNavigate })
   }, []);
 
   const load = useCallback(async ({ syncMode = "0", q = search } = {}) => {
-    setLoading(syncMode !== "force");
+    const cacheKey = `orders:${view}:${method}:${q || ""}:${selectedConnectionId || ""}`;
+    const cached = syncMode === "force" ? null : mlCache.get(cacheKey);
+    if (cached) { setOrders(cached.orders); setLastSyncedAt(cached.lastSyncedAt); }
+    setLoading(syncMode !== "force" && !cached);
     setSyncing(syncMode === "force");
     setError("");
     setWarning("");
@@ -432,6 +440,7 @@ export default function MercadoLibreSection({ currentUser, method, onNavigate })
       if (!res.ok) throw new Error(data.error || "No se pudo cargar Mercado Libre");
       const nextOrders = data.orders || [];
       setOrders(nextOrders);
+      mlCache.set(cacheKey, { orders: nextOrders, lastSyncedAt: data.lastSyncedAt || "" });
       const nextKeys = new Set(nextOrders.map(orderKey));
       setSelectedOrderKeys((prev) => prev.filter((key) => nextKeys.has(key)));
       setOpenHistoryKeys((prev) => prev.filter((key) => nextKeys.has(key)));

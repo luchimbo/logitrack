@@ -403,3 +403,19 @@ test('la etiqueta larga conserva el pie desplazado y el ancho de los recuadros',
   assert.ok(full.height * 203.2 >= 1590);
   assert.deepEqual(extractLabelDimensionsInches('^XA^FO30,30^GB100,100,2^FS^XZ'), {width: 4, height: 6});
 });
+
+test('buyer rescheduling takes priority over a historical dispatch delay', () => {
+  const logistics = deriveMercadoLibreLogistics({
+    shipmentId: '100',
+    shipmentStatus: 'shipped',
+    shipmentSubstatus: 'buyer_rescheduled',
+    delays: { delays: [{ type: 'handling_delayed' }] },
+    history: { date_history: { date_shipped: '2026-11-19T12:00:00Z', date_first_printed: '2026-11-19T11:00:00Z' } },
+  });
+  assert.equal(logistics.packageState.id, 'rescheduled');
+  assert.equal(logistics.packageState.label, 'Envío reprogramado por el comprador');
+  assert.equal(logistics.dispatchState, 'scanned');
+  assert.deepEqual(logistics.timeline.map(({ substatus, date }) => [substatus, date]), [
+    ['buyer_rescheduled', ''], ['', '2026-11-19T12:00:00Z'], ['printed', '2026-11-19T11:00:00Z'],
+  ]);
+});

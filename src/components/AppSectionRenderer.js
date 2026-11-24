@@ -47,7 +47,7 @@ function ShippingSection({ method, currentUser, mercadoLibreConnected, onNavigat
   );
 }
 
-export default function AppSectionRenderer({ activeTab, currentUser, canManageUsers, mercadoLibreConnected, onNavigate, onReplayTour }) {
+function renderSection({ activeTab, currentUser, canManageUsers, mercadoLibreConnected, onNavigate, onReplayTour }) {
   switch (activeTab) {
     case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} onReplayTour={onReplayTour} />;
     case "upload": return <UploadSection />;
@@ -70,4 +70,18 @@ export default function AppSectionRenderer({ activeTab, currentUser, canManageUs
     case "userManagement": return canManageUsers ? <UserManagementSection currentUser={currentUser} /> : <div>No autorizado</div>;
     default: return <div>Página no encontrada</div>;
   }
+}
+
+// Las secciones visitadas quedan montadas (ocultas) para que al volver no se recargue todo.
+export default function AppSectionRenderer(props) {
+  const { activeTab, currentUser } = props;
+  const [visited, setVisited] = useState([activeTab]);
+  if (!visited.includes(activeTab)) setVisited([...visited, activeTab]);
+  return (
+    <div key={currentUser?.workspaceId}>
+      {visited.map((tab) => (
+        <div key={tab} hidden={tab !== activeTab}>{renderSection({ ...props, activeTab: tab })}</div>
+      ))}
+    </div>
+  );
 }

@@ -33,6 +33,8 @@ function normalizeProduct(item = {}) {
     sku: product.seller_sku || product.seller_custom_field || item.seller_sku || '',
     variationId: product.variation_id || item.variation_id || '',
     variationAttributes: product.variation_attributes || [],
+    unitPrice: item.unit_price ?? null,
+    currency: item.currency_id || '',
   };
 }
 
@@ -40,6 +42,9 @@ function mapOrderRow(row) {
   const leadTime = parseJson(row.lead_time_json, {});
   const carrier = parseJson(row.carrier_json, null);
   const history = parseJson(row.history_json, []);
+  const rawOrder = parseJson(row.raw_order_json, {});
+  const rawShipment = parseJson(row.raw_shipment_json, {});
+  const savedProducts = parseJson(row.products_json, []);
   const logisticType = row.logistic_type || '';
   const shipmentStatus = row.shipment_status || '';
   const shipmentSubstatus = row.shipment_substatus || '';
@@ -76,7 +81,9 @@ function mapOrderRow(row) {
     recipientName: row.recipient_name || '',
     recipientPhone: row.recipient_phone || '',
     address: parseJson(row.address_json, {}),
-    products: parseJson(row.products_json, []),
+    products: Array.isArray(rawOrder?.order_items) && rawOrder.order_items.length
+      ? rawOrder.order_items.map(normalizeProduct)
+      : (Array.isArray(savedProducts) ? savedProducts : []),
     shipmentStatus,
     shipmentSubstatus,
     logisticMode: row.logistic_mode || '',
@@ -105,6 +112,8 @@ function mapOrderRow(row) {
     packageState: logistics.packageState,
     printability: logistics.printability,
     timeline: logistics.timeline,
+    currentSubstatusLabel: logistics.currentSubstatusLabel,
+    estimatedDeliveryAt: leadTime?.estimated_delivery_time?.date || rawShipment?.lead_time?.estimated_delivery_time?.date || '',
     dispatchState: logistics.dispatchState,
   };
 }

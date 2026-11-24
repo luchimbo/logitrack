@@ -27,7 +27,9 @@ const STATE_META = {
   ready_to_print: { id: 'ready_to_print', label: 'Lista para imprimir', color: '#f97316' },
   buffered: { id: 'buffered', label: 'En proceso', color: '#a855f7' },
   ready_to_ship: { id: 'ready_to_ship', label: 'Lista para despachar', color: '#f97316' },
-  in_transit: { id: 'in_transit', label: 'En transito', color: '#22c55e' },
+  in_transit: { id: 'in_transit', label: 'En tránsito', color: '#22c55e' },
+  rescheduled: { id: 'rescheduled', label: 'Envío reprogramado', color: '#f97316' },
+  buyer_rescheduled: { id: 'rescheduled', label: 'Envío reprogramado por el comprador', color: '#f97316' },
   delivered: { id: 'delivered', label: 'Entregado', color: '#22c55e' },
   delayed: { id: 'delayed', label: 'Demorado', color: '#ef4444' },
   canceled: { id: 'canceled', label: 'Cancelado', color: '#64748b' },
@@ -49,8 +51,8 @@ const STATUS_LABELS = {
   pending: 'Pendiente',
   handling: 'En preparacion',
   ready_to_ship: 'Listo para despachar',
-  shipped: 'En transito',
-  in_transit: 'En transito',
+  shipped: 'En tránsito',
+  in_transit: 'En tránsito',
   delivered: 'Entregado',
   not_delivered: 'No entregado',
   cancelled: 'Cancelado',
@@ -70,7 +72,9 @@ const SUBSTATUS_LABELS = {
   deliver_attempt: 'Intento de entrega',
   receiver_absent: 'Comprador ausente',
   bad_address: 'Direccion incorrecta',
-  buyer_rescheduled: 'Reprogramado por comprador',
+  buyer_rescheduled: 'Envío reprogramado por el comprador',
+  rescheduled: 'Envío reprogramado',
+  delivery_blocked: 'Entrega bloqueada',
   ready_to_pickup: 'Listo para retirar',
   waiting_for_pickup: 'Esperando retiro',
 };
@@ -256,6 +260,8 @@ export function derivePackageState({ shipmentStatus = '', shipmentSubstatus = ''
   if (CANCELED_STATUSES.has(status)) return asState('canceled');
   if (PROBLEM_STATUSES.has(status)) return asState('problem');
   if (DELIVERED_STATUSES.has(status)) return asState('delivered');
+  if (substatus === 'buyer_rescheduled') return asState('buyer_rescheduled');
+  if (substatus.includes('reschedul')) return asState('rescheduled');
   if (hasDelay(delays, substatus)) return asState('delayed');
   if (IN_TRANSIT_STATUSES.has(status) || SCANNED_SUBSTATUSES.has(substatus)) return asState('in_transit');
   if (status === 'ready_to_ship' && PRINTABLE_SUBSTATUSES.has(substatus)) return asState('ready_to_print');
@@ -317,13 +323,25 @@ export function groupMercadoLibrePackages(orders) {
     return {
       ...latest,
       orderIds: members.map((order) => order.id),
-      products: members.flatMap((order) => order.products || []),
+      products: members.flatMap((order) => (order.products || []).map((product) => ({ ...product, orderId: order.id }))),
     };
   });
 }
 
+const HISTORY_DATES = {
+  date_ready_to_ship: ['ready_to_ship', ''],
+  date_first_printed: ['ready_to_ship', 'printed'],
+  date_shipped: ['shipped', ''],
+  date_delivered: ['delivered', ''],
+  date_not_delivered: ['not_delivered', ''],
+  date_cancelled: ['cancelled', ''],
+};
+
 export function deriveTimeline(history = [], { shipmentStatus = '', shipmentSubstatus = '' } = {}) {
-  const events = Array.isArray(history) ? history : [];
+  const events = Array.isArray(history) ? history : Object.entries(HISTORY_DATES).flatMap(([key, [status, substatus]]) => {
+    const date = history?.date_history?.[key];
+    return date ? [{ status, substatus, date }] : [];
+  });
   const normalized = events
     .map((event) => ({
       status: event?.status || '',
@@ -332,19 +350,15 @@ export function deriveTimeline(history = [], { shipmentStatus = '', shipmentSubs
       label: eventLabel(event?.status, event?.substatus),
     }))
     .filter((event) => event.status || event.substatus || event.date)
-    .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
-    .slice(0, 6);
+    .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 
-  if (normalized.length) return normalized;
-  if (shipmentStatus || shipmentSubstatus) {
-    return [{
-      status: shipmentStatus || '',
-      substatus: shipmentSubstatus || '',
-      date: '',
-      label: eventLabel(shipmentStatus, shipmentSubstatus),
-    }];
-  }
-  return [];
+  const current = { status: shipmentStatus, substatus: shipmentSubstatus, date: '', label: eventLabel(shipmentStatus, shipmentSubstatus) };
+  const alreadyRecorded = normalized.some((event) => lower(event.status) === lower(current.status) &&
+    lower(event.substatus) === lower(current.substatus));
+  const currentFirst = (shipmentStatus || shipmentSubstatus) && !alreadyRecorded
+    ? [current, ...normalized]
+    : normalized;
+  return currentFirst.slice(0, 6);
 }
 
 export function deriveMercadoLibreLogistics(input = {}) {
@@ -352,7 +366,7 @@ export function deriveMercadoLibreLogistics(input = {}) {
   const printability = derivePrintability(input);
   const cutoff = deriveCutoffDetail(input);
   const timeline = deriveTimeline(input.history, input);
-  const dispatchState = packageState.id === 'in_transit' || packageState.id === 'delivered'
+  const dispatchState = packageState.id === 'in_transit' || packageState.id === 'delivered' || (packageState.id === 'rescheduled' && IN_TRANSIT_STATUSES.has(lower(input.shipmentStatus)))
     ? 'scanned'
     : packageState.id === 'ready_to_print' || packageState.id === 'ready_to_ship'
       ? 'ready'
@@ -364,5 +378,6 @@ export function deriveMercadoLibreLogistics(input = {}) {
     cutoff,
     timeline,
     dispatchState,
+    currentSubstatusLabel: SUBSTATUS_LABELS[lower(input.shipmentSubstatus)] || '',
   };
 }
