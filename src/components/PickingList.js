@@ -6,6 +6,7 @@ import { useBatch } from "./BatchContext";
 import { formatArgentinaDateTime, getArgentinaDateString } from "@/lib/dateUtils";
 import LoadingButton from "./LoadingButton";
 import SectionTitle from "./SectionTitle";
+import { getPickingAccessories } from "@/lib/pickingAccessories";
 
 export default function PickingList() {
     const { getTodayQueryString } = useBatch();
@@ -149,6 +150,12 @@ export default function PickingList() {
                 const detail = `${item.sku || 'N/A'}${item.color ? ` · ${item.color}` : ''} · ${item.shipment_count} env`;
                 const detailText = truncateLine(detail, columnWidth - 15, 5.8, "normal");
                 pdf.text(detailText, x + 14.5, topY + 6.7);
+
+                pdf.setTextColor(180, 83, 9);
+                getPickingAccessories(item).forEach((accessory, index) => {
+                    const text = truncateLine(`+ ${accessory}`, columnWidth - 15, 6.4, "bold");
+                    pdf.text(text, x + 14.5, topY + 9.6 + (index * 2.8));
+                });
             };
 
             const writeItemsGrid = (items) => {
@@ -156,7 +163,8 @@ export default function PickingList() {
                     const left = items[i];
                     const right = items[i + 1];
                     const third = items[i + 2];
-                    const rowHeight = 9.2;
+                    const accessoryLines = Math.max(...items.slice(i, i + 3).map(item => getPickingAccessories(item).length));
+                    const rowHeight = 9.2 + (accessoryLines * 2.8);
 
                     addPageIfNeeded(rowHeight + 2);
 
@@ -228,6 +236,9 @@ export default function PickingList() {
                         {item.color && <span>{item.color}</span>}
                         <span>{item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}</span>
                     </div>
+                    {getPickingAccessories(item).map((accessory, index) => (
+                        <div key={index} className="picking-accessory">+ {accessory}</div>
+                    ))}
                     <p className="picking-progress">{pendingShipments} de {item.shipment_count} envíos pendientes</p>
                 </div>
             </div>

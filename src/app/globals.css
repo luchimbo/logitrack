@@ -709,6 +709,7 @@ body.sidebar-open{overflow:hidden}
 .picking-metric p,.picking-progress{color:var(--text-secondary)}
 .picking-sku strong{color:var(--text);overflow-wrap:anywhere}
 .picking-progress{margin-top:3px;font-size:12px}
+.picking-accessory{width:fit-content;max-width:100%;margin-top:5px;padding:3px 8px;border:1px solid var(--warning);border-radius:6px;font-size:12px;font-weight:700;color:var(--text)}
 
 .flex-board{display:flex;flex-direction:column}
 .flex-board>.flex-lanes{flex:1;min-height:0}
