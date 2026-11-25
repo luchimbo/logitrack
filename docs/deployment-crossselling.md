@@ -200,3 +200,7 @@ Publicado con `npm run deploy:production` a `dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt` (
 
 - Logs de producción de la última hora sin filtro de rama. Upkeep respondió HTTP 200 a las 08:43:46 (ck298-1795175026163-2683d4799401) en dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt, sin mensajes de runtime ni resultados por cuenta. Sync no figura en la ventana consultada.
 - La API confirma ambos cron habilitados a las 11:00 y 11:20 UTC. Panel gráfico no inspeccionado. Sigue pendiente verificar el resultado por cuenta de upkeep.
+
+### Fuentes y cables en picking (25/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_2oS1VRZqKp6bX1tJt28Ws3deZCQw` (código `d9b0df4`): el listado de picking y su PDF muestran la fuente o el cable de cada producto (`src/lib/pickingAccessories.js`). Tests (224) aprobados; controles HMAC y dominios aprobados antes y después de promover. `/` y `/login` responden 200; `/api/picking-list` sin sesión, 401. No se revisó visualmente en producción.
