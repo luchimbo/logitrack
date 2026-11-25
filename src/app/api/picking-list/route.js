@@ -36,13 +36,13 @@ export async function GET(request) {
         const result = await db.execute({ sql, args });
         const shipments = result.rows;
 
-        // Group by product_name + sku + shipping_method
+        // Group by product_name + sku + color + shipping_method
         const products = {};
 
         for (const s of shipments) {
             const skuStr = s.sku || 'N/A';
             const methodStr = s.shipping_method || 'colecta';
-            const key = `${s.product_name}|${skuStr}|${methodStr}`;
+            const key = `${s.product_name}|${skuStr}|${s.color || ''}|${methodStr}`;
 
             if (!products[key]) {
                 products[key] = {
