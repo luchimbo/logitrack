@@ -104,7 +104,7 @@ function drawItem(pdf, layout, x, top, width, height) {
     }
 }
 
-export function renderPickingPdf(pdf, { items, generatedAt }) {
+export function renderPickingPdf(pdf, { items, generatedAt, supplemental = false }) {
     const pageHeight = pdf.internal.pageSize.getHeight();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const contentWidth = pageWidth - (MARGIN * 2);
@@ -125,7 +125,7 @@ export function renderPickingPdf(pdf, { items, generatedAt }) {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(15);
     pdf.setTextColor(20, 24, 35);
-    pdf.text("Picking", MARGIN, y);
+    pdf.text(supplemental ? "Picking adicional" : "Picking", MARGIN, y);
     y += 5;
 
     pdf.setFont("helvetica", "normal");

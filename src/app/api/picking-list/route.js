@@ -1,71 +1,66 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { getDateRange } from '@/lib/dateUtils';
-import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { getArgentinaDateString } from '@/lib/dateUtils';
+import { listIntegrationConnections } from '@/lib/integrationService';
+import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
+import { groupPickingProducts, listMercadoLibrePickingPackages } from '@/lib/mercadoLibrePicking';
+import { createPickingExportRepository } from '@/lib/pickingExports';
 
-export async function GET(request) {
+export const maxDuration = 120;
+const pickingExports = createPickingExportRepository(db);
+
+async function picking(request, exportPdf = false) {
     try {
-        await ensureDb();
-        const authResult = await requireWorkspaceActor(request);
-        if (authResult.error) {
-            return NextResponse.json(authResult.error.body, { status: authResult.error.status });
-        }
-        const workspaceId = authResult.actor.workspaceId;
-        const { searchParams } = new URL(request.url);
-        const period = searchParams.get('period');
-        const specificDate = searchParams.get('date');
-        const batch_id = searchParams.get('batch_id');
+        const auth = await requireWorkspaceActor(request);
+        if (auth.error) return NextResponse.json(auth.error.body, { status: auth.error.status });
 
-        let sql, args = [];
-
-        if (batch_id) {
-            sql = "SELECT * FROM shipments WHERE workspace_id = ? AND batch_id = ?";
-            args.push(workspaceId, batch_id);
-        } else if (period) {
-            const range = getDateRange(period, specificDate);
-            sql = `SELECT s.* FROM shipments s
-             JOIN daily_batches b ON s.batch_id = b.id
-             WHERE s.workspace_id = ? AND b.workspace_id = ? AND b.date >= ? AND b.date <= ?`;
-            args.push(workspaceId, workspaceId, range.from, range.to);
-        } else {
-            sql = "SELECT * FROM shipments WHERE workspace_id = ?";
-            args.push(workspaceId);
-        }
-
-        const result = await db.execute({ sql, args });
-        const shipments = result.rows;
-
-        // Group by product_name + sku + color + shipping_method
-        const products = {};
-
-        for (const s of shipments) {
-            const skuStr = s.sku || 'N/A';
-            const methodStr = s.shipping_method || 'colecta';
-            const key = `${s.product_name}|${skuStr}|${s.color || ''}|${methodStr}`;
-
-            if (!products[key]) {
-                products[key] = {
-                    product_name: s.product_name,
-                    sku: s.sku,
-                    color: s.color,
-                    shipping_method: methodStr,
-                    total_quantity: 0,
-                    shipment_count: 0,
-                    shipment_ids: [],
-                    statuses: [],
-                };
+        const { workspaceId } = auth.actor;
+        if (!workspaceId) return NextResponse.json({ error: 'Workspace no disponible' }, { status: 403 });
+        const connections = await listIntegrationConnections({ workspaceId, provider: 'mercadolibre' });
+        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(60_000)]);
+        const results = await Promise.allSettled(connections.map(async (connection) => {
+            const [target] = await listMercadoLibreClientTargets(workspaceId, { connectionId: connection.id });
+            if (!target) throw new Error('Conexión sin credenciales');
+            return listMercadoLibrePickingPackages(target.client, target.externalStoreId, signal);
+        }));
+        const packages = [];
+        const failedAccounts = [];
+        for (const [index, result] of results.entries()) {
+            const connection = connections[index];
+            if (result.status === 'fulfilled') {
+                packages.push(...result.value);
+            } else {
+                failedAccounts.push(connection.displayName);
+                console.error('Picking Mercado Libre', connection.id, result.reason?.message);
             }
-
-            products[key].total_quantity += Number(s.quantity) || 1;
-            products[key].shipment_count += 1;
-            products[key].shipment_ids.push(s.id);
-            products[key].statuses.push(s.status);
         }
 
-        return NextResponse.json(Object.values(products));
+        const { lastExport, pending, created = false } = exportPdf && !failedAccounts.length
+            ? await pickingExports.save(workspaceId, packages)
+            : await pickingExports.read(workspaceId, packages);
+        return NextResponse.json({
+            connectedAccounts: connections.length,
+            failedAccounts,
+            packageCount: pending.length,
+            items: groupPickingProducts(pending),
+            lastExport,
+            supplemental: lastExport?.date === getArgentinaDateString(),
+            created,
+        }, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
-        console.error("Picking list error:", error);
-        return NextResponse.json({ error: "Failed to load picking list" }, { status: 500 });
+        console.error('Picking list error:', error);
+        return NextResponse.json({ error: 'No pudimos cargar el picking. Volvé a intentar.' }, { status: 500 });
     }
+}
+
+export function GET(request) {
+    return picking(request);
+}
+
+export function POST(request) {
+    if (request.headers.get('content-type')?.split(';')[0] !== 'application/json') {
+        return NextResponse.json({ error: 'Formato de solicitud inválido' }, { status: 415 });
+    }
+    return picking(request, true);
 }

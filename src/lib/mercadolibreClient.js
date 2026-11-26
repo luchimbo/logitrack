@@ -27,12 +27,13 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request('/users/me');
   }
 
-  async function searchOrders({ sellerId, offset = 0, limit = 50, q = '', dateFrom = '', dateTo = '' } = {}) {
+  async function searchOrders({ sellerId, offset = 0, limit = 50, q = '', dateFrom = '', dateTo = '', shippingStatus = '', signal } = {}) {
     const params = new URLSearchParams({ seller: String(sellerId), 'order.status': 'paid', sort: 'date_desc', offset: String(offset), limit: String(limit) });
     if (q) params.set('q', q);
     if (dateFrom) params.set('order.date_created.from', dateFrom);
     if (dateTo) params.set('order.date_created.to', dateTo);
-    return request(`/orders/search?${params.toString()}`);
+    if (shippingStatus) params.set('shipping.status', shippingStatus);
+    return request(`/orders/search?${params.toString()}`, { signal });
   }
 
   // Publicaciones activas del vendedor (hasta 100 por página).
@@ -58,16 +59,16 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/orders/${orderId}`);
   }
 
-  function getShipment(shipmentId) {
-    return request(`/shipments/${shipmentId}`, { headers: { 'x-format-new': 'true' } });
+  function getShipment(shipmentId, { signal } = {}) {
+    return request(`/shipments/${shipmentId}`, { headers: { 'x-format-new': 'true' }, signal });
   }
 
   function getShipmentOrders(shipmentId) {
     return request(`/shipments/${shipmentId}/orders`, { headers: { 'x-new-domain': 'true' } });
   }
 
-  function getShipmentItems(shipmentId) {
-    return request(`/shipments/${shipmentId}/items`);
+  function getShipmentItems(shipmentId, { signal } = {}) {
+    return request(`/shipments/${shipmentId}/items`, { headers: { 'x-format-new': 'true' }, signal });
   }
 
   function getShipmentLeadTime(shipmentId) {
