@@ -204,3 +204,7 @@ Publicado con `npm run deploy:production` a `dpl_8j1mobUBaTiMFXU7TEcGuUKngHdt` (
 ### Fuentes y cables en picking (25/11/2026)
 
 Publicado con `npm run deploy:production` a `dpl_2oS1VRZqKp6bX1tJt28Ws3deZCQw` (código `d9b0df4`): el listado de picking y su PDF muestran la fuente o el cable de cada producto (`src/lib/pickingAccessories.js`). Tests (224) aprobados; controles HMAC y dominios aprobados antes y después de promover. `/` y `/login` responden 200; `/api/picking-list` sin sesión, 401. No se revisó visualmente en producción.
+
+### Catálogo de Mercado Libre para picking (26/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_5fxvE82NWwUEE42YZ9oVux9vJaCJ` (código `41ae730`): botón «Catálogo» en Picking con las publicaciones activas y pausadas de cada cuenta, búsqueda por palabras o SKU y texto extra por publicación (también para varias a la vez) que sale en picking y en su PDF. Editan dueños y administradores. La primera descarga carga las fuentes conocidas como texto. Mercado Libre rechaza a veces el pedido de varias publicaciones juntas (403 «Resource deprecated»); en ese caso se leen de a una. Descarga de prueba en solo lectura: 1225 y 1254 publicaciones, unos 28 s por cuenta. Tests (232) aprobados; controles HMAC y dominios aprobados antes y después de promover. Las rutas nuevas responden 401 sin sesión. No se revisó con sesión en producción.
