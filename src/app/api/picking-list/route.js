@@ -39,15 +39,24 @@ async function picking(request, exportPdf = false) {
         const { lastExport, pending, created = false } = exportPdf && !failedAccounts.length
             ? await pickingExports.save(workspaceId, packages)
             : await pickingExports.read(workspaceId, packages);
-        return NextResponse.json({
+        const status = {
             connectedAccounts: connections.length,
             failedAccounts,
             packageCount: pending.length,
+            supplemental: lastExport?.date === getArgentinaDateString(),
+        };
+        const options = { headers: { 'Cache-Control': 'no-store' } };
+        if (!exportPdf && new URL(request.url).searchParams.get('view') === 'summary') {
+            const byMethod = { colecta: 0, flex: 0 };
+            for (const shipment of packages) byMethod[shipment.shippingMethod]++;
+            return NextResponse.json({ ...status, byMethod, totalPackages: packages.length }, options);
+        }
+        return NextResponse.json({
+            ...status,
             items: groupPickingProducts(pending),
             lastExport,
-            supplemental: lastExport?.date === getArgentinaDateString(),
             created,
-        }, { headers: { 'Cache-Control': 'no-store' } });
+        }, options);
     } catch (error) {
         console.error('Picking list error:', error);
         return NextResponse.json({ error: 'No pudimos cargar el picking. Volvé a intentar.' }, { status: 500 });

@@ -15,7 +15,75 @@ import InfoDisclosure from "./InfoDisclosure";
 
 const SHIPMENTS_PAGE_SIZE = 200;
 
-export default function Dashboard() {
+export default function Dashboard({ visible, onNavigate }) {
+    return (
+        <>
+            <DashboardPickingSummary visible={visible} onOpen={() => onNavigate("pickingList")} />
+            <ShipmentDashboard />
+        </>
+    );
+}
+
+function DashboardPickingSummary({ visible, onOpen }) {
+    const [summary, setSummary] = useState(null);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (!visible) return;
+        const controller = new AbortController();
+        let timer;
+        async function refresh() {
+            try {
+                if (!document.hidden) {
+                    const result = await api("/picking-list?view=summary", { signal: controller.signal });
+                    if (controller.signal.aborted) return;
+                    setSummary(result);
+                    setError(false);
+                }
+            } catch {
+                if (!controller.signal.aborted) setError(true);
+            } finally {
+                if (!controller.signal.aborted) timer = setTimeout(refresh, 60_000);
+            }
+        }
+        refresh();
+        return () => {
+            controller.abort();
+            clearTimeout(timer);
+        };
+    }, [visible]);
+
+    if (summary?.connectedAccounts === 0 && !error) return null;
+    const failedAccounts = summary?.failedAccounts ?? [];
+    const hasCounts = summary && !error && failedAccounts.length < summary.connectedAccounts;
+
+    return (
+        <section className="card dashboard-picking" aria-labelledby="dashboard-picking-title">
+            <header className="dashboard-picking-header">
+                <div>
+                    <h2 id="dashboard-picking-title">Picking de Mercado Libre</h2>
+                    <p className="section-subtitle">Paquetes pendientes de preparación ahora</p>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={onOpen}>Ir a Picking</button>
+            </header>
+            <div aria-live="polite">
+                {error && <p>No pudimos consultar Mercado Libre. Vamos a reintentar automáticamente.</p>}
+                {!summary && !error && <p>Consultando Mercado Libre…</p>}
+                {!error && failedAccounts.length > 0 && <p>Consulta incompleta. Faltan {failedAccounts.join(", ")}.</p>}
+                {hasCounts && (
+                    <dl className="dashboard-picking-counts">
+                        <div><dt>Paquetes</dt><dd>{summary.totalPackages}</dd></div>
+                        <div><dt>Colecta</dt><dd>{summary.byMethod.colecta}</dd></div>
+                        <div><dt>Flex</dt><dd>{summary.byMethod.flex}</dd></div>
+                        <div><dt>{summary.supplemental ? "Para PDF adicional" : "Por exportar"}</dt><dd>{summary.packageCount}</dd></div>
+                    </dl>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function ShipmentDashboard() {
     const { getQueryString, period, setPeriod, specificDate, setSpecificDate, rangeFrom, setRangeFrom, rangeTo, setRangeTo } = useBatch();
     const [data, setData] = useState(null);
     const [shipments, setShipments] = useState([]);
@@ -266,7 +334,7 @@ export default function Dashboard() {
             <div className="section active">
                 <div className="section-header">
                     <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
-                    <p className="section-subtitle">Resumen de operaciones del período</p>
+                    <p className="section-subtitle">Etiquetas cargadas en el período</p>
                     {renderPeriodPicker()}
                 </div>
                 <div className="card">
@@ -285,7 +353,7 @@ export default function Dashboard() {
             <div className="section active">
                 <div className="section-header">
                     <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
-                    <p className="section-subtitle">Resumen de operaciones</p>
+                    <p className="section-subtitle">Etiquetas cargadas en el período</p>
                     {renderPeriodPicker()}
                 </div>
                 <div className="empty-state">
@@ -392,7 +460,7 @@ export default function Dashboard() {
         <div className="section active">
             <div className="section-header">
                 <SectionTitle icon="dashboard">Resumen de envíos · {periodLabel()}</SectionTitle>
-                <p className="section-subtitle">Resumen de operaciones del período</p>
+                <p className="section-subtitle">Etiquetas cargadas en el período</p>
                 {renderPeriodPicker()}
             </div>
 

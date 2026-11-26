@@ -47,17 +47,17 @@ function ShippingSection({ method, currentUser, mercadoLibreConnected, onNavigat
   );
 }
 
-function renderSection({ activeTab, currentUser, canManageUsers, mercadoLibreConnected, onNavigate, onReplayTour }) {
+function renderSection({ activeTab, visible, currentUser, canManageUsers, mercadoLibreConnected, onNavigate, onReplayTour }) {
   switch (activeTab) {
     case "operationToday": return <OperationToday key={currentUser?.workspaceId} currentUser={currentUser} onNavigate={onNavigate} onReplayTour={onReplayTour} />;
     case "upload": return <UploadSection />;
-    case "pickingList": return <PickingList />;
+    case "pickingList": return <PickingList visible={visible} />;
     case "flex":
     case "colecta":
       return <ShippingSection key={`${currentUser?.workspaceId}:${activeTab}`} method={activeTab} currentUser={currentUser} mercadoLibreConnected={mercadoLibreConnected} onNavigate={onNavigate} />;
     case "workspaceSetup": return canManageUsers ? <WorkspaceSetupSection /> : <div>No autorizado</div>;
     case "zoneConfig": return <ZoneConfig />;
-    case "dashboard": return <Dashboard />;
+    case "dashboard": return <Dashboard visible={visible} onNavigate={onNavigate} />;
     case "logisticsFinance": return <LogisticsFinance key="finance" currentUser={currentUser} />;
     case "deliveryControl": return <LogisticsFinance key="delivery" currentUser={currentUser} delivery />;
     case "printJobs": return <PackageHistorySection />;
@@ -80,7 +80,7 @@ export default function AppSectionRenderer(props) {
   return (
     <div key={currentUser?.workspaceId}>
       {visited.map((tab) => (
-        <div key={tab} hidden={tab !== activeTab}>{renderSection({ ...props, activeTab: tab })}</div>
+        <div key={tab} hidden={tab !== activeTab}>{renderSection({ ...props, activeTab: tab, visible: tab === activeTab })}</div>
       ))}
     </div>
   );

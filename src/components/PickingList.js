@@ -7,7 +7,7 @@ import SectionTitle from "./SectionTitle";
 import { getPickingAccessories } from "@/lib/pickingAccessories";
 import { renderPickingPdf } from "@/lib/pickingPdf";
 
-export default function PickingList() {
+export default function PickingList({ visible = true }) {
     const [data, setData] = useState(null);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     const [error, setError] = useState(null);
@@ -16,6 +16,7 @@ export default function PickingList() {
     const exporting = useRef(false);
 
     useEffect(() => {
+        if (!visible) return;
         let timer;
         let stopped = false;
         async function fetchData() {
@@ -41,7 +42,7 @@ export default function PickingList() {
             clearTimeout(timer);
             poll.current?.abort();
         };
-    }, [refresh]);
+    }, [refresh, visible]);
 
     if (!data && !error) {
         return (
