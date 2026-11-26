@@ -208,3 +208,7 @@ Publicado con `npm run deploy:production` a `dpl_2oS1VRZqKp6bX1tJt28Ws3deZCQw` (
 ### Catálogo de Mercado Libre para picking (26/11/2026)
 
 Publicado con `npm run deploy:production` a `dpl_5fxvE82NWwUEE42YZ9oVux9vJaCJ` (código `41ae730`): botón «Catálogo» en Picking con las publicaciones activas y pausadas de cada cuenta, búsqueda por palabras o SKU y texto extra por publicación (también para varias a la vez) que sale en picking y en su PDF. Editan dueños y administradores. La primera descarga carga las fuentes conocidas como texto. Mercado Libre rechaza a veces el pedido de varias publicaciones juntas (403 «Resource deprecated»); en ese caso se leen de a una. Descarga de prueba en solo lectura: 1225 y 1254 publicaciones, unos 28 s por cuenta. Tests (232) aprobados; controles HMAC y dominios aprobados antes y después de promover. Las rutas nuevas responden 401 sin sesión. No se revisó con sesión en producción.
+
+### Catálogo agrupado por SKU (26/11/2026)
+
+Publicado con `npm run deploy:production` a `dpl_6ma85pimzdbqk2ZoJGW5onFjGQFy` (código `5f2a509`): el catálogo muestra un renglón por SKU (las publicaciones repetidas comparten el texto) y filtra activas e inactivas. Los textos se guardan con clave `sku:<SKU>`, o con el número de publicación si no hay SKU; los guardados por publicación en la versión anterior pasan al SKU en la próxima descarga. Tests (234) aprobados; controles HMAC y dominios aprobados. Al publicar, la base de PC MIDI no respondía (timeout a pcmidi.tailef6e62.ts.net), así que no se contó el catálogo real agrupado.
