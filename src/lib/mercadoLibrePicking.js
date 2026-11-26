@@ -62,7 +62,7 @@ export async function listMercadoLibrePickingPackages(client, sellerId, signal) 
                     if (!item.item_id || !Number.isInteger(quantity) || quantity < 1) {
                         throw new Error(`Producto del envío ${shipmentId} inválido`);
                     }
-                    return { key, name: [description, ...variants].join(' · '), sku, color, quantity };
+                    return { key, itemId: String(item.item_id), name: [description, ...variants].join(' · '), sku, color, quantity };
                 });
             if (!products.length) throw new Error(`Sin productos en el envío ${shipmentId}`);
             packages.push({ key: JSON.stringify([String(sellerId), shipmentId]), shippingMethod, products });
@@ -78,7 +78,7 @@ function itemKey(id, variationId) {
 export function groupPickingProducts(packages) {
     const products = new Map();
     for (const shipment of packages) {
-        for (const { key, name, sku, color, quantity } of shipment.products) {
+        for (const { key, itemId, name, sku, color, quantity } of shipment.products) {
             const groupKey = JSON.stringify([name, sku, color, sku ? '' : key, shipment.shippingMethod]);
             if (!products.has(groupKey)) {
                 products.set(groupKey, {
@@ -89,14 +89,16 @@ export function groupPickingProducts(packages) {
                     shipping_method: shipment.shippingMethod,
                     total_quantity: 0,
                     shipments: new Set(),
+                    itemIds: new Set(),
                 });
             }
             const product = products.get(groupKey);
             product.total_quantity += quantity;
             product.shipments.add(shipment.key);
+            if (itemId) product.itemIds.add(itemId);
         }
     }
     return [...products.values()]
-        .map(({ shipments, ...product }) => ({ ...product, shipment_count: shipments.size }))
+        .map(({ shipments, itemIds, ...product }) => ({ ...product, item_ids: [...itemIds], shipment_count: shipments.size }))
         .sort((a, b) => b.total_quantity - a.total_quantity || a.product_name.localeCompare(b.product_name, 'es') || a.key.localeCompare(b.key));
 }

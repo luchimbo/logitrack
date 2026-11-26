@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { api, toast } from "@/lib/api";
 import LoadingButton from "./LoadingButton";
 import SectionTitle from "./SectionTitle";
-import { getPickingAccessories } from "@/lib/pickingAccessories";
+import PickingCatalog from "./PickingCatalog";
 import { renderPickingPdf } from "@/lib/pickingPdf";
 
 export default function PickingList({ visible = true }) {
+    const [showCatalog, setShowCatalog] = useState(false);
     const [data, setData] = useState(null);
     const [isExportingPdf, setIsExportingPdf] = useState(false);
     const [error, setError] = useState(null);
@@ -16,7 +17,7 @@ export default function PickingList({ visible = true }) {
     const exporting = useRef(false);
 
     useEffect(() => {
-        if (!visible) return;
+        if (!visible || showCatalog) return;
         let timer;
         let stopped = false;
         async function fetchData() {
@@ -42,7 +43,9 @@ export default function PickingList({ visible = true }) {
             clearTimeout(timer);
             poll.current?.abort();
         };
-    }, [refresh, visible]);
+    }, [refresh, visible, showCatalog]);
+
+    if (showCatalog) return <PickingCatalog onClose={() => setShowCatalog(false)} />;
 
     if (!data && !error) {
         return (
@@ -112,8 +115,8 @@ export default function PickingList({ visible = true }) {
                         {item.color && <span>{item.color}</span>}
                         <span>{item.shipment_count} envío{item.shipment_count > 1 ? 's' : ''}</span>
                     </div>
-                    {getPickingAccessories(item).map((accessory, index) => (
-                        <div key={index} className="picking-accessory">+ {accessory}</div>
+                    {(item.notes || []).map((note, index) => (
+                        <div key={index} className="picking-accessory">+ {note}</div>
                     ))}
                 </div>
             </div>
@@ -151,6 +154,9 @@ export default function PickingList({ visible = true }) {
                     </p>
                 </div>
                 <div className="picking-actions">
+                    <button type="button" className="btn" disabled={isExportingPdf} onClick={() => setShowCatalog(true)}>
+                        Catálogo
+                    </button>
                     <button type="button" className="btn" disabled={isExportingPdf} onClick={() => setRefresh((value) => value + 1)}>
                         Actualizar
                     </button>

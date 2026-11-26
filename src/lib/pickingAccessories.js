@@ -39,6 +39,8 @@ const RULES = [
 
 // Publicaciones que nombran un modelo pero son un accesorio suyo.
 const ACCESSORY_LISTING = /^(microfono|atril|funda|soporte|cable|merch|remera|gorra)\b/;
+// Las licencias de software llevan el nombre del instrumento pero no se envían con fuente.
+const SOFTWARE_LISTING = /\b(software|licencia|plugin)\b/;
 
 const RULE_BY_SKU = new Map(RULES.flatMap((rule) => rule.skus.map((sku) => [sku, rule])));
 
@@ -60,7 +62,7 @@ function findRule(sku, name) {
     const bySku = RULE_BY_SKU.get(sku.toUpperCase());
     if (bySku) return bySku;
     const normalized = normalize(name);
-    if (ACCESSORY_LISTING.test(normalized)) return null;
+    if (ACCESSORY_LISTING.test(normalized) || SOFTWARE_LISTING.test(normalized)) return null;
     return RULES.find((rule) => rule.name.test(normalized)) || null;
 }
 

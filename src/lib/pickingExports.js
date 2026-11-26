@@ -38,7 +38,7 @@ function readPicking(results, packages) {
     };
 }
 
-async function savePickingExport(db, workspaceId, packages) {
+async function savePickingExport(db, workspaceId, packages, decorate) {
     const transaction = await db.transaction('write');
     try {
         const { lastExport, pending } = readPicking(await transaction.batch(pickingQueries(workspaceId, packages)), packages);
@@ -46,11 +46,12 @@ async function savePickingExport(db, workspaceId, packages) {
 
         const now = new Date();
         const date = getArgentinaDateString(now);
+        const items = await decorate(groupPickingProducts(pending));
         const snapshot = {
             supplemental: lastExport?.date === date,
             generatedAt: formatArgentinaDateTime(now),
             packageCount: pending.length,
-            items: groupPickingProducts(pending),
+            items,
         };
         const inserted = await transaction.execute({
             sql: 'INSERT INTO picking_exports (workspace_id, operation_date, snapshot_json) VALUES (?, ?, ?)',
@@ -81,9 +82,10 @@ export function createPickingExportRepository(db) {
             await ensureSchema();
             return readPicking(await db.batch(pickingQueries(workspaceId, packages), 'read'), packages);
         },
-        async save(workspaceId, packages) {
+        // decorate agrega datos a los productos antes de guardar la copia (por ejemplo, el texto extra).
+        async save(workspaceId, packages, decorate = async (items) => items) {
             await ensureSchema();
-            return savePickingExport(db, workspaceId, packages);
+            return savePickingExport(db, workspaceId, packages, decorate);
         },
     };
 }

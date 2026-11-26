@@ -61,7 +61,8 @@ function layoutItem(pdf, item, width) {
         { style: TITLE, lines: wrap(pdf, item.product_name || "Producto sin nombre", textWidth, TITLE) },
         color && { style: COLOR, lines: wrap(pdf, `Color: ${color}`, colorWidth, COLOR), swatch },
         { style: DETAIL, lines: wrap(pdf, `SKU ${item.sku || "N/A"} · ${envios}`, textWidth, DETAIL) },
-        ...getPickingAccessories(item).map((accessory) => (
+        // Las copias guardadas antes del catálogo no traen `notes`: se usan las reglas de fuentes.
+        ...(item.notes ?? getPickingAccessories(item)).flatMap((note) => String(note).split("\n")).filter(Boolean).map((accessory) => (
             { style: ACCESSORY, lines: wrap(pdf, `+ ${accessory}`, textWidth, ACCESSORY) }
         )),
     ].filter(Boolean);

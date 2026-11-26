@@ -6,9 +6,11 @@ import { listIntegrationConnections } from '@/lib/integrationService';
 import { listMercadoLibreClientTargets } from '@/lib/mercadolibreResolver';
 import { groupPickingProducts, listMercadoLibrePickingPackages } from '@/lib/mercadoLibrePicking';
 import { createPickingExportRepository } from '@/lib/pickingExports';
+import { createPickingCatalogRepository, pickingNotesFor } from '@/lib/pickingCatalog';
 
 export const maxDuration = 120;
 const pickingExports = createPickingExportRepository(db);
+const pickingCatalog = createPickingCatalogRepository(db);
 
 async function picking(request, exportPdf = false) {
     try {
@@ -36,8 +38,13 @@ async function picking(request, exportPdf = false) {
             }
         }
 
+        // Si no se puede leer el texto extra, el picking sale igual con las fuentes conocidas.
+        const decorate = (items) => pickingCatalog.decorate(workspaceId, items).catch((error) => {
+            console.error('Texto extra de picking', error.message);
+            return items.map((item) => ({ ...item, notes: pickingNotesFor(item, new Map()) }));
+        });
         const { lastExport, pending, created = false } = exportPdf && !failedAccounts.length
-            ? await pickingExports.save(workspaceId, packages)
+            ? await pickingExports.save(workspaceId, packages, decorate)
             : await pickingExports.read(workspaceId, packages);
         const status = {
             connectedAccounts: connections.length,
@@ -53,7 +60,7 @@ async function picking(request, exportPdf = false) {
         }
         return NextResponse.json({
             ...status,
-            items: groupPickingProducts(pending),
+            items: await decorate(groupPickingProducts(pending)),
             lastExport,
             created,
         }, options);

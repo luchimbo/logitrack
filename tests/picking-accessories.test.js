@@ -31,6 +31,7 @@ test("no agrega fuente a lo que no está en el listado ni a accesorios", () => {
     assert.deepEqual(get("Placa Interfaz De Audio Arturia Minifuse 2", "ZTO018"), []);
     assert.deepEqual(get("Micrófono Cuello De Cisne Arturia Microfreak Vocoder", "ZTO169"), []);
     assert.deepEqual(get("Atril Para Partituras Arturia Astrolab 61", "ZTO149"), []);
+    assert.deepEqual(get("Software Arturia Minifreak V Licencia Oficial Original", "ZFO051"), []);
 });
 
 test("lista cada producto de un envío combinado", () => {

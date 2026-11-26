@@ -42,10 +42,22 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     return request(`/users/${sellerId}/items/search?${params.toString()}`);
   }
 
+  // Todas las publicaciones de un estado, por tandas de hasta 100 con scroll_id.
+  function scanSellerItems({ sellerId, status = 'active', scrollId = '', limit = 100 } = {}) {
+    const params = new URLSearchParams({ search_type: 'scan', status, limit: String(limit) });
+    if (scrollId) params.set('scroll_id', scrollId);
+    return request(`/users/${sellerId}/items/search?${params.toString()}`);
+  }
+
   // Varias publicaciones por pedido (máximo 20 ids); cada elemento trae {code, body}.
   function getItems(ids = [], attributes = 'id,title,permalink,seller_custom_field,attributes,catalog_product_id') {
     const params = new URLSearchParams({ ids: ids.join(','), attributes });
     return request(`/items?${params.toString()}`);
+  }
+
+  // Una publicación con los atributos de cada variante (ahí está su SKU).
+  function getItem(itemId) {
+    return request(`/items/${encodeURIComponent(itemId)}?include_attributes=all`);
   }
 
   // Opiniones de una publicación (o de su producto de catálogo).
@@ -179,7 +191,9 @@ export function createMercadoLibreClient({ accessToken } = {}) {
     getMe,
     searchOrders,
     searchSellerItems,
+    scanSellerItems,
     getItems,
+    getItem,
     getItemReviews,
     getOrder,
     getShipment,
