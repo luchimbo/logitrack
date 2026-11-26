@@ -73,7 +73,7 @@ export function normalizeSearch(value) {
 export function matchesCatalogSearch(item, query) {
     const words = normalizeSearch(query).split(' ').filter(Boolean);
     if (!words.length) return true;
-    const haystack = normalizeSearch(`${item.title} ${item.skus.join(' ')} ${item.item_id}`);
+    const haystack = normalizeSearch(`${item.title} ${item.skus.join(' ')} ${(item.item_ids || [item.item_id]).join(' ')}`);
     return words.every((word) => haystack.includes(word));
 }
 
@@ -137,13 +137,58 @@ export async function fetchSellerCatalog(client, sellerId, { waits = RETRY_WAITS
     return items;
 }
 
-// Texto que sale en picking para un producto agrupado: lo guardado de sus publicaciones o,
-// si ninguna tiene fila guardada, las reglas de fuentes.
-export function pickingNotesFor(item, notesByItem) {
+// El texto se guarda por producto: publicaciones con el mismo SKU comparten texto. La clave
+// es «sku:<SKU>»; una publicación sin SKU usa su número (MLA…). La columna picking_notes.item_id
+// guarda esa clave (las filas de la primera versión tienen el número de publicación).
+export function productKey(sku, itemId) {
+    const value = String(sku || '').trim().toUpperCase();
+    return value ? `sku:${value}` : String(itemId || '');
+}
+
+const listingKey = (listing) => productKey(listing.skus[0], listing.item_id);
+
+// Junta las publicaciones de un mismo producto. Los productos con alguna publicación activa van primero.
+export function groupCatalogListings(listings, notes = new Map()) {
+    const products = new Map();
+    for (const listing of listings) {
+        const key = listingKey(listing);
+        if (!products.has(key)) products.set(key, []);
+        products.get(key).push(listing);
+    }
+    return [...products].map(([key, group]) => {
+        const ordered = [...group].sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active'));
+        // Texto del producto o, si no tiene, el de alguna publicación (primera versión del catálogo).
+        const legacy = ordered.map((listing) => notes.get(listing.item_id)).find((note) => note != null);
+        const note = notes.has(key) ? notes.get(key) : legacy;
+        return {
+            key,
+            title: ordered[0].title,
+            thumbnail: ordered.find((listing) => listing.thumbnail)?.thumbnail || '',
+            skus: [...new Set(ordered.flatMap((listing) => listing.skus))],
+            item_ids: ordered.map((listing) => listing.item_id),
+            active: ordered.some((listing) => listing.status === 'active'),
+            listings: ordered.map(({ item_id, status, permalink, connection_id }) => ({ item_id, status, permalink, connection_id })),
+            note: note == null ? '' : note,
+            hasSavedNote: note != null,
+            synced_at: ordered.reduce((latest, listing) => (listing.synced_at > latest ? listing.synced_at : latest), ''),
+        };
+    }).sort((a, b) => Number(b.active) - Number(a.active) || a.title.localeCompare(b.title, 'es', { sensitivity: 'base' }));
+}
+
+// Texto que sale en picking para un producto agrupado. Busca por su SKU, por el producto de cada
+// publicación en el catálogo y por la publicación; si nada tiene fila guardada, usa las reglas.
+export function pickingNotesFor(item, notesByKey, keyByItem = new Map()) {
     const ids = item.item_ids || [];
-    const saved = ids.filter((id) => notesByItem.has(id));
-    if (!saved.length) return getPickingAccessories(item);
-    return [...new Set(saved.map((id) => notesByItem.get(id)).filter(Boolean))];
+    const keys = [...new Set([
+        ...(item.sku ? [productKey(item.sku)] : []),
+        ...ids.map((id) => keyByItem.get(id)).filter(Boolean),
+        ...ids,
+    ])];
+    const saved = keys.find((key) => notesByKey.has(key));
+    if (!saved) return getPickingAccessories(item);
+    // La clave más específica gana: un texto quitado del producto no se completa con uno viejo.
+    const note = notesByKey.get(saved);
+    return note ? [note] : [];
 }
 
 export function createPickingCatalogRepository(db) {
@@ -155,43 +200,43 @@ export function createPickingCatalogRepository(db) {
         });
     }
 
-    async function notesByItem(workspaceId, itemIds) {
-        await ensureSchema();
-        const ids = [...new Set(itemIds.map(String))];
-        if (!ids.length) return new Map();
-        const result = await db.execute({
+    async function listings(workspaceId, executor = db) {
+        const result = await executor.execute({
+            sql: 'SELECT connection_id, item_id, title, skus, status, permalink, thumbnail, synced_at FROM meli_catalog_items WHERE workspace_id = ?',
+            args: [workspaceId],
+        });
+        return result.rows.map((row) => ({
+            connection_id: Number(row.connection_id),
+            item_id: String(row.item_id),
+            title: String(row.title || ''),
+            skus: String(row.skus || '').split(' ').filter(Boolean),
+            status: String(row.status || ''),
+            permalink: String(row.permalink || ''),
+            thumbnail: String(row.thumbnail || ''),
+            synced_at: String(row.synced_at || ''),
+        }));
+    }
+
+    async function notesFor(workspaceId, keys, executor = db) {
+        const unique = [...new Set(keys.map(String).filter(Boolean))];
+        if (!unique.length) return new Map();
+        const result = await executor.execute({
             sql: 'SELECT item_id, note FROM picking_notes WHERE workspace_id = ? AND item_id IN (SELECT value FROM json_each(?))',
-            args: [workspaceId, JSON.stringify(ids)],
+            args: [workspaceId, JSON.stringify(unique)],
         });
         return new Map(result.rows.map((row) => [String(row.item_id), String(row.note || '')]));
     }
 
+    const keysOf = (list) => list.flatMap((listing) => [listingKey(listing), listing.item_id]);
+
     return {
         async list(workspaceId) {
             await ensureSchema();
-            const result = await db.execute({
-                sql: `SELECT c.connection_id, c.item_id, c.title, c.skus, c.status, c.permalink, c.thumbnail, c.synced_at,
-                             n.note, n.updated_at AS note_updated_at
-                      FROM meli_catalog_items c
-                      LEFT JOIN picking_notes n ON n.workspace_id = c.workspace_id AND n.item_id = c.item_id
-                      WHERE c.workspace_id = ?
-                      ORDER BY c.status = 'active' DESC, c.title COLLATE NOCASE`,
-                args: [workspaceId],
-            });
-            return result.rows.map((row) => ({
-                connection_id: Number(row.connection_id),
-                item_id: String(row.item_id),
-                title: String(row.title || ''),
-                skus: String(row.skus || '').split(' ').filter(Boolean),
-                status: String(row.status || ''),
-                permalink: String(row.permalink || ''),
-                thumbnail: String(row.thumbnail || ''),
-                synced_at: String(row.synced_at || ''),
-                note: row.note == null ? '' : String(row.note),
-            }));
+            const all = await listings(workspaceId);
+            return groupCatalogListings(all, await notesFor(workspaceId, keysOf(all)));
         },
 
-        // Reemplaza el catálogo de una cuenta y carga las fuentes donde todavía no hay texto.
+        // Reemplaza el catálogo de una cuenta y carga las fuentes donde el producto todavía no tiene texto.
         async replaceConnection(workspaceId, connectionId, items, syncedAt = new Date().toISOString()) {
             await ensureSchema();
             const transaction = await db.transaction('write');
@@ -211,54 +256,64 @@ export function createPickingCatalogRepository(db) {
                     args: [workspaceId, connectionId, syncedAt],
                 });
 
-                const existing = await transaction.execute({
-                    sql: 'SELECT item_id FROM picking_notes WHERE workspace_id = ? AND item_id IN (SELECT value FROM json_each(?))',
-                    args: [workspaceId, JSON.stringify(items.map((item) => item.item_id))],
-                });
-                const withRow = new Set(existing.rows.map((row) => String(row.item_id)));
-                const seeds = items
-                    .filter((item) => !withRow.has(item.item_id))
-                    .map((item) => [item.item_id, getPickingAccessories({ product_name: item.title, sku: item.skus[0] || '' }).join('\n')])
-                    .filter(([, note]) => note);
-                for (let i = 0; i < seeds.length; i += 200) {
-                    await transaction.batch(seeds.slice(i, i + 200).map(([itemId, note]) => ({
-                        sql: "INSERT INTO picking_notes (workspace_id, item_id, note, updated_by) VALUES (?, ?, ?, 'carga inicial de fuentes')",
-                        args: [workspaceId, itemId, note],
+                // Cada producto sin fila propia recibe el texto de alguna de sus publicaciones
+                // (primera versión del catálogo) o, si no hay ninguno, las fuentes conocidas.
+                const products = groupCatalogListings(items, await notesFor(workspaceId, keysOf(items), transaction));
+                const writes = [];
+                let seeded = 0;
+                const existing = await notesFor(workspaceId, products.map((product) => product.key), transaction);
+                for (const product of products) {
+                    if (existing.has(product.key)) continue;
+                    if (product.hasSavedNote) {
+                        writes.push([product.key, product.note, 'primera versión del catálogo']);
+                        continue;
+                    }
+                    const rule = getPickingAccessories({ product_name: product.title, sku: product.skus[0] || '' }).join('\n');
+                    if (!rule) continue;
+                    writes.push([product.key, rule, 'carga inicial de fuentes']);
+                    seeded += 1;
+                }
+                for (let i = 0; i < writes.length; i += 200) {
+                    await transaction.batch(writes.slice(i, i + 200).map(([key, note, by]) => ({
+                        sql: 'INSERT INTO picking_notes (workspace_id, item_id, note, updated_by) VALUES (?, ?, ?, ?) ON CONFLICT(workspace_id, item_id) DO NOTHING',
+                        args: [workspaceId, key, note, by],
                     })));
                 }
                 await transaction.commit();
-                return { items: items.length, seeded: seeds.length };
+                return { items: items.length, products: products.length, seeded };
             } finally {
                 transaction.close();
             }
         },
 
-        // Aplica el mismo texto a varias publicaciones del catálogo del espacio.
-        async setNotes(workspaceId, itemIds, note, updatedBy = '') {
+        // Aplica el mismo texto a varios productos del catálogo del espacio.
+        async setNotes(workspaceId, keys, note, updatedBy = '') {
             await ensureSchema();
-            const ids = [...new Set((itemIds || []).map(String).filter(Boolean))];
-            if (!ids.length) return 0;
-            const known = await db.execute({
-                sql: 'SELECT item_id FROM meli_catalog_items WHERE workspace_id = ? AND item_id IN (SELECT value FROM json_each(?))',
-                args: [workspaceId, JSON.stringify(ids)],
-            });
-            const valid = known.rows.map((row) => String(row.item_id));
-            if (valid.length !== ids.length) throw Object.assign(new Error('Alguna publicación no está en el catálogo'), { status: 400 });
+            const wanted = [...new Set((keys || []).map(String).filter(Boolean))];
+            if (!wanted.length) return 0;
+            const known = new Set((await listings(workspaceId)).map(listingKey));
+            if (wanted.some((key) => !known.has(key))) throw Object.assign(new Error('Algún producto no está en el catálogo'), { status: 400 });
             const text = cleanNote(note);
-            await db.batch(valid.map((itemId) => ({
+            await db.batch(wanted.map((key) => ({
                 sql: `INSERT INTO picking_notes (workspace_id, item_id, note, updated_by, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                       ON CONFLICT(workspace_id, item_id) DO UPDATE SET note = excluded.note, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
-                args: [workspaceId, itemId, text, String(updatedBy || '')],
+                args: [workspaceId, key, text, String(updatedBy || '')],
             })), 'write');
-            return valid.length;
+            return wanted.length;
         },
-
-        notesByItem,
 
         // Agrega `notes` a los productos agrupados del picking.
         async decorate(workspaceId, items) {
-            const map = await notesByItem(workspaceId, items.flatMap((item) => item.item_ids || []));
-            return items.map((item) => ({ ...item, notes: pickingNotesFor(item, map) }));
+            await ensureSchema();
+            const ids = [...new Set(items.flatMap((item) => item.item_ids || []))];
+            const catalog = ids.length ? await db.execute({
+                sql: 'SELECT item_id, skus FROM meli_catalog_items WHERE workspace_id = ? AND item_id IN (SELECT value FROM json_each(?))',
+                args: [workspaceId, JSON.stringify(ids)],
+            }) : { rows: [] };
+            const keyByItem = new Map(catalog.rows.map((row) => [String(row.item_id), productKey(String(row.skus || '').split(' ')[0], row.item_id)]));
+            const keys = [...items.filter((item) => item.sku).map((item) => productKey(item.sku)), ...keyByItem.values(), ...ids];
+            const notes = await notesFor(workspaceId, keys);
+            return items.map((item) => ({ ...item, notes: pickingNotesFor(item, notes, keyByItem) }));
         },
     };
 }

@@ -20,7 +20,10 @@ export async function GET(request) {
         const accounts = Object.fromEntries(connections.map((connection) => [connection.id, connection.displayName]));
         const syncedAt = items.reduce((latest, item) => (item.synced_at > latest ? item.synced_at : latest), '');
         return NextResponse.json({
-            items: items.map((item) => ({ ...item, account: accounts[item.connection_id] || '' })),
+            items: items.map(({ synced_at: _, hasSavedNote: __, ...item }) => ({
+                ...item,
+                accounts: [...new Set(item.listings.map((listing) => accounts[listing.connection_id]).filter(Boolean))],
+            })),
             connectedAccounts: connections.length,
             syncedAt: syncedAt || null,
             canEdit: Boolean(isGlobalAdmin || ['owner', 'admin'].includes(role)),
