@@ -43,7 +43,6 @@ const integrations = [
   ["Tiendanube", "Pedidos por enviar o despachados, productos y datos de envío.", true],
   ["Mercado Libre", "Carga de etiquetas ZPL/TXT, Flex, Colecta y operación diaria de despachos."],
   ["Zipnova", "Envíos, recolecciones, etiquetas disponibles y estados de preparación."],
-  ["Correo Argentino", "Próximamente: creación de envíos, consulta de agencias, tracking y etiquetas."],
   ["Más integraciones", "Estamos sumando nuevos canales y operadores logísticos para centralizar más partes de tu operación."],
 ];
 
@@ -52,7 +51,6 @@ const integrationLogos = [
   ["Mercado Libre", "/LogoMercadoLibre.png"],
   ["Shopify", "/LogoShopify.png"],
   ["Zipnova", "/LogoZipnova.png"],
-  ["Correo Argentino", "/LogoCorreoArgentino.jpg"],
 ];
 
 const tiendanubeAppId = process.env.NEXT_PUBLIC_TIENDANUBE_APP_ID || process.env.TIENDANUBE_APP_ID || "{APP_ID}";
