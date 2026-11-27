@@ -7,6 +7,7 @@ import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 import { bumpFlexPortalRevision } from '@/lib/flexPortal';
 import { logAudit } from '@/lib/audit';
+import { CSV_MAX_ROWS, SHIPMENT_CSV_COLUMNS, csvFileName, csvResponse } from '@/lib/csvExport';
 
 function auditShipments(actor, action, entityId, metadata) {
     return logAudit({
@@ -50,6 +51,7 @@ export async function GET(request) {
         // view=dashboard: columnas livianas (sin raw_zpl) y paginado, para que
         // "Año" o "Todo" no traigan el historial completo en una sola respuesta.
         const dashboardView = searchParams.get('view') === 'dashboard';
+        const csvExport = searchParams.get('format') === 'csv';
         const limit = Math.min(Math.max(Number.parseInt(searchParams.get('limit') || '', 10) || 0, 0), 1000);
         const offset = Math.max(Number.parseInt(searchParams.get('offset') || '', 10) || 0, 0);
 
@@ -63,7 +65,11 @@ export async function GET(request) {
             mo.logistic_type AS ml_logistic_type, mo.shipping_method AS ml_shipping_method, mo.lead_time_json AS ml_lead_time_json,
             mo.delays_json AS ml_delays_json, mo.carrier_json AS ml_carrier_json, mo.history_json AS ml_history_json,
             mo.label_imported_at AS ml_label_imported_at, mo.shipment_row_id AS ml_shipment_row_id`;
-        const selectCols = dashboardView
+        const selectCols = csvExport
+            ? `s.id, s.created_at, s.dispatch_date, s.shipping_method, s.status, s.assigned_carrier, s.carrier_name,
+               s.tracking_number, s.sale_id, s.product_name, s.sku, s.quantity, s.recipient_name, s.address,
+               s.postal_code, s.city, s.partido, s.province, s.external_provider`
+            : dashboardView
             ? `s.id, s.product_name, s.recipient_name, s.city, s.province, s.shipping_method, s.status,
                s.external_provider, s.external_shipment_id, s.dispatch_date,
                (s.raw_zpl IS NOT NULL AND s.raw_zpl != '') AS has_label`
@@ -106,6 +112,10 @@ export async function GET(request) {
         }
 
         sql += ` ORDER BY ${orderBy} DESC`;
+        if (csvExport) {
+            const result = await db.execute({ sql: `${sql} LIMIT ?`, args: [...args, CSV_MAX_ROWS] });
+            return csvResponse(result.rows || [], SHIPMENT_CSV_COLUMNS, csvFileName(`envios-${period || 'todos'}`));
+        }
         if (limit) {
             sql += ' LIMIT ? OFFSET ?';
             args.push(limit, offset);

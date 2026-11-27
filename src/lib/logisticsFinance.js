@@ -405,11 +405,6 @@ export function settlementDetailCsv(items, adjustments = [], accounts = {}) {
   ];
   return csv(rows, ['Fecha entrega', 'Despacho', 'Número de envío', 'Venta ML', 'Cuenta', 'Destinatario', 'Partido', 'Zona', 'Precio', 'Estado'].map((name, i) => [name, i]));
 }
-export function csv(rows, columns) {
-  const cell = (value) => {
-    let text = String(value ?? '');
-    if (/^[=+\-@\t\r]/.test(text) && !/^-\d+(,\d+)?$/.test(text)) text = `'${text}`;
-    return `"${text.replaceAll('"', '""')}"`;
-  };
-  return '\uFEFF' + [columns.map(([name]) => cell(name)).join(';'), ...rows.map((r) => columns.map(([, key]) => cell(typeof key === 'function' ? key(r) : r[key])).join(';'))].join('\r\n');
-}
+import { csv } from './csvExport.js';
+
+export { csv };

@@ -11,6 +11,7 @@ import {
   getPackageHistoryLimit,
   packageHistorySummaryFromRow,
 } from "@/lib/packageHistory";
+import { CSV_MAX_ROWS, PACKAGE_HISTORY_CSV_COLUMNS, csvFileName, csvResponse } from "@/lib/csvExport";
 
 const SUMMARY_COLUMNS = `
   s.id, s.product_name, s.sku, s.tracking_number, s.sale_id,
@@ -28,6 +29,15 @@ export async function GET(request) {
       workspaceId: authResult.actor.workspaceId,
       query: searchParams.get("q"),
     });
+    if (searchParams.get("format") === "csv") {
+      const rankSql = buildExactMatchRankSql(filters.normalizedQuery);
+      const result = await db.execute({
+        sql: `SELECT ${SUMMARY_COLUMNS}, ${rankSql} AS match_rank FROM shipments s WHERE ${filters.whereSql}
+              ORDER BY match_rank ASC, s.id DESC LIMIT ?`,
+        args: [...exactMatchRankArgs(filters.normalizedQuery), ...filters.args, CSV_MAX_ROWS],
+      });
+      return csvResponse(result.rows || [], PACKAGE_HISTORY_CSV_COLUMNS, csvFileName("historial-paquetes"));
+    }
     const limit = getPackageHistoryLimit(searchParams.get("limit"));
     const cursor = decodePackageHistoryCursor(searchParams.get("before"));
     const rankSql = buildExactMatchRankSql(filters.normalizedQuery);

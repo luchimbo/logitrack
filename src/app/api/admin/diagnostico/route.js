@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireGlobalAdmin } from '@/lib/auth';
+import { primaryGlobalAdminEmail } from '@/lib/adminEmails';
 
 async function exec(sql, args = []) {
     return db.execute({ sql, args });
@@ -31,7 +32,8 @@ export async function GET(request) {
 
         // camilopcmidi memberships
         const camiloUser = await exec(
-            "SELECT id, email FROM app_users WHERE lower(email) = lower('camilopcmidi@gmail.com') LIMIT 1"
+            "SELECT id, email FROM app_users WHERE lower(email) = lower(?) LIMIT 1",
+            [primaryGlobalAdminEmail()]
         );
         let camiloMemberships = { rows: [] };
         if (camiloUser.rows.length) {

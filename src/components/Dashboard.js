@@ -651,6 +651,9 @@ function ShipmentDashboard() {
                                 <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                                     {selectedVisibleCount > 0 ? `${selectedVisibleCount} seleccionados en esta vista` : 'Seleccioná etiquetas para descargar varias'}
                                 </span>
+                                <a className="btn btn-ghost btn-sm" href={`/api/shipments?${getQueryString()}${shipmentFilter !== 'all' ? `&shipping_method=${shipmentFilter}` : ''}&format=csv`} download>
+                                    Exportar CSV
+                                </a>
                                 <button className="btn btn-ghost btn-sm" onClick={toggleSelectVisible} disabled={!filteredShipments.length}>
                                     {allVisibleSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
                                 </button>

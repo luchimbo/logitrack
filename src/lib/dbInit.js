@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { db, hasDbCredentials } from "./db";
 import { FINANCE_SCHEMA } from "./financeSchema";
+import { primaryGlobalAdminEmail } from "./adminEmails";
 
 let _initialized = false;
 
@@ -888,14 +889,14 @@ export async function initDb() {
     "INSERT INTO workspaces (name, slug) SELECT 'GeoModi', 'legacy' WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE slug = 'legacy')",
     "UPDATE workspaces SET name = 'GeoModi' WHERE slug = 'legacy'",
     "INSERT OR IGNORE INTO workspace_settings (workspace_id, printing_setup_completed) SELECT id, 0 FROM workspaces WHERE slug = 'legacy'",
-    { sql: "UPDATE app_users SET is_global_admin = 1 WHERE lower(email) = lower(?)", args: ["camilopcmidi@gmail.com"] },
+    { sql: "UPDATE app_users SET is_global_admin = 1 WHERE lower(email) = lower(?)", args: [primaryGlobalAdminEmail()] },
     {
       sql: `INSERT INTO workspace_members (workspace_id, app_user_id, role)
             SELECT w.id, u.id, 'owner' FROM workspaces w, app_users u
             WHERE w.slug = 'legacy' AND lower(u.email) = lower(?)
             ORDER BY u.id LIMIT 1
             ON CONFLICT(workspace_id, app_user_id) DO UPDATE SET role = 'owner'`,
-      args: ["camilopcmidi@gmail.com"],
+      args: [primaryGlobalAdminEmail()],
     },
     ...["shipments", "daily_batches", "zone_mappings", "carriers", "print_jobs", "print_job_items", "zipnova_shipments"]
       .map((tableName) => `UPDATE ${tableName} SET workspace_id = ${legacy} WHERE workspace_id IS NULL`),

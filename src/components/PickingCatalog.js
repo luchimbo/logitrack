@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, toast } from "@/lib/api";
 import { formatArgentinaDateTime } from "@/lib/dateUtils";
 import { matchesCatalogSearch } from "@/lib/pickingCatalog";
+import { PICKING_CATALOG_CSV_COLUMNS, csvFileName, downloadCsv } from "@/lib/csvExport";
 import LoadingButton from "./LoadingButton";
 import SectionTitle from "./SectionTitle";
 
@@ -59,6 +60,8 @@ export default function PickingCatalog({ onClose }) {
     const [draft, setDraft] = useState("");
     const [syncing, setSyncing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const mounted = useRef(true);
+    useEffect(() => () => { mounted.current = false; }, []);
 
     const load = async () => {
         try {
@@ -107,23 +110,53 @@ export default function PickingCatalog({ onClose }) {
         return next;
     });
 
-    const sync = async () => {
+    // La descarga corre en el servidor; acá solo se espera su resultado.
+    const waitForSync = async (job) => {
+        let current = job;
+        while (mounted.current && current?.status === "running") {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            if (!mounted.current) return null;
+            current = (await api("/picking-catalog/sync")).job;
+        }
+        return current;
+    };
+    const reportSync = (job) => {
+        if (!job) return;
+        if (job.status === "error") { toast(job.error || "No pudimos actualizar el catálogo. Volvé a intentar.", "error"); return; }
+        const { accounts = [], failedAccounts = [] } = job.result || {};
+        const seeded = accounts.reduce((sum, account) => sum + (account.seeded || 0), 0);
+        if (failedAccounts.length) {
+            toast(`No pudimos leer ${failedAccounts.join(", ")}. Volvé a intentar.`, "error");
+        } else {
+            toast(`Catálogo actualizado${seeded ? `: ${plural(seeded, "producto", "productos")} con fuente cargada` : ""}.`, "success");
+        }
+    };
+    const followSync = async (job) => {
         setSyncing(true);
         try {
-            const result = await api("/picking-catalog/sync", { method: "POST" });
-            const seeded = result.accounts.reduce((sum, account) => sum + account.seeded, 0);
-            if (result.failedAccounts.length) {
-                toast(`No pudimos leer ${result.failedAccounts.join(", ")}. Volvé a intentar.`, "error");
-            } else {
-                toast(`Catálogo actualizado${seeded ? `: ${plural(seeded, "producto", "productos")} con fuente cargada` : ""}.`, "success");
-            }
+            const finished = await waitForSync(job);
+            if (!mounted.current) return;
+            reportSync(finished);
             await load();
         } catch (err) {
             toast(err.message, "error");
         } finally {
-            setSyncing(false);
+            if (mounted.current) setSyncing(false);
         }
     };
+    const sync = async () => {
+        try {
+            const { job } = await api("/picking-catalog/sync", { method: "POST" });
+            await followSync(job);
+        } catch (err) {
+            toast(err.message, "error");
+        }
+    };
+    // Si se volvió a la pantalla con una descarga en curso, seguir esperándola.
+    useEffect(() => {
+        api("/picking-catalog/sync").then(({ job }) => { if (job?.status === "running") followSync(job); }).catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const save = async (note) => {
         const keys = [...selected];
@@ -160,6 +193,9 @@ export default function PickingCatalog({ onClose }) {
                 </div>
                 <div className="picking-actions">
                     <button type="button" className="btn" onClick={onClose}>Volver a picking</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => downloadCsv(visibleItems, PICKING_CATALOG_CSV_COLUMNS, csvFileName('catalogo-picking'))} disabled={!visibleItems.length}>
+                        Exportar CSV
+                    </button>
                     {canEdit && (
                         <LoadingButton isLoading={syncing} spinnerSize="md" className="btn btn-primary" onClick={sync} disabled={!data?.connectedAccounts}>
                             Actualizar catálogo

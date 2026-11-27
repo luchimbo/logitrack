@@ -8,6 +8,7 @@ import TiendanubeOrderCard from "@/components/tiendanube/TiendanubeOrderCard";
 import TiendanubeOrderDetails from "@/components/tiendanube/TiendanubeOrderDetails";
 import MobileSelectionBar from "@/components/MobileSelectionBar";
 import { useTiendanubeOrders } from "@/hooks/useTiendanubeOrders";
+import { TIENDANUBE_ORDER_CSV_COLUMNS, csvFileName, downloadCsv } from "@/lib/csvExport";
 import SectionTitle from "./SectionTitle";
 import {
   badgeStyle,
@@ -310,6 +311,9 @@ export default function TiendanubeSection({ currentUser }) {
                   />
                   <button type="button" className="btn btn-ghost" onClick={handleSearchSubmit} disabled={loading || syncing}>
                     Buscar
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => downloadCsv(orderedOrders, TIENDANUBE_ORDER_CSV_COLUMNS, csvFileName('pedidos-tiendanube'))} disabled={!orderedOrders.length}>
+                    Exportar CSV
                   </button>
                 </div>
               </div>

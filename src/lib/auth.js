@@ -3,8 +3,8 @@ import { jwtVerify } from "jose";
 import { db } from "@/lib/db";
 import { ensureDb } from "@/lib/ensureDb";
 import { logAudit } from "@/lib/audit";
+import { globalAdminEmails } from "@/lib/adminEmails";
 
-const DEFAULT_GLOBAL_ADMIN_EMAIL = "camilopcmidi@gmail.com";
 
 function getJwtSecret() {
   const secret = String(process.env.JWT_SECRET || "").trim();
@@ -30,11 +30,7 @@ function shouldRefreshLastSeen(value) {
 }
 
 function getGlobalAdminEmails() {
-  const configured = String(process.env.CLERK_GLOBAL_ADMIN_EMAILS || DEFAULT_GLOBAL_ADMIN_EMAIL)
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  return new Set(configured.length ? configured : [DEFAULT_GLOBAL_ADMIN_EMAIL]);
+  return new Set(globalAdminEmails());
 }
 
 function isGlobalAdminEmail(email) {

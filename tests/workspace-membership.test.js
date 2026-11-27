@@ -86,7 +86,8 @@ test('existing session resolves new workspace immediately in fast and refreshed 
       .replace('import { jwtVerify } from "jose";', 'const jwtVerify = async () => { throw Error("unused"); };')
       .replace('import { db } from "@/lib/db";', `const db = globalThis.${key};`)
       .replace('import { ensureDb } from "@/lib/ensureDb";', 'const ensureDb = async () => {};')
-      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};');
+      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};')
+      .replace('import { globalAdminEmails } from "@/lib/adminEmails";', `import { globalAdminEmails } from "${new URL('../src/lib/adminEmails.js', import.meta.url).href}";`);
     const { getCurrentActor } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const request = { cookies: { get: () => undefined } };
     assert.equal((await getCurrentActor(request)).workspaceId, 2);
@@ -110,7 +111,8 @@ test('first sign-in links an assigned pending identity without creating another 
       .replace('import { jwtVerify } from "jose";', 'const jwtVerify = async () => { throw Error("unused"); };')
       .replace('import { db } from "@/lib/db";', 'const db = globalThis.__pendingMembershipAuthTest;')
       .replace('import { ensureDb } from "@/lib/ensureDb";', 'const ensureDb = async () => {};')
-      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};');
+      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};')
+      .replace('import { globalAdminEmails } from "@/lib/adminEmails";', `import { globalAdminEmails } from "${new URL('../src/lib/adminEmails.js', import.meta.url).href}";`);
     const { getCurrentActor } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const resolved = await getCurrentActor({ cookies: { get: () => undefined } });
     assert.equal(resolved.workspaceId, 1);
@@ -155,7 +157,8 @@ test('una sesión existente pierde acceso al espacio en la siguiente solicitud',
       .replace('import { jwtVerify } from "jose";', 'const jwtVerify = async () => { throw Error("unused"); };')
       .replace('import { db } from "@/lib/db";', 'const db = globalThis.__removedMemberDb;')
       .replace('import { ensureDb } from "@/lib/ensureDb";', 'const ensureDb = async () => {};')
-      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};');
+      .replace('import { logAudit } from "@/lib/audit";', 'const logAudit = async () => {};')
+      .replace('import { globalAdminEmails } from "@/lib/adminEmails";', `import { globalAdminEmails } from "${new URL('../src/lib/adminEmails.js', import.meta.url).href}";`);
     const {getCurrentActor}=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const request={cookies:{get:()=>undefined}};
     assert.equal((await getCurrentActor(request)).workspaceId,1);
