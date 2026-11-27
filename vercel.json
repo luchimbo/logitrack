@@ -8,6 +8,14 @@
     {
       "path": "/api/cron/mercadolibre-upkeep",
       "schedule": "20 11 * * *"
+    },
+    {
+      "path": "/api/cron/mercadolibre-catchup",
+      "schedule": "40 * * * *"
+    },
+    {
+      "path": "/api/cron/tiendanube-sync",
+      "schedule": "50 * * * *"
     }
   ]
 }

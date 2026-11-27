@@ -6,6 +6,20 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
 import { deriveMercadoLibreLogistics } from '@/lib/mercadolibreLogistics';
 import { bumpFlexPortalRevision } from '@/lib/flexPortal';
+import { logAudit } from '@/lib/audit';
+
+function auditShipments(actor, action, entityId, metadata) {
+    return logAudit({
+        workspaceId: actor.workspaceId,
+        appUserId: actor.appUserId,
+        actorType: actor.authType,
+        actorLabel: actor.email || actor.username,
+        action,
+        entityType: 'shipment',
+        entityId,
+        metadata,
+    });
+}
 
 function parseJson(value, fallback) {
     try {
@@ -168,6 +182,11 @@ export async function PATCH(request) {
             if (flex.rows[0]?.shipping_method === "flex") await bumpFlexPortalRevision(db, workspaceId);
         }
 
+        await auditShipments(authResult.actor, 'update_shipment', id, {
+            ...(status ? { status } : {}),
+            ...(assigned_carrier !== null ? { assigned_carrier: assigned_carrier || null } : {}),
+        });
+
         return NextResponse.json({ success: true, id, status, assigned_carrier });
     } catch (error) {
         console.error("Error updating shipment:", error);
@@ -205,15 +224,18 @@ export async function DELETE(request) {
                 args: [workspaceId, workspaceId, range.from, range.to]
             });
         } else {
-            selected = await db.execute({
-                sql: "SELECT id FROM shipments WHERE workspace_id = ?",
-                args: [workspaceId],
-            });
+            // Sin lote ni período no se borra nada: antes esto vaciaba todos los envíos del espacio.
+            return NextResponse.json({ error: "Indicá un lote o un período para borrar envíos" }, { status: 400 });
         }
 
         const result = await deleteShipmentsByIds({
             workspaceId,
             ids: (selected?.rows || []).map((row) => row.id),
+        });
+
+        await auditShipments(authResult.actor, 'delete_shipments', batch_id || period, {
+            ...(batch_id ? { batch_id } : { period, date: specificDate, from: fromDate, to: toDate }),
+            deleted: result.deleted,
         });
 
         return NextResponse.json({ success: true, deleted: result.deleted });

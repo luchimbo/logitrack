@@ -18,6 +18,8 @@ const TIENDANUBE_ORDER_WEBHOOK_EVENTS = [
   'order/voided',
   'order/unpacked',
   'fulfillment_order/status_updated',
+  // Marca la conexión para reconectar en vez de dejarla "conectada" sin acceso.
+  'app/uninstalled',
 ];
 
 async function popOauthSession(storeId, retries = 5) {

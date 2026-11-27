@@ -18,6 +18,11 @@ export default function OperationToday({ currentUser, onNavigate, onReplayTour }
   const [manualUpdating, setManualUpdating] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(() => operationCache?.updatedAt || null);
+  const [syncHealth, setSyncHealth] = useState([]);
+  const loadSyncHealth = useCallback(() => {
+    api("/sync-health").then((result) => setSyncHealth(Array.isArray(result?.connections) ? result.connections : [])).catch(() => {});
+  }, []);
+  useEffect(() => { loadSyncHealth(); }, [loadSyncHealth, cacheKey]);
 
   const hydrate = useCallback((snapshot) => {
     setSources(snapshot.sources); setLastUpdated(snapshot.updatedAt);
@@ -91,6 +96,7 @@ export default function OperationToday({ currentUser, onNavigate, onReplayTour }
       </button>
     </header>
     {error ? <div className="operation-alert critical" role="alert"><strong>No pudimos cargar el tablero.</strong><span>{error}</span></div> : null}
+    <SyncHealthAlerts connections={syncHealth} onConnect={() => onNavigate("integrations")} />
     <section className="operation-method-grid" aria-labelledby="operation-packing-title">
       <MethodCard title="Flex" tone="flex" total={metrics.flex} pending={mlPending} accounts={breakdown.flex} onOpen={() => onNavigate("flex")} onConnect={() => onNavigate("integrations")} onRetry={mlFailed ? load : null} />
       <MethodCard title="Total Colecta" tone="colecta" total={metrics.colecta} pending={mlPending} accounts={breakdown.colecta} onOpen={() => onNavigate("colecta")} onConnect={() => onNavigate("integrations")} onRetry={mlFailed ? load : null} />
@@ -100,6 +106,27 @@ export default function OperationToday({ currentUser, onNavigate, onReplayTour }
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate("logisticsFinance")}>Ventas y costos</button>
     </nav>
   </div>;
+}
+
+// Solo se muestran problemas: una cuenta sin corridas todavía (recién conectada) no alarma.
+const SYNC_ALERT_LABELS = { needs_reauth: "Reconectar", failing: "Sincronización", stale: "Sincronización", warning: "Aviso" };
+export function syncHealthAlerts(connections = []) {
+  return connections.filter((item) => SYNC_ALERT_LABELS[item?.status]);
+}
+function SyncHealthAlerts({ connections, onConnect }) {
+  const alerts = syncHealthAlerts(connections);
+  if (!alerts.length) return null;
+  return <section className="operation-alerts" aria-label="Estado de la sincronización">
+    {alerts.map((item) => {
+      const critical = item.status === "needs_reauth" || item.status === "failing" || item.status === "stale";
+      const lastOk = item.lastOkAt ? ` Última sincronización correcta: ${formatArgentinaDateTime(new Date(item.lastOkAt))}.` : "";
+      return <div key={item.connectionId} className={`operation-alert ${critical ? "critical" : "attention"}`} role={critical ? "alert" : "status"}>
+        <span>{SYNC_ALERT_LABELS[item.status]}</span>
+        <p><strong>{item.displayName}</strong>: {item.message}{lastOk}{item.lastError && item.status !== "needs_reauth" ? ` Detalle: ${item.lastError}` : ""}</p>
+        {item.status === "needs_reauth" ? <button type="button" className="btn btn-primary btn-sm" onClick={onConnect}>Ir a Canales</button> : null}
+      </div>;
+    })}
+  </section>;
 }
 
 // Vista mínima: un número por tipo. Doble click (o Enter) abre el detalle por cuenta.

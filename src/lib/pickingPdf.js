@@ -122,6 +122,7 @@ export function renderPickingPdf(pdf, { items, generatedAt, supplemental = false
     const units = (list) => list.reduce((sum, item) => sum + item.total_quantity, 0);
     const colecta = items.filter((item) => item.shipping_method === "colecta");
     const flex = items.filter((item) => item.shipping_method === "flex");
+    const tiendanube = items.filter((item) => item.shipping_method === "tiendanube");
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(15);
@@ -138,12 +139,13 @@ export function renderPickingPdf(pdf, { items, generatedAt, supplemental = false
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(9);
     pdf.setTextColor(20, 24, 35);
-    pdf.text(`Productos: ${items.length}   ·   Unidades: ${units(items)}   ·   Colecta: ${colecta.length}/${units(colecta)}   ·   Flex: ${flex.length}/${units(flex)}`, MARGIN, y);
+    pdf.text(`Productos: ${items.length}   ·   Unidades: ${units(items)}   ·   Colecta: ${colecta.length}/${units(colecta)}   ·   Flex: ${flex.length}/${units(flex)}${tiendanube.length ? `   ·   Tiendanube: ${tiendanube.length}/${units(tiendanube)}` : ""}`, MARGIN, y);
     y += 4;
 
     const sections = [
         { title: "Colecta", list: colecta, fill: [245, 158, 11] },
         { title: "Flex", list: flex, fill: [99, 102, 241] },
+        { title: "Tiendanube", list: tiendanube, fill: [37, 99, 235] },
     ];
 
     for (const { title, list, fill } of sections) {

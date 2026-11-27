@@ -672,6 +672,9 @@ export async function initDb() {
     await addColumnIfMissing("tiendanube_orders", "dispatch_marked_by", "TEXT");
     await addColumnIfMissing("tiendanube_orders", "integration_connection_id", "INTEGER");
     await addColumnIfMissing("tiendanube_orders", "external_store_id", "TEXT");
+    // Mercado Libre rechazó el refresh del token (invalid_grant): hay que reconectar la cuenta.
+    await addColumnIfMissing("workspace_integration_connections", "auth_error", "TEXT");
+    await addColumnIfMissing("workspace_integration_connections", "auth_error_at", "DATETIME");
     await addColumnIfMissing("shipments", "external_provider", "TEXT");
     await addColumnIfMissing("shipments", "external_order_id", "TEXT");
     await addColumnIfMissing("shipments", "external_shipment_id", "TEXT");

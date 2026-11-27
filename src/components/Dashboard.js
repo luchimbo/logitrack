@@ -75,6 +75,7 @@ function DashboardPickingSummary({ visible, onOpen }) {
                         <div><dt>Paquetes</dt><dd>{summary.totalPackages}</dd></div>
                         <div><dt>Colecta</dt><dd>{summary.byMethod.colecta}</dd></div>
                         <div><dt>Flex</dt><dd>{summary.byMethod.flex}</dd></div>
+                        {summary.byMethod.tiendanube ? <div><dt>Tiendanube</dt><dd>{summary.byMethod.tiendanube}</dd></div> : null}
                         <div><dt>{summary.supplemental ? "Para PDF adicional" : "Por exportar"}</dt><dd>{summary.packageCount}</dd></div>
                     </dl>
                 )}

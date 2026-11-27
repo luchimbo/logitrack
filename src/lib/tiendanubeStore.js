@@ -191,7 +191,9 @@ export async function upsertTiendanubeOrder(workspaceId, order, { connectionId =
   });
 }
 
-export async function syncTiendanubeOrders({ workspaceId, client, status = '', paymentStatus = '', q = '', connectionId = null, externalStoreId = '' } = {}) {
+// stats.capped queda en true si se cortó por maxPages con más páginas pendientes: antes ese
+// corte (500 pedidos) era silencioso. updatedAtMin permite el barrido incremental del cron.
+export async function syncTiendanubeOrders({ workspaceId, client, status = '', paymentStatus = '', q = '', connectionId = null, externalStoreId = '', updatedAtMin = '', maxPages = 10, stats = {} } = {}) {
   await ensureDb();
   if (!client) throw new Error('Cliente de Tiendanube no disponible');
 
@@ -199,9 +201,11 @@ export async function syncTiendanubeOrders({ workspaceId, client, status = '', p
   const perPage = 50;
   let hasMore = true;
   let totalSynced = 0;
+  stats.capped = false;
 
-  while (hasMore && page <= 10) {
-    const orders = await client.listOrders({ page, perPage, status, paymentStatus, q });
+  while (hasMore) {
+    if (page > maxPages) { stats.capped = true; break; }
+    const orders = await client.listOrders({ page, perPage, status, paymentStatus, q, updatedAtMin });
     const items = Array.isArray(orders) ? orders : [];
     if (items.length === 0) {
       hasMore = false;
@@ -335,4 +339,72 @@ export async function updateTiendanubeDispatchStatus({ workspaceId, ids = [], di
   });
 
   return { updated: Number(result.rowsAffected || 0) };
+}
+
+// Filas de una tienda: por external_store_id, o por conexiones (activas o no) de esa tienda
+// para pedidos viejos guardados antes de registrar external_store_id.
+const TIENDANUBE_STORE_ROWS = `(external_store_id = ? OR integration_connection_id IN (
+  SELECT id FROM workspace_integration_connections WHERE provider = 'tiendanube' AND external_store_id = ?
+))`;
+
+// store/redact: Tiendanube lo envía 48 h después de desinstalar la app.
+export async function redactTiendanubeStoreOrders({ storeId }) {
+  await ensureDb();
+  const id = String(storeId || '').trim();
+  if (!id) return { deleted: 0 };
+  const result = await db.execute({
+    sql: `DELETE FROM tiendanube_orders WHERE ${TIENDANUBE_STORE_ROWS}`,
+    args: [id, id],
+  });
+  return { deleted: Number(result.rowsAffected || 0) };
+}
+
+// customers/redact: se anonimiza en lugar de borrar para no alterar totales ni historial.
+export async function redactTiendanubeCustomerOrders({ storeId, orderIds = [], email = '' }) {
+  await ensureDb();
+  const id = String(storeId || '').trim();
+  const ids = orderIds.map(String).filter(Boolean);
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!id || (!ids.length && !normalizedEmail)) return { anonymized: 0 };
+
+  const matchers = [];
+  const args = [];
+  if (ids.length) {
+    matchers.push(`CAST(tiendanube_id AS TEXT) IN (${ids.map(() => '?').join(', ')})`);
+    args.push(...ids);
+  }
+  if (normalizedEmail) {
+    matchers.push('LOWER(TRIM(contact_email)) = ?');
+    args.push(normalizedEmail);
+  }
+
+  const result = await db.execute({
+    sql: `UPDATE tiendanube_orders
+          SET contact_name = NULL, contact_email = NULL, contact_phone = NULL, shipping_address_json = NULL
+          WHERE ${TIENDANUBE_STORE_ROWS} AND (${matchers.join(' OR ')})`,
+    args: [id, id, ...args],
+  });
+  return { anonymized: Number(result.rowsAffected || 0) };
+}
+
+// Picking: pagados, abiertos, marcados "por enviar", con envío a domicilio y sin despachar.
+export async function listTiendanubePickingRows({ workspaceId }) {
+  await ensureDb();
+  const conditions = [
+    'workspace_id = ?',
+    `COALESCE(TRIM(shipping_address_json), '') NOT IN ('', '{}', 'null')`,
+    `LOWER(COALESCE(status, '')) IN ('open', '')`,
+    `LOWER(COALESCE(payment_status, '')) = 'paid'`,
+    `COALESCE(dispatch_status, 'to_send') = 'to_send'`,
+    `LOWER(COALESCE(shipping_status, '')) NOT IN ('shipped', 'delivered')`,
+  ];
+  for (const word of [...TIENDANUBE_PICKUP_WORDS, 'digital']) {
+    conditions.push(`LOWER(COALESCE(shipping_method, '') || ' ' || COALESCE(shipping_carrier, '')) NOT LIKE '%${word}%'`);
+  }
+  const result = await db.execute({
+    sql: `SELECT tiendanube_id, external_store_id, number, products_json FROM tiendanube_orders
+          WHERE ${conditions.join(' AND ')} ORDER BY created_at_external ASC LIMIT 1000`,
+    args: [workspaceId],
+  });
+  return result.rows;
 }

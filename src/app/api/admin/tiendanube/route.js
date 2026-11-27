@@ -3,6 +3,8 @@ import { requireWorkspaceActor } from '@/lib/auth';
 import { listTiendanubeClientTargets } from '@/lib/tiendanubeResolver';
 import { getTiendanubeSyncMeta, listStoredTiendanubeOrders, syncTiendanubeOrders } from '@/lib/tiendanubeStore';
 
+const LIST_LIMIT = 500;
+
 export async function GET(request) {
   try {
     const authResult = await requireWorkspaceActor(request);
@@ -24,8 +26,11 @@ export async function GET(request) {
       try {
         const targets = await listTiendanubeClientTargets(workspaceId, { connectionId });
         if (!targets.length) throw new Error('Tiendanube no está conectado para este workspace');
+        const capped = [];
         for (const target of targets) {
+          const stats = {};
           await syncTiendanubeOrders({
+            stats,
             workspaceId,
             client: target.client,
             status,
@@ -34,14 +39,17 @@ export async function GET(request) {
             connectionId: target.connectionId,
             externalStoreId: target.externalStoreId,
           });
+          if (stats.capped) capped.push(target.externalStoreId);
         }
         didSync = true;
+        if (capped.length) warning = 'Se actualizaron los 500 pedidos más recientes; el resto lo completa la sincronización automática.';
       } catch (error) {
         warning = error.message || 'No se pudo sincronizar Tiendanube en vivo';
       }
     }
 
-    const orders = await listStoredTiendanubeOrders({ workspaceId, status, paymentStatus, q, connectionId });
+    const orders = await listStoredTiendanubeOrders({ workspaceId, status, paymentStatus, q, connectionId, limit: LIST_LIMIT });
+    if (orders.length >= LIST_LIMIT && !warning) warning = `Se muestran los ${LIST_LIMIT} pedidos más recientes. Usá la búsqueda para encontrar otros.`;
     const updatedSyncMeta = await getTiendanubeSyncMeta({ workspaceId, connectionId });
     return NextResponse.json({
       orders,

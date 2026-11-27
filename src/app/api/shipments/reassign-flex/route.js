@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { assignCarrier } from '@/lib/zoneMapper';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(request) {
     try {
@@ -37,6 +38,20 @@ export async function POST(request) {
                 });
                 updatedCount++;
             }
+        }
+
+        if (updatedCount) {
+            const { actor } = authResult;
+            await logAudit({
+                workspaceId,
+                appUserId: actor.appUserId,
+                actorType: actor.authType,
+                actorLabel: actor.email || actor.username,
+                action: 'reassign_flex_carriers',
+                entityType: 'shipment_batch',
+                entityId: batch_id || null,
+                metadata: { batch_id: batch_id || null, updated: updatedCount, total_checked: shipments.length },
+            });
         }
 
         return NextResponse.json({ updated: updatedCount, total_checked: shipments.length });

@@ -98,7 +98,10 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
               try {
                 await syncOrder({ workspaceId, client: account.client, orderId: row.order_id, connectionId: account.connectionId,
                   externalStoreId: account.externalStoreId, siteId: account.config?.siteId || 'MLA' });
-              } catch { /* The next daily refresh retries it. */ }
+              } catch {
+                // The next daily refresh retries it; the count keeps the gap visible meanwhile.
+                progress.ordersOpenFailed = (progress.ordersOpenFailed || 0) + 1;
+              }
               progress.ordersOpen = (progress.ordersOpen || 0) + 1;
             }));
             plan.afterId = Number(batch[batch.length - 1].id);
@@ -141,7 +144,7 @@ export async function runSettlementFetchStep(workspaceId, settlementId, { rebuil
             await syncOrder({ workspaceId, client: found.account.client, orderId: found.orderId, connectionId: found.account.connectionId,
               externalStoreId: found.account.externalStoreId, siteId: found.account.config?.siteId || 'MLA' });
             progress.labelsFound++;
-          } catch { skip.add(tracking); }
+          } catch { skip.add(tracking); progress.labelsFailed = (progress.labelsFailed || 0) + 1; }
         } else skip.add(tracking);
         progress.labels++; cursor.misses = [...skip];
         if (progress.labels % 10 === 0) await save();

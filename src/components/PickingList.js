@@ -64,10 +64,12 @@ export default function PickingList({ visible = true }) {
     const packageCount = data?.packageCount || 0;
     const colectaItems = pickingList.filter(p => p.shipping_method === 'colecta');
     const flexItems = pickingList.filter(p => p.shipping_method === 'flex');
+    const tiendanubeItems = pickingList.filter(p => p.shipping_method === 'tiendanube');
     const totalProducts = pickingList.length;
     const totalUnits = pickingList.reduce((sum, p) => sum + p.total_quantity, 0);
     const colectaUnits = colectaItems.reduce((sum, p) => sum + p.total_quantity, 0);
     const flexUnits = flexItems.reduce((sum, p) => sum + p.total_quantity, 0);
+    const tiendanubeUnits = tiendanubeItems.reduce((sum, p) => sum + p.total_quantity, 0);
 
     const handleExportPdf = async (savedExport) => {
         if (exporting.current) return;
@@ -208,12 +210,17 @@ export default function PickingList({ visible = true }) {
                             <span>{flexUnits}</span>
                             <p>uds flex · {flexItems.length} prod.</p>
                         </div>
+                        {tiendanubeItems.length ? <div className="picking-metric picking-metric-tiendanube">
+                            <span>{tiendanubeUnits}</span>
+                            <p>uds Tiendanube · {tiendanubeItems.length} prod.</p>
+                        </div> : null}
                     </div>
 
                     <div className="picking-layout">
                         <section className="picking-main" aria-label="Productos para picking">
                             {renderSection('Colecta', 'colecta', colectaItems, colectaUnits)}
                             {renderSection('Flex', 'flex', flexItems, flexUnits)}
+                            {renderSection('Tiendanube', 'tiendanube', tiendanubeItems, tiendanubeUnits)}
                         </section>
                     </div>
                 </>

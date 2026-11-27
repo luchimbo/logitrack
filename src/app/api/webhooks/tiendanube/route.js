@@ -1,9 +1,13 @@
-import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createTiendanubeClient } from '@/lib/tiendanubeClient';
-import { findIntegrationByConfigValue, findIntegrationConnectionByStore } from '@/lib/integrationService';
+import { findIntegrationByConfigValue, findIntegrationConnectionByStore, markIntegrationConnectionAuthError } from '@/lib/integrationService';
 import { upsertTiendanubeOrder } from '@/lib/tiendanubeStore';
 import { recordOnlineOrder } from '@/lib/crossselling/storefront-runtime';
+import {
+  TIENDANUBE_SIGNATURE_HEADER,
+  verifyTiendanubeWebhookSignature,
+  warnIfTiendanubeSecretMissing,
+} from '@/lib/tiendanubeWebhookSecurity';
 
 const TIENDANUBE_CLIENT_SECRET = process.env.TIENDANUBE_CLIENT_SECRET || '';
 const ORDER_EVENTS = new Set([
@@ -25,20 +29,6 @@ const FULFILLMENT_ORDER_EVENTS = new Set([
   'fulfillment_order/tracking_event_deleted',
 ]);
 
-function verifyTiendanubeSignature(rawBody, signature) {
-  if (!TIENDANUBE_CLIENT_SECRET) return true;
-  if (!signature) return false;
-
-  const expected = crypto
-    .createHmac('sha256', TIENDANUBE_CLIENT_SECRET)
-    .update(rawBody)
-    .digest('hex');
-  const received = String(signature || '').trim();
-
-  if (expected.length !== received.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
-}
-
 function getWebhookOrderId(body) {
   if (body?.order_id) return body.order_id;
   if (ORDER_EVENTS.has(String(body?.event || ''))) return body?.id;
@@ -47,9 +37,10 @@ function getWebhookOrderId(body) {
 
 export async function POST(request) {
   const rawBody = await request.text();
-  const signature = request.headers.get('x-linkedstore-hmac-sha256') || '';
+  const signature = request.headers.get(TIENDANUBE_SIGNATURE_HEADER) || '';
+  warnIfTiendanubeSecretMissing(TIENDANUBE_CLIENT_SECRET);
 
-  if (!verifyTiendanubeSignature(rawBody, signature)) {
+  if (!verifyTiendanubeWebhookSignature(rawBody, signature, TIENDANUBE_CLIENT_SECRET)) {
     return NextResponse.json({ error: 'Firma inválida' }, { status: 401 });
   }
 
@@ -61,6 +52,13 @@ export async function POST(request) {
 
     if (!storeId || !event) {
       return NextResponse.json({ received: true, ignored: 'payload incompleto' });
+    }
+
+    if (event === 'app/uninstalled') {
+      // No se borra nada acá: Tiendanube manda store/redact 48 h después. Se marca para reconectar.
+      const uninstalled = await findIntegrationConnectionByStore({ provider: 'tiendanube', externalStoreId: storeId, includeConfig: false });
+      if (uninstalled?.id) await markIntegrationConnectionAuthError({ id: uninstalled.id, error: 'La app se desinstaló en Tiendanube' });
+      return NextResponse.json({ received: true, uninstalled: Boolean(uninstalled?.id) });
     }
 
     if (!ORDER_EVENTS.has(event) && !FULFILLMENT_ORDER_EVENTS.has(event)) {

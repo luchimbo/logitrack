@@ -821,3 +821,4 @@ span.catalog-thumb{background:var(--bg-secondary)}
 .integration-title-block{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;min-width:0}
 .integration-title-block .integration-provider-title{margin-bottom:0}
 .integration-card-action{margin-top:auto;width:100%}
+.picking-metric-tiendanube::before{background:#2563eb}.picking-group-tiendanube{border-left:3px solid #2563eb}

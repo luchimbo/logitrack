@@ -1,43 +1,50 @@
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/lib/audit';
+import { redactTiendanubeCustomerOrders, redactTiendanubeStoreOrders } from '@/lib/tiendanubeStore';
+import {
+  TIENDANUBE_SIGNATURE_HEADER,
+  handleTiendanubePrivacyWebhook,
+  warnIfTiendanubeSecretMissing,
+} from '@/lib/tiendanubeWebhookSecurity';
 
-const VALID_TOPICS = new Set([
-  'store-redact',
-  'customers-redact',
-  'customers-data-request',
-  'store',
-  'customers',
-]);
+const TIENDANUBE_CLIENT_SECRET = process.env.TIENDANUBE_CLIENT_SECRET || '';
 
-function normalizePrivacyTopic(topic, body) {
-  const event = String(body?.event || '').replace('/', '-');
-  if (event === 'store-redact' || event === 'customers-redact' || event === 'customers-data_request') {
-    return event.replace('data_request', 'data-request');
-  }
-  return topic;
+function auditPrivacy(action, metadata) {
+  return logAudit({ actorType: 'system', actorLabel: 'tiendanube', action, entityType: 'tiendanube_store', entityId: metadata.storeId, metadata });
 }
 
 export async function POST(request, { params }) {
   try {
     const { topic } = await params;
+    warnIfTiendanubeSecretMissing(TIENDANUBE_CLIENT_SECRET);
 
-    const body = await request.json().catch(() => ({}));
-    const normalizedTopic = normalizePrivacyTopic(topic, body);
-
-    if (!VALID_TOPICS.has(topic) || !VALID_TOPICS.has(normalizedTopic)) {
-      return NextResponse.json({ error: 'Topic no soportado' }, { status: 404 });
-    }
-
-    console.log(`[Tiendanube Webhook] ${normalizedTopic}`, {
-      storeId: body?.store_id || body?.id,
-      body,
+    const result = await handleTiendanubePrivacyWebhook({
+      topic,
+      rawBody: await request.text(),
+      signature: request.headers.get(TIENDANUBE_SIGNATURE_HEADER) || '',
+      secret: TIENDANUBE_CLIENT_SECRET,
+    }, {
+      log: (normalizedTopic, { storeId }) => console.log(`[Tiendanube Webhook] ${normalizedTopic}`, { storeId }),
+      redactStore: async ({ storeId }) => {
+        const outcome = await redactTiendanubeStoreOrders({ storeId });
+        await auditPrivacy('tiendanube.privacy.store_redact', { storeId, deleted: outcome.deleted });
+        return outcome;
+      },
+      redactCustomer: async ({ storeId, orderIds, email }) => {
+        const outcome = await redactTiendanubeCustomerOrders({ storeId, orderIds, email });
+        await auditPrivacy('tiendanube.privacy.customer_redact', { storeId, orders: orderIds.length, anonymized: outcome.anonymized });
+        return outcome;
+      },
+      recordDataRequest: ({ storeId, customerId, requestId, orderIds }) => auditPrivacy(
+        'tiendanube.privacy.data_request',
+        { storeId, customerId, requestId, orderIds },
+      ),
     });
 
-    // Por ahora solo logueamos y respondemos 200 OK para cumplir con homologación
-    // En el futuro se puede implementar la lógica de borrado/exportación de datos aquí
-
-    return NextResponse.json({ received: true });
+    return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
-    console.error('Tiendanube webhook error:', error);
-    return NextResponse.json({ error: error.message || 'Error procesando webhook' }, { status: 200 });
+    // 500 para que Tiendanube reintente: un borrado pendiente no debe darse por cumplido.
+    console.error('Tiendanube privacy webhook error:', error?.message || error);
+    return NextResponse.json({ error: 'Error procesando webhook' }, { status: 500 });
   }
 }

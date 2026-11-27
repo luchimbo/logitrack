@@ -366,7 +366,20 @@ function JobStatus({ job, onRetry }) {
     </>;
   }
   if (job?.status === 'error') return <small>No se pudo buscar: {job.error}{onRetry ? <> <button className={styles.link} onClick={onRetry}>Reintentar</button></> : null}</small>;
+  const failed = jobFailureNote(job);
+  if (failed) return <small role="status">{failed}{onRetry ? <> <button className={styles.link} onClick={onRetry}>Buscar envíos de nuevo</button></> : null}</small>;
   return onRetry ? <small><button className={styles.link} onClick={onRetry}>Buscar envíos de nuevo</button></small> : null;
+}
+// Ventas o etiquetas que Mercado Libre no devolvió: la liquidación puede estar incompleta.
+export function jobFailureNote(job) {
+  const p = job?.progress || {};
+  const orders = Number(p.ordersOpenFailed || 0);
+  const labels = Number(p.labelsFailed || 0);
+  if (!orders && !labels) return '';
+  const parts = [];
+  if (orders) parts.push(`${orders} ${orders === 1 ? 'venta abierta' : 'ventas abiertas'}`);
+  if (labels) parts.push(`${labels} ${labels === 1 ? 'etiqueta' : 'etiquetas'}`);
+  return `No se pudieron verificar ${parts.join(' y ')} con Mercado Libre; los importes pueden estar incompletos.`;
 }
 function downloadSettlement({ settlement: s, items, adjustments, accounts = {} }, detailed = false) {
   const text = detailed ? settlementDetailCsv(items, adjustments, accounts) : settlementMatrixCsv(settlementMatrix(items, ZONE_ORDER), adjustments);

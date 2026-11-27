@@ -1,4 +1,5 @@
 import { encrypt, decrypt } from '@/lib/cryptoUtils';
+export { isMercadoLibreReauthError } from './mercadolibreAuthErrors.js';
 
 const MELI_CLIENT_ID = process.env.MERCADOLIBRE_CLIENT_ID || '';
 const MELI_CLIENT_SECRET = process.env.MERCADOLIBRE_CLIENT_SECRET || '';
@@ -59,7 +60,10 @@ async function tokenRequest(body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error_description || data.message || data.error || 'Error de autorizacion Mercado Libre');
+    const error = new Error(data.error_description || data.message || data.error || 'Error de autorizacion Mercado Libre');
+    error.status = res.status;
+    error.code = String(data.error || '');
+    throw error;
   }
   return {
     accessToken: data.access_token,
@@ -89,3 +93,4 @@ export function refreshMercadoLibreToken({ refreshToken }) {
     refresh_token: refreshToken,
   });
 }
+

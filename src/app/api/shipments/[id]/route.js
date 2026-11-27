@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { ensureDb } from '@/lib/ensureDb';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { deleteShipmentsByIds } from '@/lib/shipmentDeletion';
+import { logAudit } from '@/lib/audit';
 
 export async function DELETE(request, { params }) {
     try {
@@ -23,6 +24,17 @@ export async function DELETE(request, { params }) {
         if (!result.deleted) {
             return NextResponse.json({ error: "Shipment not found" }, { status: 404 });
         }
+
+        const { actor } = authResult;
+        await logAudit({
+            workspaceId,
+            appUserId: actor.appUserId,
+            actorType: actor.authType,
+            actorLabel: actor.email || actor.username,
+            action: 'delete_shipment',
+            entityType: 'shipment',
+            entityId: id,
+        });
 
         return NextResponse.json({ success: true, deleted: id });
     } catch (error) {

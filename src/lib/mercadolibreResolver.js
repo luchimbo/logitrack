@@ -1,6 +1,6 @@
 import { createMercadoLibreClient } from '@/lib/mercadolibreClient';
-import { getIntegrationConnection, listIntegrationConnections, saveIntegrationConnection } from '@/lib/integrationService';
-import { refreshMercadoLibreToken } from '@/lib/mercadolibreOAuth';
+import { getIntegrationConnection, listIntegrationConnections, markIntegrationConnectionAuthError, saveIntegrationConnection } from '@/lib/integrationService';
+import { isMercadoLibreReauthError, refreshMercadoLibreToken } from '@/lib/mercadolibreOAuth';
 
 function shouldRefresh(config = {}) {
   if (!config.refreshToken) return false;
@@ -14,7 +14,16 @@ async function clientFromConnection(connection) {
   let config = connection.config;
 
   if (shouldRefresh(config)) {
-    const tokens = await refreshMercadoLibreToken({ refreshToken: config.refreshToken });
+    let tokens;
+    try {
+      tokens = await refreshMercadoLibreToken({ refreshToken: config.refreshToken });
+    } catch (error) {
+      if (isMercadoLibreReauthError(error)) {
+        await markIntegrationConnectionAuthError({ id: connection.id, error: error.message }).catch(() => {});
+        throw Object.assign(new Error(`La cuenta ${connection.displayName || connection.externalStoreId} necesita reconectarse en Canales`), { code: 'needs_reauth', cause: error });
+      }
+      throw error;
+    }
     config = { ...config, ...tokens };
     await saveIntegrationConnection({
       workspaceId: connection.workspaceId,
@@ -38,7 +47,14 @@ export async function listMercadoLibreClientTargets(workspaceId, { connectionId 
   const connections = await listIntegrationConnections({ workspaceId, provider: 'mercadolibre', includeConfig: true });
   const targets = [];
   for (const connection of connections) {
-    const client = await clientFromConnection(connection);
+    // Una cuenta con el token vencido no debe dejar sin datos a las demás.
+    let client = null;
+    try {
+      client = await clientFromConnection(connection);
+    } catch (error) {
+      console.error('Mercado Libre connection unavailable', { connectionId: connection.id, code: error?.code || '', error: error?.message || String(error) });
+      continue;
+    }
     if (client) targets.push({ connectionId: connection.id, externalStoreId: connection.externalStoreId, displayName: connection.displayName, config: connection.config, client });
   }
   return targets;

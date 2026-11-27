@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireWorkspaceActor } from '@/lib/auth';
 import { markMercadoLibreLabelsPrinted } from '@/lib/mercadolibreStore';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(request) {
   try {
@@ -20,6 +21,17 @@ export async function POST(request) {
       workspaceId: authResult.actor.workspaceId,
       connectionId,
       orderIds,
+    });
+    const { actor } = authResult;
+    await logAudit({
+      workspaceId: actor.workspaceId,
+      appUserId: actor.appUserId,
+      actorType: actor.authType,
+      actorLabel: actor.email || actor.username,
+      action: 'mark_ml_labels_printed',
+      entityType: 'mercadolibre_order',
+      entityId: orderIds.slice(0, 50).join(','),
+      metadata: { connectionId, orders: orderIds.length, count },
     });
     return NextResponse.json({ success: true, count });
   } catch (error) {

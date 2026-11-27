@@ -29,6 +29,14 @@ const isPublicRoute = createRouteMatcher([
   "/api/v2/print-jobs/recover(.*)",
 ]);
 
+// Lista explícita: cada ruta valida CRON_SECRET; no abrir /api/cron/* entero.
+const CRON_ROUTES = new Set([
+  "/api/cron/mercadolibre-sync",
+  "/api/cron/mercadolibre-upkeep",
+  "/api/cron/mercadolibre-catchup",
+  "/api/cron/tiendanube-sync",
+]);
+
 const clerkGuard = clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) return NextResponse.next();
 
@@ -54,8 +62,8 @@ export default function proxy(req, event) {
   if (req.nextUrl.pathname === "/api/cross-selling/config") return NextResponse.next();
   // El webhook de Mercado Libre llega de servidor a servidor y valida el aviso en su handler.
   if (req.nextUrl.pathname === "/api/webhooks/mercadolibre") return NextResponse.next();
-  // El cron diario de Mercado Libre se autentica con CRON_SECRET en su handler; Vercel Cron no tiene sesión de Clerk.
-  if (req.nextUrl.pathname === "/api/cron/mercadolibre-sync" || req.nextUrl.pathname === "/api/cron/mercadolibre-upkeep") return NextResponse.next();
+  // Los crons se autentican con CRON_SECRET en su handler; Vercel Cron no tiene sesión de Clerk.
+  if (CRON_ROUTES.has(req.nextUrl.pathname)) return NextResponse.next();
   // Mostrador usa HMAC por tienda; estas rutas validan la firma en sus handlers.
   if (req.nextUrl.pathname === "/api/cross-selling/module") return NextResponse.next();
   if (req.nextUrl.pathname === "/api/cross-selling/report") return NextResponse.next();

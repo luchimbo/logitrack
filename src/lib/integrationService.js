@@ -12,6 +12,8 @@ export async function saveIntegration({ workspaceId, provider, config }) {
     ON CONFLICT(workspace_id, provider) DO UPDATE SET
       config_json = excluded.config_json,
       is_active = 1,
+      auth_error = NULL,
+      auth_error_at = NULL,
       connected_at = CURRENT_TIMESTAMP,
       updated_at = CURRENT_TIMESTAMP`,
     args: [workspaceId, provider, configJson],
@@ -171,6 +173,17 @@ export async function findIntegrationConnectionByStore({ provider, externalStore
   });
 
   return result.rows.length ? mapConnectionRow(result.rows[0], includeConfig) : null;
+}
+
+// Tokens nuevos guardados con saveIntegrationConnection limpian la marca.
+export async function markIntegrationConnectionAuthError({ id, error }) {
+  await ensureDb();
+  await db.execute({
+    sql: `UPDATE workspace_integration_connections
+          SET auth_error = ?, auth_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+    args: [String(error || 'invalid_grant').slice(0, 300), Number(id)],
+  });
 }
 
 export async function deleteIntegrationConnection({ workspaceId, provider, id, externalStoreId } = {}) {
